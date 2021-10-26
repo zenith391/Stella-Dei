@@ -1,7 +1,16 @@
 const std = @import("std");
+const glfw = @import("glfw.zig");
+
+fn render() void {
+
+}
 
 pub fn main() !void {
-	std.log.info("All your codebase are belong to us.", .{});
+	try glfw.init();
+	defer glfw.deinit();
+
+	var window = try glfw.Window.create();
+	window.loop(render);
 }
 
 test "basic test" {
