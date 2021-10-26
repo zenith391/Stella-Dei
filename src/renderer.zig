@@ -16,16 +16,11 @@ const quadVertices = [_]f32 {
 pub const Renderer = struct {
 	window: Window,
 	color: ShaderProgram = undefined,
+	quadVao: gl.GLuint = undefined,
 
 	pub fn init(self: *Renderer) !void {
 		_ = self;
 		log.debug("Start initialization", .{});
-		var vbo: gl.GLuint = undefined;
-		gl.genBuffers(1, &vbo);
-		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-		gl.bufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(quadVertices)), &quadVertices, gl.STATIC_DRAW);
-
-		log.debug("Quad VBO: {d}", .{ vbo });
 
 		const vertexShader = Shader.create(gl.VERTEX_SHADER);
 		defer vertexShader.deinit();
@@ -46,13 +41,29 @@ pub const Renderer = struct {
 		program.attach(vertexShader);
 		try program.link();
 
+		var vao: gl.GLuint = undefined;
+		gl.genVertexArrays(1, &vao);
+		gl.bindVertexArray(vao);
+
+		var vbo: gl.GLuint = undefined;
+		gl.genBuffers(1, &vbo);
+		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+		gl.bufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(quadVertices)), &quadVertices, gl.STATIC_DRAW);
+
+		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 2 * @sizeOf(f32), null);
+		gl.enableVertexAttribArray(0);
+
+		log.debug("Quad VBO: {d}", .{ vbo });
+
 		self.color = program;
+		self.quadVao = vao;
 	}
 
 	pub fn fillRect(self: *Renderer, x: u32, y: u32, w: u32, h: u32) void {
-		_ = self;
 		_ = x; _ = y; _ = w; _ = h; // currently unused for testing
-
+		self.color.use();
+		gl.bindVertexArray(self.quadVao);
+		gl.drawArrays(gl.TRIANGLES, 0, 6);
 	}
 };
 

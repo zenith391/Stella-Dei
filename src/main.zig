@@ -12,7 +12,7 @@ fn render(window: glfw.Window) void {
 
 	gl.clearColor(0, 0, 0, 1);
 	gl.clear(gl.COLOR_BUFFER_BIT);
-
+	renderer.fillRect(0, 0, 100, 100);
 }
 
 pub fn main() !void {
