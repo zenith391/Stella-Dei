@@ -12,8 +12,8 @@ pub fn deinit() void {
 
 /// This is used by zig-opengl library to load OpenGL functions from GLFW
 pub fn getProcAddress(_: void, name: [:0]const u8) ?*c_void {
-    var proc = c.glfwGetProcAddress(name);
-    return @intToPtr(?*c_void, @ptrToInt(proc));
+	var proc = c.glfwGetProcAddress(name);
+	return @intToPtr(?*c_void, @ptrToInt(proc));
 }
 
 pub const Size = struct {
@@ -37,19 +37,27 @@ pub const Window = struct {
 	}
 
 	pub fn getSize(self: Window) Size {
-		var width: c_int  = undefined;
-		var height: c_int = undefined;
+		var width:  c_int  = undefined;
+		var height: c_int  = undefined;
 		c.glfwGetWindowSize(self.window, &width, &height);
 
 		return Size { .width = width, .height = height };
 	}
 
 	pub fn getFramebufferSize(self: Window) Size {
-		var width: c_int  = undefined;
-		var height: c_int = undefined;
+		var width:  c_int  = undefined;
+		var height: c_int  = undefined;
 		c.glfwGetFramebufferSize(self.window, &width, &height);
 
 		return Size { .width = width, .height = height };
+	}
+
+	pub fn getFramebufferWidth(self: Window) c_int {
+		return self.getFramebufferSize().width;
+	}
+
+	pub fn getFramebufferHeight(self: Window) c_int {
+		return self.getFramebufferSize().height;
 	}
 
 	/// Make the event loop and use the given function for rendering
