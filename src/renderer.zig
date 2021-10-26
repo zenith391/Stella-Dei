@@ -55,8 +55,8 @@ pub const Renderer = struct {
 		));
 
 		self.colorProgram.setUniformVec2("scale", Vec2.new(
-			@intToFloat(f32, w) / @intToFloat(f32, self.window.getFramebufferWidth ()),
-			@intToFloat(f32, h) / @intToFloat(f32, self.window.getFramebufferHeight())
+			@intToFloat(f32, w) / @intToFloat(f32, self.window.getFramebufferWidth ()) * 2,
+			@intToFloat(f32, h) / @intToFloat(f32, self.window.getFramebufferHeight()) * 2
 		));
 
 		gl.bindVertexArray(self.quadVao);
