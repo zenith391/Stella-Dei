@@ -10,6 +10,17 @@ pub fn deinit() void {
 	c.glfwTerminate();
 }
 
+/// This is used by zig-opengl library to load OpenGL functions from GLFW
+pub fn getProcAddress(_: void, name: [:0]const u8) ?*c_void {
+    var proc = c.glfwGetProcAddress(name);
+    return @intToPtr(?*c_void, @ptrToInt(proc));
+}
+
+pub const Size = struct {
+	width: c_int,
+	height: c_int
+};
+
 pub const Window = struct {
 	window: *c.GLFWwindow,
 
@@ -22,10 +33,27 @@ pub const Window = struct {
 		};
 	}
 
+	pub fn getSize(self: Window) Size {
+		var width: c_int  = undefined;
+		var height: c_int = undefined;
+		c.glfwGetWindowSize(self.window, &width, &height);
+
+		return Size { .width = width, .height = height };
+	}
+
+	pub fn getFramebufferSize(self: Window) Size {
+		var width: c_int  = undefined;
+		var height: c_int = undefined;
+		c.glfwGetFramebufferSize(self.window, &width, &height);
+
+		return Size { .width = width, .height = height };
+	}
+
 	/// Make the event loop and use the given function for rendering
 	pub fn loop(self: Window, render: anytype) void {
 		while (!self.shouldClose()) {
-			render();
+			c.glfwMakeContextCurrent(self.window);
+			render(self);
 
 			c.glfwSwapBuffers(self.window);
 			c.glfwPollEvents();

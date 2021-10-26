@@ -1,4 +1,5 @@
-const std = @import("std");
+const std  = @import("std");
+const deps = @import("deps.zig");
 
 /// Step used to convert from tabs to space
 const ConvertStep = struct {
@@ -77,8 +78,7 @@ pub fn build(b: *std.build.Builder) void {
     const exe = b.addExecutableSource("name-not-included", convert.getSource());
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    exe.linkLibC();
-    exe.linkSystemLibrary("glfw");
+    deps.addAllTo(exe);
     exe.install();
 
     const run_cmd = exe.run();
