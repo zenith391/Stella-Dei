@@ -5,6 +5,7 @@ const log    = std.log.scoped(.renderer);
 const Window = @import("glfw.zig").Window;
 
 const Vec2 = za.Vec2;
+const Vec3 = za.Vec3;
 
 /// Vertices that compose a quad, it will often be used so here is it
 const quadVertices = [_]f32 {
@@ -18,11 +19,14 @@ const quadVertices = [_]f32 {
 
 pub const Renderer = struct {
 	window: Window,
-	color: ShaderProgram = undefined,
+	colorProgram: ShaderProgram = undefined,
 	quadVao: gl.GLuint = undefined,
 
+	// Graphics state
+	color: Vec3 = Vec3.one(),
+
 	pub fn init(self: *Renderer) !void {
-		self.color = try ShaderProgram.createFromName("color");
+		self.colorProgram = try ShaderProgram.createFromName("color");
 
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
@@ -38,14 +42,21 @@ pub const Renderer = struct {
 		self.quadVao = vao;
 	}
 
+	pub fn setColor(self: *Renderer, color: Vec3) void {
+		self.color = color;
+	}
+
 	pub fn fillRect(self: *Renderer, x: u32, y: u32, w: u32, h: u32) void {
-		_ = x; _ = y; _ = w; _ = h; // currently unused for testing
-		self.color.use();
+		self.colorProgram.use();
+		self.colorProgram.setUniformVec3("color", self.color);
+		self.colorProgram.setUniformVec2("offset", Vec2.new(
+			@intToFloat(f32, x) / @intToFloat(f32, self.window.getFramebufferWidth ()) * 2 - 1,
+			@intToFloat(f32, y) / @intToFloat(f32, self.window.getFramebufferHeight()) * 2 - 1
+		));
 
-
-		self.color.setUniformVec2("offset", Vec2.new(
-			@intToFloat(f32, x) / @intToFloat(f32, self.window.getFramebufferWidth ()) - 1,
-			@intToFloat(f32, y) / @intToFloat(f32, self.window.getFramebufferHeight())
+		self.colorProgram.setUniformVec2("scale", Vec2.new(
+			@intToFloat(f32, w) / @intToFloat(f32, self.window.getFramebufferWidth ()),
+			@intToFloat(f32, h) / @intToFloat(f32, self.window.getFramebufferHeight())
 		));
 
 		gl.bindVertexArray(self.quadVao);
@@ -128,6 +139,11 @@ const ShaderProgram = struct {
 	pub fn setUniformVec2(self: ShaderProgram, uniform: [:0]const u8, vec: Vec2) void {
 		const location = gl.getUniformLocation(self.program, uniform);
 		gl.uniform2f(location, vec.x, vec.y);
+	}
+
+	pub fn setUniformVec3(self: ShaderProgram, uniform: [:0]const u8, vec: Vec3) void {
+		const location = gl.getUniformLocation(self.program, uniform);
+		gl.uniform3f(location, vec.x, vec.y, vec.z);
 	}
 
 	pub fn attach(self: ShaderProgram, shader: Shader) void {
