@@ -39,22 +39,26 @@ const ConvertStep = struct {
 
         var walker = try sourceDir.walk(self.builder.allocator);
         while (try walker.next()) |entry| {
-            var source = try sourceDir.openFile(entry.path, .{});
-            defer source.close();
+            if (entry.kind == .File) {
+                var source = try sourceDir.openFile(entry.path, .{});
+                defer source.close();
 
-            const text = try source.readToEndAlloc(self.builder.allocator, std.math.maxInt(usize));
-            defer self.builder.allocator.free(text);
+                const text = try source.readToEndAlloc(self.builder.allocator, std.math.maxInt(usize));
+                defer self.builder.allocator.free(text);
 
-            // Replace every occurence of a tab by a single space
-            _ = std.mem.replace(u8, text, "\t", " ", text);
+                // Replace every occurence of a tab by a single space
+                _ = std.mem.replace(u8, text, "\t", " ", text);
 
-            // Ensure the target file's parent directory exists
-            const dirname = std.fs.path.dirname(entry.path) orelse ".";
-            try targetDir.makePath(dirname);
+                // Ensure the target file's parent directory exists
+                const dirname = std.fs.path.dirname(entry.path) orelse ".";
+                try targetDir.makePath(dirname);
 
-            var target = try targetDir.createFile(entry.path, .{});
-            defer target.close();
-            try target.writeAll(text);
+                var target = try targetDir.createFile(entry.path, .{});
+                defer target.close();
+                try target.writeAll(text);
+            } else if (entry.kind == .Directory) {
+                try targetDir.makePath(entry.path);
+            }
         }
 
         self.generated_file.path = try std.mem.concat(self.builder.allocator, u8,

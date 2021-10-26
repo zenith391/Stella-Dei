@@ -25,6 +25,9 @@ pub const Window = struct {
 	window: *c.GLFWwindow,
 
 	pub fn create() !Window {
+		c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 4);
+		c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 6);
+		c.glfwWindowHint(c.GLFW_OPENGL_PROFILE, c.GLFW_OPENGL_CORE_PROFILE);
 		var window = c.glfwCreateWindow(640, 480, "", null, null) orelse return error.GlfwError;
 		c.glfwMakeContextCurrent(window);
 
