@@ -42,16 +42,16 @@ pub const Package = struct {
 const dirs = struct {
     pub const _root = "";
     pub const _93jjp4rc0htn = cache ++ "/../..";
-    pub const _wq37ovv3zzis = cache ++ "/git/github.com/MasterQ32/zig-opengl";
+    pub const _cx6o3hudom95 = cache ++ "/git/github.com/MasterQ32/zig-opengl";
 };
 
 pub const package_data = struct {
     pub const _93jjp4rc0htn = Package{
         .directory = dirs._93jjp4rc0htn,
     };
-    pub const _wq37ovv3zzis = Package{
-        .directory = dirs._wq37ovv3zzis,
-        .pkg = Pkg{ .name = "gl", .path = .{ .path = dirs._wq37ovv3zzis ++ "/exports/gl_4v6.zig" }, .dependencies = null },
+    pub const _cx6o3hudom95 = Package{
+        .directory = dirs._cx6o3hudom95,
+        .pkg = Pkg{ .name = "gl", .path = .{ .path = dirs._cx6o3hudom95 ++ "/exports/gl_4v6.zig" }, .dependencies = null },
     };
     pub const _root = Package{
         .directory = dirs._root,
@@ -60,11 +60,11 @@ pub const package_data = struct {
 };
 
 pub const packages = &[_]Package{
-    package_data._wq37ovv3zzis,
+    package_data._cx6o3hudom95,
 };
 
 pub const pkgs = struct {
-    pub const gl = package_data._wq37ovv3zzis;
+    pub const gl = package_data._cx6o3hudom95;
 };
 
 pub const imports = struct {

@@ -15,8 +15,7 @@ const quadVertices = [_]f32 {
 
 pub const Renderer = struct {
 	window: Window,
-	vertex: ShaderProgram = undefined,
-	fragment: ShaderProgram = undefined,
+	color: ShaderProgram = undefined,
 
 	pub fn init(self: *Renderer) !void {
 		_ = self;
@@ -30,7 +29,7 @@ pub const Renderer = struct {
 
 		const vertexShader = Shader.create(gl.VERTEX_SHADER);
 		defer vertexShader.deinit();
-		
+
 		vertexShader.setSource(@embedFile("shaders/color.vs"));
 		try vertexShader.compile();
 
@@ -43,11 +42,15 @@ pub const Renderer = struct {
 		std.log.info("vertex: {}, fragment: {}", .{ vertexShader, fragmentShader });
 
 		var program = ShaderProgram.create();
-		program.link(fragmentShader);
-		program.link(vertexShader);
+		program.attach(fragmentShader);
+		program.attach(vertexShader);
+		try program.link();
+
+		self.color = program;
 	}
 
 	pub fn fillRect(self: *Renderer, x: u32, y: u32, w: u32, h: u32) void {
+		_ = self;
 		_ = x; _ = y; _ = w; _ = h; // currently unused for testing
 
 	}
@@ -99,7 +102,7 @@ const ShaderProgram = struct {
 
 	pub fn create() ShaderProgram {
 		return ShaderProgram {
-			.shader = gl.createProgram()
+			.program = gl.createProgram()
 		};
 	}
 
@@ -107,8 +110,9 @@ const ShaderProgram = struct {
 		gl.attachShader(self.program, shader.shader);
 	}
 
-	pub fn link(self: ShaderProgram) void {
+	pub fn link(self: ShaderProgram) !void {
 		gl.linkProgram(self.program);
+		// TODO: check for errors
 	}
 
 	pub fn use(self: ShaderProgram) void {
