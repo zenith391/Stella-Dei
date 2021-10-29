@@ -1,9 +1,10 @@
 const std    = @import("std");
 const gl     = @import("gl");
 const za     = @import("zalgebra");
-const log    = std.log.scoped(.renderer);
 const Window = @import("glfw.zig").Window;
+const log    = std.log.scoped(.renderer);
 
+const Allocator = std.mem.Allocator;
 const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 
@@ -19,16 +20,19 @@ const quadVertices = [_]f32 {
 
 pub const Renderer = struct {
 	window: Window,
-	colorProgram: ShaderProgram = undefined,
-	imageProgram: ShaderProgram = undefined,
-	quadVao: gl.GLuint = undefined,
+	textureCache: TextureCache,
+
+	colorProgram: ShaderProgram,
+	imageProgram: ShaderProgram,
+	quadVao: gl.GLuint,
+	framebufferSize: Vec2,
 
 	// Graphics state
 	color: Vec3 = Vec3.one(),
 
-	pub fn init(self: *Renderer) !void {
-		self.colorProgram = try ShaderProgram.createFromName("color");
-		self.imageProgram = try ShaderProgram.createFromName("image");
+	pub fn init(allocator: *Allocator, window: Window) !Renderer {
+		const colorProgram = try ShaderProgram.createFromName("color");
+		const imageProgram = try ShaderProgram.createFromName("image");
 
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
@@ -44,7 +48,14 @@ pub const Renderer = struct {
 		gl.enable(gl.BLEND);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-		self.quadVao = vao;
+		return Renderer {
+			.window = window,
+			.textureCache = TextureCache.init(allocator),
+			.colorProgram = colorProgram,
+			.imageProgram = imageProgram,
+			.quadVao = vao,
+			.framebufferSize = undefined
+		};
 	}
 
 	pub fn setColor(self: *Renderer, color: Vec3) void {
@@ -55,35 +66,46 @@ pub const Renderer = struct {
 		self.colorProgram.use();
 		self.colorProgram.setUniformVec3("color", self.color);
 		self.colorProgram.setUniformVec2("offset", Vec2.new(
-			@intToFloat(f32, x) / @intToFloat(f32, self.window.getFramebufferWidth ()) * 2 - 1,
-			@intToFloat(f32, y) / @intToFloat(f32, self.window.getFramebufferHeight()) * 2 - 1
+			(@intToFloat(f32, x) / self.framebufferSize.x) * 2 - 1,
+			(@intToFloat(f32, y) / self.framebufferSize.y) * 2 - 1
 		));
 
 		self.colorProgram.setUniformVec2("scale", Vec2.new(
-			@intToFloat(f32, w) / @intToFloat(f32, self.window.getFramebufferWidth ()) * 2,
-			@intToFloat(f32, h) / @intToFloat(f32, self.window.getFramebufferHeight()) * 2
+			(@intToFloat(f32, w) / self.framebufferSize.x) * 2,
+			(@intToFloat(f32, h) / self.framebufferSize.y) * 2
 		));
 
 		gl.bindVertexArray(self.quadVao);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 	}
 
-	pub fn drawTexture(self: *Renderer, texture: Texture, x: u32, y: u32, w: u32, h: u32) void {
+	pub fn drawTextureObject(self: *Renderer, texture: Texture, x: u32, y: u32, w: u32, h: u32) void {
 		self.imageProgram.use();
 		self.imageProgram.setUniformInt("uTexture", 0);
-		self.imageProgram.setUniformVec2("offset", Vec2.new(
-			@intToFloat(f32, x) / @intToFloat(f32, self.window.getFramebufferWidth ()) * 2 - 1,
-			@intToFloat(f32, y) / @intToFloat(f32, self.window.getFramebufferHeight()) * 2 - 1
+		self.colorProgram.setUniformVec2("offset", Vec2.new(
+			(@intToFloat(f32, x) / self.framebufferSize.x) * 2 - 1,
+			(@intToFloat(f32, y) / self.framebufferSize.y) * 2 - 1
 		));
 
-		self.imageProgram.setUniformVec2("scale", Vec2.new(
-			@intToFloat(f32, w) / @intToFloat(f32, self.window.getFramebufferWidth ()) * 2,
-			@intToFloat(f32, h) / @intToFloat(f32, self.window.getFramebufferHeight()) * 2
+		self.colorProgram.setUniformVec2("scale", Vec2.new(
+			(@intToFloat(f32, w) / self.framebufferSize.x) * 2,
+			(@intToFloat(f32, h) / self.framebufferSize.y) * 2
 		));
 
 		gl.bindTexture(gl.TEXTURE_2D, texture.texture);
 		gl.bindVertexArray(self.quadVao);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
+	}
+
+	pub fn drawTexture(self: *Renderer, name: []const u8, x: u32, y: u32, w: u32, h: u32) void {
+		self.drawTextureObject(
+			self.textureCache.get(name),
+			x, y, w, h
+		);
+	}
+
+	pub fn deinit(self: *Renderer) void {
+		self.textureCache.deinit();
 	}
 };
 
@@ -92,7 +114,7 @@ const zigimg = @import("zigimg");
 pub const Texture = struct {
 	texture: gl.GLuint,
 
-	pub fn createFromPath(allocator: *std.mem.Allocator, path: []const u8) !Texture {
+	pub fn createFromPath(allocator: *Allocator, path: []const u8) !Texture {
 		var file = try std.fs.cwd().openFile(path, .{});
 		defer file.close();
 
@@ -119,6 +141,41 @@ pub const Texture = struct {
 		gl.generateMipmap(gl.TEXTURE_2D);
 
 		return Texture { .texture = texture };
+	}
+};
+
+pub const TextureCache = struct {
+	cache: std.StringHashMap(Texture),
+
+	pub fn init(allocator: *Allocator) TextureCache {
+		return TextureCache {
+			.cache = std.StringHashMap(Texture).init(allocator)
+		};
+	}
+
+	pub fn get(self: *TextureCache, name: []const u8) Texture {
+		if (self.cache.get(name)) |texture| {
+			return texture;
+		} else {
+			const path = std.mem.concat(self.cache.allocator, u8,
+				&[_][]const u8 { "assets/", name, ".png" }) catch unreachable;
+			defer self.cache.allocator.free(path);
+
+			const texture = Texture.createFromPath(self.cache.allocator, path) catch |err| {
+				std.log.warn("could not load texture at '{s}': {s}", .{ path, @errorName(err) });
+				if (@errorReturnTrace()) |trace| {
+					std.debug.dumpStackTrace(trace.*);
+				}
+				@panic("TODO: placeholder texture");
+			};
+			self.cache.put(name, texture) catch unreachable;
+
+			return texture;
+		}
+	}
+
+	pub fn deinit(self: *TextureCache) void {
+		self.cache.deinit();
 	}
 };
 
