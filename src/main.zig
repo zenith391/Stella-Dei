@@ -3,8 +3,10 @@ const gl   = @import("gl");
 const glfw = @import("glfw.zig");
 
 const Renderer = @import("renderer.zig").Renderer;
+const Texture = @import("renderer.zig").Texture;
 
 var renderer: Renderer = undefined;
+var texture: Texture = undefined;
 
 fn render(window: glfw.Window) void {
 	const size = window.getFramebufferSize();
@@ -14,6 +16,7 @@ fn render(window: glfw.Window) void {
 
 	renderer.fillRect(0, 0, 100, 100);
 	renderer.fillRect(100, 100, 100, 100);
+	renderer.drawTexture(texture, 200, 200, 250, 250);
 }
 
 pub fn main() !void {
@@ -25,6 +28,7 @@ pub fn main() !void {
 
 	renderer = Renderer { .window = window };
 	try renderer.init();
+	texture = try Texture.createFromPath(std.heap.page_allocator, "sun.png");
 	window.loop(render);
 }
 

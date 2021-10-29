@@ -20,6 +20,7 @@ const quadVertices = [_]f32 {
 pub const Renderer = struct {
 	window: Window,
 	colorProgram: ShaderProgram = undefined,
+	imageProgram: ShaderProgram = undefined,
 	quadVao: gl.GLuint = undefined,
 
 	// Graphics state
@@ -27,6 +28,7 @@ pub const Renderer = struct {
 
 	pub fn init(self: *Renderer) !void {
 		self.colorProgram = try ShaderProgram.createFromName("color");
+		self.imageProgram = try ShaderProgram.createFromName("image");
 
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
@@ -38,6 +40,9 @@ pub const Renderer = struct {
 		gl.bufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(quadVertices)), &quadVertices, gl.STATIC_DRAW);
 		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 2 * @sizeOf(f32), null);
 		gl.enableVertexAttribArray(0);
+
+		gl.enable(gl.BLEND);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
 		self.quadVao = vao;
 	}
@@ -61,6 +66,59 @@ pub const Renderer = struct {
 
 		gl.bindVertexArray(self.quadVao);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
+	}
+
+	pub fn drawTexture(self: *Renderer, texture: Texture, x: u32, y: u32, w: u32, h: u32) void {
+		self.imageProgram.use();
+		self.imageProgram.setUniformInt("uTexture", 0);
+		self.imageProgram.setUniformVec2("offset", Vec2.new(
+			@intToFloat(f32, x) / @intToFloat(f32, self.window.getFramebufferWidth ()) * 2 - 1,
+			@intToFloat(f32, y) / @intToFloat(f32, self.window.getFramebufferHeight()) * 2 - 1
+		));
+
+		self.imageProgram.setUniformVec2("scale", Vec2.new(
+			@intToFloat(f32, w) / @intToFloat(f32, self.window.getFramebufferWidth ()) * 2,
+			@intToFloat(f32, h) / @intToFloat(f32, self.window.getFramebufferHeight()) * 2
+		));
+
+		gl.bindTexture(gl.TEXTURE_2D, texture.texture);
+		gl.bindVertexArray(self.quadVao);
+		gl.drawArrays(gl.TRIANGLES, 0, 6);
+	}
+};
+
+const zigimg = @import("zigimg");
+
+pub const Texture = struct {
+	texture: gl.GLuint,
+
+	pub fn createFromPath(allocator: *std.mem.Allocator, path: []const u8) !Texture {
+		var file = try std.fs.cwd().openFile(path, .{});
+		defer file.close();
+
+		var image = try zigimg.Image.fromFile(allocator, &file);
+		defer image.deinit();
+
+		const first = @ptrCast([*]u8, &image.pixels.?.Rgba32[0]);
+		const pixels = first[0..image.width*image.height*4];
+
+		return createFromData(image.width, image.height, pixels);
+	}
+
+	pub fn createFromData(width: usize, height: usize, data: []const u8) Texture {
+		var texture: gl.GLuint = undefined;
+		gl.genTextures(1, &texture);
+		gl.bindTexture(gl.TEXTURE_2D, texture);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 
+			@intCast(c_int, width), @intCast(c_int, height), 0, gl.RGBA, gl.UNSIGNED_BYTE, data.ptr);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
+
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.generateMipmap(gl.TEXTURE_2D);
+
+		return Texture { .texture = texture };
 	}
 };
 
@@ -144,6 +202,11 @@ const ShaderProgram = struct {
 	pub fn setUniformVec3(self: ShaderProgram, uniform: [:0]const u8, vec: Vec3) void {
 		const location = gl.getUniformLocation(self.program, uniform);
 		gl.uniform3f(location, vec.x, vec.y, vec.z);
+	}
+
+	pub fn setUniformInt(self: ShaderProgram, uniform: [:0]const u8, int: c_int) void {
+		const location = gl.getUniformLocation(self.program, uniform);
+		gl.uniform1i(location, int);
 	}
 
 	pub fn attach(self: ShaderProgram, shader: Shader) void {

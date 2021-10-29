@@ -4,9 +4,12 @@ license: GPL-3.0-or-later
 dev_dependencies:
     - src: git https://github.com/kooparse/zalgebra
       name: zalgebra
+      license: MIT
       main: src/main.zig
     - src: git https://github.com/MasterQ32/zig-opengl
       name: gl
+      license: EUPL-1.2
       main: exports/gl_4v6.zig
+    - src: git https://github.com/zigimg/zigimg
     - src: system_lib c
     - src: system_lib glfw
