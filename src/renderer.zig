@@ -62,34 +62,34 @@ pub const Renderer = struct {
 		self.color = color;
 	}
 
-	pub fn fillRect(self: *Renderer, x: u32, y: u32, w: u32, h: u32) void {
+	pub fn fillRect(self: *Renderer, x: f32, y: f32, w: f32, h: f32) void {
 		self.colorProgram.use();
 		self.colorProgram.setUniformVec3("color", self.color);
 		self.colorProgram.setUniformVec2("offset", Vec2.new(
-			(@intToFloat(f32, x) / self.framebufferSize.x) * 2 - 1,
-			(@intToFloat(f32, y) / self.framebufferSize.y) * 2 - 1
+			(x / self.framebufferSize.x) * 2 - 1,
+			(y / self.framebufferSize.y) * 2 - 1
 		));
 
 		self.colorProgram.setUniformVec2("scale", Vec2.new(
-			(@intToFloat(f32, w) / self.framebufferSize.x) * 2,
-			(@intToFloat(f32, h) / self.framebufferSize.y) * 2
+			(w / self.framebufferSize.x) * 2,
+			(h / self.framebufferSize.y) * 2
 		));
 
 		gl.bindVertexArray(self.quadVao);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 	}
 
-	pub fn drawTextureObject(self: *Renderer, texture: Texture, x: u32, y: u32, w: u32, h: u32) void {
+	pub fn drawTextureObject(self: *Renderer, texture: Texture, x: f32, y: f32, w: f32, h: f32) void {
 		self.imageProgram.use();
 		self.imageProgram.setUniformInt("uTexture", 0);
-		self.colorProgram.setUniformVec2("offset", Vec2.new(
-			(@intToFloat(f32, x) / self.framebufferSize.x) * 2 - 1,
-			(@intToFloat(f32, y) / self.framebufferSize.y) * 2 - 1
+		self.imageProgram.setUniformVec2("offset", Vec2.new(
+			(x / self.framebufferSize.x) * 2 - 1,
+			(y / self.framebufferSize.y) * 2 - 1
 		));
 
-		self.colorProgram.setUniformVec2("scale", Vec2.new(
-			(@intToFloat(f32, w) / self.framebufferSize.x) * 2,
-			(@intToFloat(f32, h) / self.framebufferSize.y) * 2
+		self.imageProgram.setUniformVec2("scale", Vec2.new(
+			(w / self.framebufferSize.x) * 2,
+			(h / self.framebufferSize.y) * 2
 		));
 
 		gl.bindTexture(gl.TEXTURE_2D, texture.texture);
@@ -97,7 +97,7 @@ pub const Renderer = struct {
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 	}
 
-	pub fn drawTexture(self: *Renderer, name: []const u8, x: u32, y: u32, w: u32, h: u32) void {
+	pub fn drawTexture(self: *Renderer, name: []const u8, x: f32, y: f32, w: f32, h: f32) void {
 		self.drawTextureObject(
 			self.textureCache.get(name),
 			x, y, w, h

@@ -10,16 +10,47 @@ var renderer: Renderer = undefined;
 var texture: Texture = undefined;
 
 const MainMenuState = @import("states/main_menu.zig").MainMenuState;
+const PlayState     = @import("states/play.zig").PlayState;
 
 pub const GameState = union(enum) {
-	MainMenu: MainMenuState
+	MainMenu: MainMenuState,
+	Playing: PlayState,
 };
 
 pub const Game = struct {
-	state: GameState
+	state: GameState,
+
+	pub fn init() Game {
+		return Game { .state = .MainMenu };
+	}
+
+	pub fn setState(self: *Game, comptime NewState: type) void {
+		var state = NewState.init(self);
+
+		inline for (std.meta.fields(GameState)) |field| {
+			if (field.field_type == NewState) {
+				self.state = @unionInit(GameState, field.name, state);
+				return;
+			}
+		}
+		@compileError(@typeName(NewState) ++ " is not in the GameState union");
+	}
 };
 
 var game: Game = undefined;
+
+fn mousePressed(window: glfw.Window, button: glfw.MouseButton) void {
+	_ = window;
+	inline for (std.meta.fields(GameState)) |field| {
+		// if the field is active
+		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
+			if (@hasDecl(field.field_type, "mousePressed")) {
+				@field(game.state, field.name).mousePressed(&game, button);
+				return;
+			}
+		}
+	}
+}
 
 fn render(window: glfw.Window) void {
 	const size = window.getFramebufferSize();
@@ -28,8 +59,12 @@ fn render(window: glfw.Window) void {
 	gl.clear(gl.COLOR_BUFFER_BIT);
 
 	renderer.framebufferSize = za.Vec2.new(@intToFloat(f32, size.width), @intToFloat(f32, size.height));
-	switch (game.state) {
-		.MainMenu => |*menu| menu.render(&game, &renderer)
+	inline for (std.meta.fields(GameState)) |field| {
+		// if the field is active
+		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
+			@field(game.state, field.name).render(&game, &renderer);
+			return;
+		}
 	}
 }
 
@@ -42,15 +77,24 @@ pub fn main() !void {
 	defer glfw.deinit();
 
 	var window = try glfw.Window.create();
+	window.mousePressed = mousePressed;
+	window.initEvents();
+
 	try gl.load({}, glfw.getProcAddress);
 
 	renderer = try Renderer.init(allocator, window);
 	defer renderer.deinit();
 	
-	game = Game { .state = .MainMenu };
+	game = Game.init();
 	window.loop(render);
 }
 
-test "basic test" {
-	try std.testing.expectEqual(10, 3 + 7);
+const expect = std.testing.expect;
+
+test "main menu state" {
+	var testGame = Game.init();
+	try expect(std.meta.activeTag(testGame.state) == .MainMenu);
+
+	testGame.setState(PlayState);
+	try expect(std.meta.activeTag(testGame.state) == .Playing);
 }
