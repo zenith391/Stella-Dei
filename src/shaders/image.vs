@@ -3,21 +3,10 @@ layout (location = 0) in vec2 aPos;
 
 out vec2 texCoord;
 
-uniform vec2 offset;
-uniform vec2 scale;
+uniform mat4 projMatrix;
+uniform mat4 modelMatrix;
 
 void main() {
-	vec2 position = aPos;
-
-	// Apply scaling
-	position *= scale;
-
-	// Apply translation
-	position += offset;
-
-	// Invert Y position
-	position.y = -position.y;
-
-	gl_Position = vec4(position.x, position.y, 0, 1);
-	texCoord = aPos;
+	gl_Position = projMatrix * modelMatrix * vec4(aPos, 0, 1);
+	texCoord = aPos + vec2(0.5f, 0.5f);
 }

@@ -7,15 +7,16 @@ const log    = std.log.scoped(.renderer);
 const Allocator = std.mem.Allocator;
 const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
+const Mat4 = za.Mat4;
 
 /// Vertices that compose a quad, it will often be used so here is it
 const quadVertices = [_]f32 {
-	0.0, 0.0,
-	0.0, 1.0,
-	1.0, 1.0,
-	1.0, 1.0,
-	1.0, 0.0,
-	0.0, 0.0,
+	-0.5, -0.5,
+	-0.5,  0.5,
+	 0.5,  0.5,
+	 0.5,  0.5,
+	 0.5, -0.5,
+	-0.5, -0.5,
 };
 
 pub const Renderer = struct {
@@ -48,6 +49,13 @@ pub const Renderer = struct {
 		gl.enable(gl.BLEND);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
+		colorProgram.use();
+		colorProgram.setUniformMat4("projMatrix",
+			Mat4.orthographic(0, 1, 1, 0, 0, 10));
+		imageProgram.use();
+		imageProgram.setUniformMat4("projMatrix",
+			Mat4.orthographic(0, 1, 1, 0, 0, 10));
+
 		return Renderer {
 			.window = window,
 			.textureCache = TextureCache.init(allocator),
@@ -62,45 +70,42 @@ pub const Renderer = struct {
 		self.color = color;
 	}
 
-	pub fn fillRect(self: *Renderer, x: f32, y: f32, w: f32, h: f32) void {
+	fn getModelMatrix(x: f32, y: f32, w: f32, h: f32, rot: f32) Mat4 {
+		const translate = Vec3.new(x + w / 2, y + h / 2, 0);
+		const scale = Vec3.new(w, h, 1);
+
+		return Mat4.recompose(translate, Vec3.new(0, 0, rot), scale);
+	}
+
+	pub fn fillRect(self: *Renderer, x: f32, y: f32, w: f32, h: f32, rot: f32) void {
 		self.colorProgram.use();
 		self.colorProgram.setUniformVec3("color", self.color);
-		self.colorProgram.setUniformVec2("offset", Vec2.new(
-			(x / self.framebufferSize.x) * 2 - 1,
-			(y / self.framebufferSize.y) * 2 - 1
-		));
-
-		self.colorProgram.setUniformVec2("scale", Vec2.new(
-			(w / self.framebufferSize.x) * 2,
-			(h / self.framebufferSize.y) * 2
-		));
+		self.colorProgram.setUniformMat4("projMatrix",
+			Mat4.orthographic(0, self.framebufferSize.x, self.framebufferSize.y, 0, 0, 10));
+		self.colorProgram.setUniformMat4("modelMatrix",
+			getModelMatrix(x, y, w, h, rot));
 
 		gl.bindVertexArray(self.quadVao);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 	}
 
-	pub fn drawTextureObject(self: *Renderer, texture: Texture, x: f32, y: f32, w: f32, h: f32) void {
+	pub fn drawTextureObject(self: *Renderer, texture: Texture, x: f32, y: f32, w: f32, h: f32, rot: f32) void {
 		self.imageProgram.use();
 		self.imageProgram.setUniformInt("uTexture", 0);
-		self.imageProgram.setUniformVec2("offset", Vec2.new(
-			(x / self.framebufferSize.x) * 2 - 1,
-			(y / self.framebufferSize.y) * 2 - 1
-		));
-
-		self.imageProgram.setUniformVec2("scale", Vec2.new(
-			(w / self.framebufferSize.x) * 2,
-			(h / self.framebufferSize.y) * 2
-		));
+		self.imageProgram.setUniformMat4("projMatrix",
+			Mat4.orthographic(0, self.framebufferSize.x, self.framebufferSize.y, 0, 0, 10));
+		self.imageProgram.setUniformMat4("modelMatrix",
+			getModelMatrix(x, y, w, h, rot));
 
 		gl.bindTexture(gl.TEXTURE_2D, texture.texture);
 		gl.bindVertexArray(self.quadVao);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 	}
 
-	pub fn drawTexture(self: *Renderer, name: []const u8, x: f32, y: f32, w: f32, h: f32) void {
+	pub fn drawTexture(self: *Renderer, name: []const u8, x: f32, y: f32, w: f32, h: f32, rot: f32) void {
 		self.drawTextureObject(
 			self.textureCache.get(name),
-			x, y, w, h
+			x, y, w, h, rot
 		);
 	}
 
@@ -259,6 +264,11 @@ const ShaderProgram = struct {
 	pub fn setUniformVec3(self: ShaderProgram, uniform: [:0]const u8, vec: Vec3) void {
 		const location = gl.getUniformLocation(self.program, uniform);
 		gl.uniform3f(location, vec.x, vec.y, vec.z);
+	}
+
+	pub fn setUniformMat4(self: ShaderProgram, uniform: [:0]const u8, mat: Mat4) void {
+		const location = gl.getUniformLocation(self.program, uniform);
+		gl.uniformMatrix4fv(location, 1, gl.FALSE, mat.getData());
 	}
 
 	pub fn setUniformInt(self: ShaderProgram, uniform: [:0]const u8, int: c_int) void {
