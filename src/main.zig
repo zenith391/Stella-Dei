@@ -19,9 +19,10 @@ pub const GameState = union(enum) {
 
 pub const Game = struct {
 	state: GameState,
+	window: *glfw.Window,
 
-	pub fn init() Game {
-		return Game { .state = .MainMenu };
+	pub fn init(window: *glfw.Window) Game {
+		return Game { .state = .MainMenu, .window = window };
 	}
 
 	pub fn setState(self: *Game, comptime NewState: type) void {
@@ -56,7 +57,7 @@ fn render(window: glfw.Window) void {
 	const size = window.getFramebufferSize();
 	gl.viewport(0, 0, size.width, size.height);
 	gl.clearColor(0, 0, 0, 1);
-	gl.clear(gl.COLOR_BUFFER_BIT);
+	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	renderer.framebufferSize = za.Vec2.new(@intToFloat(f32, size.width), @intToFloat(f32, size.height));
 	inline for (std.meta.fields(GameState)) |field| {
@@ -67,6 +68,9 @@ fn render(window: glfw.Window) void {
 		}
 	}
 }
+
+const perlin = @import("perlin.zig").p2d;
+const ppm = @import("ppm.zig");
 
 pub fn main() !void {
 	var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
@@ -82,10 +86,14 @@ pub fn main() !void {
 
 	try gl.load({}, glfw.getProcAddress);
 
-	renderer = try Renderer.init(allocator, window);
+	renderer = try Renderer.init(allocator, &window);
 	defer renderer.deinit();
+
+	var image = try ppm.Image.generate(allocator, 100, 100, perlin);
+	defer image.deinit();
+	try ppm.write("test.ppm", image);
 	
-	game = Game.init();
+	game = Game.init(&window);
 	window.loop(render);
 }
 

@@ -109,6 +109,10 @@ pub const Window = struct {
 		return Vec2.new(@floatCast(f32, x), @floatCast(f32, y));
 	}
 
+	pub fn isMousePressed(self: Window, button: MouseButton) bool {
+		return c.glfwGetMouseButton(self.window, @enumToInt(button)) == c.GLFW_PRESS;
+	}
+
 	/// Make the event loop and use the given function for rendering
 	pub fn loop(self: Window, render: anytype) void {
 		while (!self.shouldClose()) {

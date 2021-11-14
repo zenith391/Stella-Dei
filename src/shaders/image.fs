@@ -7,4 +7,7 @@ uniform sampler2D uTexture;
 
 void main() {
 	fragColor = texture(uTexture, texCoord);
+	if (fragColor.w == 0) {
+		discard;
+	}
 }

@@ -20,20 +20,22 @@ const quadVertices = [_]f32 {
 };
 
 pub const Renderer = struct {
-	window: Window,
+	window: *Window,
 	textureCache: TextureCache,
 
 	colorProgram: ShaderProgram,
 	imageProgram: ShaderProgram,
+	terrainProgram: ShaderProgram,
 	quadVao: gl.GLuint,
 	framebufferSize: Vec2,
 
 	// Graphics state
 	color: Vec3 = Vec3.one(),
 
-	pub fn init(allocator: *Allocator, window: Window) !Renderer {
+	pub fn init(allocator: *Allocator, window: *Window) !Renderer {
 		const colorProgram = try ShaderProgram.createFromName("color");
 		const imageProgram = try ShaderProgram.createFromName("image");
+		const terrainProgram = try ShaderProgram.createFromName("terrain");
 
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
@@ -46,6 +48,8 @@ pub const Renderer = struct {
 		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 2 * @sizeOf(f32), null);
 		gl.enableVertexAttribArray(0);
 
+		// TODO: disable depth test in 2D (it causes blending problems)
+		gl.enable(gl.DEPTH_TEST);
 		gl.enable(gl.BLEND);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -61,6 +65,7 @@ pub const Renderer = struct {
 			.textureCache = TextureCache.init(allocator),
 			.colorProgram = colorProgram,
 			.imageProgram = imageProgram,
+			.terrainProgram = terrainProgram,
 			.quadVao = vao,
 			.framebufferSize = undefined
 		};
