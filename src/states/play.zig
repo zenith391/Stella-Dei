@@ -12,16 +12,84 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Mat4 = za.Mat4;
 
+const quadVertices = [_]f32 {
+	// bottom left
+	-0.5, -0.5, 0.0,
+	// top left
+	-0.5,  0.5, 0.0,
+	// top right
+	 0.5,  0.5, 0.0,
+	 0.5,  0.5, 0.0,
+	// bottom right
+	 0.5, -0.5, 0.0,
+	// bottom left
+	-0.5, -0.5, 0.0,
+};
+
+const TerrainMesh = struct {
+	vao: gl.GLuint,
+
+	pub fn generate(allocator: *std.mem.Allocator) !TerrainMesh {
+		var vao: gl.GLuint = undefined;
+		gl.genVertexArrays(1, &vao);
+		var vbo: gl.GLuint = undefined;
+		gl.genBuffers(1, &vbo);
+
+		gl.bindVertexArray(vao);
+		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+
+		const width = 10;
+		const height = 10;
+
+		const vertices = try allocator.alloc(f32, 3 * 6 * width * height);
+		defer allocator.free(vertices);
+
+		var x: usize = 0;
+		while (x < width) : (x += 1) {
+			var y: usize = 0;
+			while (y < height) : (y += 1) {
+				const idx = (y * width + x) * 3 * 6;
+				const fx = @intToFloat(f32, x);
+				const fy = @intToFloat(f32, y);
+				for (quadVertices) |vert, i| {
+					var out = vert;
+					if (i % 3 == 0) { // x position
+						out += fx;
+					} else if (i % 3 == 1) { // y position
+						out += fy;
+					} else if (i == 1*3-1 or i == 6*3-1) { // bottom left
+						out = perlin.p2do(fx, fy, 4);
+					} else if (i == 2*3-1) { // top left
+						out = perlin.p2do(fx, fy + 1, 4);
+					} else if (i == 3*3-1 or i == 4*3-1) { // top right
+						out = perlin.p2do(fx + 1, fy + 1, 4);
+					} else if (i == 5*3-1) { // bottom right
+						out = perlin.p2do(fx + 1, fy, 4);
+					}
+					vertices[idx + i] = out;
+				}
+			}
+		}
+
+		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), vertices.ptr, gl.STATIC_DRAW);
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), null);
+		gl.enableVertexAttribArray(0);
+
+		return TerrainMesh { .vao = vao };
+	}
+};
+
 pub const PlayState = struct {
 	rot: f32 = 0,
 	cameraPos: Vec3 = Vec3.new(0, -5, 0),
 	dragStart: Vec2 = undefined,
+	terrain: ?TerrainMesh = null,
 
 	pub fn init(_: *Game) PlayState {
 		return PlayState {};
 	}
 
-	pub fn render(self: *PlayState, _: *Game, renderer: *Renderer) void {
+	pub fn render(self: *PlayState, game: *Game, renderer: *Renderer) void {
 		const window = renderer.window;
 		const size = renderer.framebufferSize;
 		//renderer.drawTexture("sun", size.x / 2 - 125, size.y / 2 - 125, 250, 250, self.rot);
@@ -34,6 +102,12 @@ pub const PlayState = struct {
 			self.dragStart = window.getCursorPos();
 		}
 
+		if (self.terrain == null) {
+			// TODO: we shouldn't generate terrain in render()
+			self.terrain = TerrainMesh.generate(game.allocator) catch unreachable;
+		}
+		const terrain = self.terrain.?;
+
 		const program = renderer.terrainProgram;
 		program.use();
 		program.setUniformMat4("projMatrix",
@@ -43,19 +117,11 @@ pub const PlayState = struct {
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
-		var x: f32 = -5;
-		while (x < 10) : (x += 1) {
-			var y: f32 = -5;
-			while (y < 10) : (y += 1) {
-				const z = perlin.p2do(x / 10, y / 10, 4) * 3 + 2.0;
-
-				const modelMatrix = Mat4.recompose(Vec3.new(x, z, y), Vec3.new(90, 0, 0), Vec3.one());
-				program.setUniformMat4("modelMatrix",
-					modelMatrix);
-				gl.bindVertexArray(renderer.quadVao);
-				gl.drawArrays(gl.TRIANGLES, 0, 6);
-			}
-		}
+		const modelMatrix = Mat4.recompose(Vec3.new(-5, 2, -5), Vec3.new(90, 0, 0), Vec3.new(1, 1, 1));
+		program.setUniformMat4("modelMatrix",
+			modelMatrix);
+		gl.bindVertexArray(terrain.vao);
+		gl.drawArrays(gl.TRIANGLES, 0, 6 * 10 * 10);
 	}
 
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {

@@ -20,9 +20,10 @@ pub const GameState = union(enum) {
 pub const Game = struct {
 	state: GameState,
 	window: *glfw.Window,
+	allocator: *std.mem.Allocator,
 
-	pub fn init(window: *glfw.Window) Game {
-		return Game { .state = .MainMenu, .window = window };
+	pub fn init(window: *glfw.Window, allocator: *std.mem.Allocator) Game {
+		return Game { .state = .MainMenu, .window = window, .allocator = allocator };
 	}
 
 	pub fn setState(self: *Game, comptime NewState: type) void {
@@ -89,11 +90,11 @@ pub fn main() !void {
 	renderer = try Renderer.init(allocator, &window);
 	defer renderer.deinit();
 
-	var image = try ppm.Image.generate(allocator, 100, 100, perlin);
-	defer image.deinit();
-	try ppm.write("test.ppm", image);
+	//var image = try ppm.Image.generate(allocator, 100, 100, perlin);
+	//defer image.deinit();
+	//try ppm.write("test.ppm", image);
 	
-	game = Game.init(&window);
+	game = Game.init(&window, allocator);
 	window.loop(render);
 }
 
