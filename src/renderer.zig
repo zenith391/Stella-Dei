@@ -32,7 +32,7 @@ pub const Renderer = struct {
 	// Graphics state
 	color: Vec3 = Vec3.one(),
 
-	pub fn init(allocator: *Allocator, window: *Window) !Renderer {
+	pub fn init(allocator: Allocator, window: *Window) !Renderer {
 		const colorProgram = try ShaderProgram.createFromName("color");
 		const imageProgram = try ShaderProgram.createFromName("image");
 		const terrainProgram = try ShaderProgram.createFromName("terrain");
@@ -124,7 +124,7 @@ const zigimg = @import("zigimg");
 pub const Texture = struct {
 	texture: gl.GLuint,
 
-	pub fn createFromPath(allocator: *Allocator, path: []const u8) !Texture {
+	pub fn createFromPath(allocator: Allocator, path: []const u8) !Texture {
 		var file = try std.fs.cwd().openFile(path, .{});
 		defer file.close();
 
@@ -157,7 +157,7 @@ pub const Texture = struct {
 pub const TextureCache = struct {
 	cache: std.StringHashMap(Texture),
 
-	pub fn init(allocator: *Allocator) TextureCache {
+	pub fn init(allocator: Allocator) TextureCache {
 		return TextureCache {
 			.cache = std.StringHashMap(Texture).init(allocator)
 		};

@@ -21,9 +21,9 @@ pub fn deinit() void {
 }
 
 /// This is used by zig-opengl library to load OpenGL functions from GLFW
-pub fn getProcAddress(_: void, name: [:0]const u8) ?*c_void {
+pub fn getProcAddress(_: void, name: [:0]const u8) ?*anyopaque {
 	var proc = c.glfwGetProcAddress(name);
-	return @intToPtr(?*c_void, @ptrToInt(proc));
+	return @intToPtr(?*anyopaque, @ptrToInt(proc));
 }
 
 pub const Size = struct {

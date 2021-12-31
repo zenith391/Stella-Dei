@@ -20,9 +20,9 @@ pub const GameState = union(enum) {
 pub const Game = struct {
 	state: GameState,
 	window: *glfw.Window,
-	allocator: *std.mem.Allocator,
+	allocator: std.mem.Allocator,
 
-	pub fn init(window: *glfw.Window, allocator: *std.mem.Allocator) Game {
+	pub fn init(window: *glfw.Window, allocator: std.mem.Allocator) Game {
 		return Game { .state = .MainMenu, .window = window, .allocator = allocator };
 	}
 
@@ -76,7 +76,7 @@ const ppm = @import("ppm.zig");
 pub fn main() !void {
 	var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
 	defer _ = gpa.deinit();
-	const allocator = &gpa.allocator;
+	const allocator = gpa.allocator();
 
 	try glfw.init();
 	defer glfw.deinit();
