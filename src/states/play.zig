@@ -113,7 +113,7 @@ pub const PlayState = struct {
 
 		if (window.isMousePressed(.Right)) {
 			const delta = window.getCursorPos().sub(self.dragStart).scale(1 / 100.0);
-			self.cameraPos = self.cameraPos.add(Vec3.new(-delta.x, 0, delta.y));
+			self.cameraPos = self.cameraPos.add(Vec3.new(-delta.x(), 0, delta.y()));
 
 			self.dragStart = window.getCursorPos();
 		}
@@ -127,7 +127,7 @@ pub const PlayState = struct {
 		const program = renderer.terrainProgram;
 		program.use();
 		program.setUniformMat4("projMatrix",
-			Mat4.perspective(70, size.x / size.y, 0.1, 100.0));
+			Mat4.perspective(70, size.x() / size.y(), 0.1, 100.0));
 
 		const target = self.cameraPos.add(Vec3.new(0, 5, 2));
 		program.setUniformMat4("viewMatrix",

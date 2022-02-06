@@ -1,6 +1,7 @@
 const std    = @import("std");
 const gl     = @import("gl");
 const za     = @import("zalgebra");
+const zigimg = @import("zigimg");
 const Window = @import("glfw.zig").Window;
 const log    = std.log.scoped(.renderer);
 
@@ -86,7 +87,7 @@ pub const Renderer = struct {
 		self.colorProgram.use();
 		self.colorProgram.setUniformVec3("color", self.color);
 		self.colorProgram.setUniformMat4("projMatrix",
-			Mat4.orthographic(0, self.framebufferSize.x, self.framebufferSize.y, 0, 0, 10));
+			Mat4.orthographic(0, self.framebufferSize.x(), self.framebufferSize.y(), 0, 0, 10));
 		self.colorProgram.setUniformMat4("modelMatrix",
 			getModelMatrix(x, y, w, h, rot));
 
@@ -98,7 +99,7 @@ pub const Renderer = struct {
 		self.imageProgram.use();
 		self.imageProgram.setUniformInt("uTexture", 0);
 		self.imageProgram.setUniformMat4("projMatrix",
-			Mat4.orthographic(0, self.framebufferSize.x, self.framebufferSize.y, 0, 0, 10));
+			Mat4.orthographic(0, self.framebufferSize.x(), self.framebufferSize.y(), 0, 0, 10));
 		self.imageProgram.setUniformMat4("modelMatrix",
 			getModelMatrix(x, y, w, h, rot));
 
@@ -118,8 +119,6 @@ pub const Renderer = struct {
 		self.textureCache.deinit();
 	}
 };
-
-const zigimg = @import("zigimg");
 
 pub const Texture = struct {
 	texture: gl.GLuint,
@@ -263,12 +262,12 @@ const ShaderProgram = struct {
 
 	pub fn setUniformVec2(self: ShaderProgram, uniform: [:0]const u8, vec: Vec2) void {
 		const location = gl.getUniformLocation(self.program, uniform);
-		gl.uniform2f(location, vec.x, vec.y);
+		gl.uniform2f(location, vec.x(), vec.y());
 	}
 
 	pub fn setUniformVec3(self: ShaderProgram, uniform: [:0]const u8, vec: Vec3) void {
 		const location = gl.getUniformLocation(self.program, uniform);
-		gl.uniform3f(location, vec.x, vec.y, vec.z);
+		gl.uniform3f(location, vec.x(), vec.y(), vec.z());
 	}
 
 	pub fn setUniformMat4(self: ShaderProgram, uniform: [:0]const u8, mat: Mat4) void {
