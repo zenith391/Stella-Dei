@@ -12,15 +12,15 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Mat4 = za.Mat4;
 
-const quadVertices = [_]f32 {
+const quadVertices = [_]Vec3 {
 	// bottom left
-	-0.5, -0.5, 0.0,
+	Vec3.new(-0.5, -0.5, 0.0),
 	// top left
-	-0.5,  0.5, 0.0,
+	Vec3.new(-0.5,  0.5, 0.0),
 	// top right
-	 0.5,  0.5, 0.0,
+	Vec3.new( 0.5,  0.5, 0.0),
 	// bottom right
-	 0.5, -0.5, 0.0,
+	Vec3.new( 0.5, -0.5, 0.0),
 };
 
 const quadIndices = [_]u32 {
@@ -46,45 +46,53 @@ const TerrainMesh = struct {
 		const width = 10;
 		const height = 10;
 
-		const vertices = try allocator.alloc(f32, 2 * 3 * 4 * width * height);
+		// TODO: just make the mesh and optimize it in a later pass
+		const vertices = try allocator.alloc(f32, quadVertices.len * 3 * width * height);
 		defer allocator.free(vertices);
 
-		const indices = try allocator.alloc(u32, 6 * width * height);
+		const indices = try allocator.alloc(u32, quadIndices.len * width * height);
 		defer allocator.free(indices);
 
-		var x: usize = 0;
-		while (x < width) : (x += 1) {
-			var y: usize = 0;
-			while (y < height) : (y += 1) {
-				const idx = (y * width + x) * 2 * 3 * 4;
+		var y: usize = 0;
+		while (y < height) : (y += 1) {
+			var x: usize = 0;
+			while (x < width) : (x += 1) {
+				const idx = (y * width + x) * quadVertices.len * 3;
 				const fx = @intToFloat(f32, x);
 				const fy = @intToFloat(f32, y);
 				for (quadVertices) |vert, i| {
 					var out = vert;
-					if (i % 3 == 0) { // x position
-						out += fx;
-					} else if (i % 3 == 1) { // y position
-						out += fy;
-					} else if (i == 1*3-1) { // bottom left
-						out = perlin.p2do(fx, fy, 4);
-					} else if (i == 2*3-1) { // top left
-						out = perlin.p2do(fx, fy + 1, 4);
-					} else if (i == 3*3-1) { // top right
-						out = perlin.p2do(fx + 1, fy + 1, 4);
-					} else if (i == 5*3-1) { // bottom right
-						out = perlin.p2do(fx + 1, fy, 4);
+					out.data[0] += fx;
+					out.data[1] += fy;
+					if (i == 0) { // bottom left
+						out.data[1] += 0;
 					}
-					vertices[idx + i] = out;
+
+					// if (i % 3 == 0) { // x position
+					// 	out += fx;
+					// } else if (i % 3 == 1) { // y position
+					// 	out += fy;
+					// } else if (i == 1*3-1) { // bottom left
+					// 	out = perlin.p2do(fx, fy, 4);
+					// } else if (i == 2*3-1) { // top left
+					// 	out = perlin.p2do(fx, fy + 1, 4);
+					// } else if (i == 3*3-1) { // top right
+					// 	out = perlin.p2do(fx + 1, fy + 1, 4);
+					// } else if (i == 5*3-1) { // bottom right
+					// 	out = perlin.p2do(fx + 1, fy, 4);
+					// }
+					vertices[idx + i*3 + 0] = out.x();
+					vertices[idx + i*3 + 1] = out.y();
+					vertices[idx + i*3 + 2] = out.z();
 				}
 
-				const iidx = (y * width + x) * 4;
+				const iidx = (y * width + x) * quadIndices.len;
+				const indexOffset = (y * width + x) * 4; // 4 indices used per quad
 				for (quadIndices) |index, i| {
-					indices[iidx + i] = @intCast(u32, index + iidx);
+					indices[i + iidx] = @intCast(u32, index + indexOffset);
 				}
 			}
 		}
-
-
 
 		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), vertices.ptr, gl.STATIC_DRAW);
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, indices.len * @sizeOf(u32)), indices.ptr, gl.STATIC_DRAW);
@@ -98,23 +106,24 @@ const TerrainMesh = struct {
 pub const PlayState = struct {
 	rot: f32 = 0,
 	cameraPos: Vec3 = Vec3.new(0, -5, 0),
-	dragStart: Vec2 = undefined,
+	dragStart: Vec2,
 	terrain: ?TerrainMesh = null,
 
-	pub fn init(_: *Game) PlayState {
-		return PlayState {};
+	pub fn init(game: *Game) PlayState {
+		return PlayState {
+			.dragStart = game.window.getCursorPos()
+		};
 	}
 
 	pub fn render(self: *PlayState, game: *Game, renderer: *Renderer) void {
 		const window = renderer.window;
 		const size = renderer.framebufferSize;
-		//renderer.drawTexture("sun", size.x / 2 - 125, size.y / 2 - 125, 250, 250, self.rot);
-		self.rot += 1;
+		//renderer.drawTexture("sun", size.x() / 2 - 125, size.y() / 2 - 125, 250, 250, self.rot);
+		//self.rot += 1;
 
 		if (window.isMousePressed(.Right)) {
 			const delta = window.getCursorPos().sub(self.dragStart).scale(1 / 100.0);
 			self.cameraPos = self.cameraPos.add(Vec3.new(-delta.x(), 0, delta.y()));
-
 			self.dragStart = window.getCursorPos();
 		}
 
