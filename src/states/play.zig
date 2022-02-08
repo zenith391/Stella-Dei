@@ -115,6 +115,11 @@ pub const Planet = struct {
 		);
 	}
 
+	fn vecCompare(_: void, lhs: Vec3, rhs: Vec3) bool {
+		const origin = Vec3.new(0, 1, 0);
+		return lhs.distance(origin) < rhs.distance(origin);
+	}
+
 	pub fn generate(allocator: std.mem.Allocator, numPoints: usize) !Planet {
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
@@ -124,25 +129,78 @@ pub const Planet = struct {
 		gl.bindVertexArray(vao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
 
+		var points = try std.ArrayList(Vec3).initCapacity(allocator, numPoints);
+		defer points.deinit();
+
+		{
+			var i: usize = 0;
+			while (i < numPoints) : (i += 1) {
+				var point = getPoint(numPoints, i);
+
+				const phi = std.math.acos(point.z());
+				const theta = std.math.acos(point.x() / std.math.sin(phi));
+				const value = perlin.p2do(theta * 10, phi * 10, 4);
+				_ = value;
+				//point = point.scale(1 + value*0.1);
+				points.appendAssumeCapacity(point);
+			}
+		}
+
+		//std.sort.sort(Vec3, points.items, {}, vecCompare);
+
 		const vertices = try allocator.alloc(f32, 3 * numPoints);
 		defer allocator.free(vertices);
 
-		var i: usize = 0;
-		while (i < numPoints) : (i += 1) {
-			var point = getPoint(numPoints, i);
+		// Do a Delaunay triangulation on the points we just got
+		{
+			// for (points.items) |point, i| {
+			// 	// Index into the vertices array
+			// 	const arrayIdx = i * 3;
 
-			// Index into the vertices array
-			const arrayIdx = i * 3;
+			// 	vertices[arrayIdx + 0] = point.x() * 5;
+			// 	vertices[arrayIdx + 1] = point.y() * 5;
+			// 	vertices[arrayIdx + 2] = point.z() * 5;
+			// }
+			var i: usize = 0;
+			while (points.items.len >= 3) {
+				const triangleA = points.items[0];
+				_ = points.swapRemove(0);
 
-			const phi = std.math.acos(point.z());
-			const theta = std.math.acos(point.x() / std.math.sin(phi));
+				var triangleBIdx: usize = 0;
+				var triangleB: Vec3 = Vec3.new(1000, 1000, 1000);
+				for (points.items) |candidate, idx| {
+					if (candidate.distance(triangleA) < triangleB.distance(triangleA)) {
+						triangleB = candidate;
+						triangleBIdx = idx;
+					}
+				}
+				_ = points.swapRemove(triangleBIdx);
 
-			const value = perlin.p2do(theta * 10, phi * 10, 4);
-			point = point.scale(1 + value*0.1);
+				var triangleCIdx: usize = 0;
+				var triangleC: Vec3 = Vec3.new(1000, 1000, 1000);
+				for (points.items) |candidate, idx| {
+					if (candidate.distance(triangleA) + candidate.distance(triangleB) 
+						< triangleC.distance(triangleA) + triangleC.distance(triangleB)) {
+						triangleC = candidate;
+						triangleCIdx = idx;
+					}
+				}
+				_ = points.swapRemove(triangleCIdx);
 
-			vertices[arrayIdx + 0] = point.x() * 5;
-			vertices[arrayIdx + 1] = point.y() * 5;
-			vertices[arrayIdx + 2] = point.z() * 5;
+			 	const arrayIdx = i;
+				vertices[arrayIdx + 0] = triangleA.x() * 5;
+				vertices[arrayIdx + 1] = triangleA.y() * 5;
+				vertices[arrayIdx + 2] = triangleA.z() * 5;
+
+				vertices[arrayIdx + 3] = triangleB.x();
+				vertices[arrayIdx + 4] = triangleB.y() * 5;
+				vertices[arrayIdx + 5] = triangleB.z() * 5;
+
+				vertices[arrayIdx + 6] = triangleC.x() * 5;
+				vertices[arrayIdx + 7] = triangleC.y() * 5;
+				vertices[arrayIdx + 8] = triangleC.z() * 5;
+				i += 9;
+			}
 		}
 
 		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), vertices.ptr, gl.STATIC_DRAW);
@@ -208,7 +266,7 @@ pub const PlayState = struct {
 
 		program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
 		gl.bindVertexArray(planet.vao);
-		gl.drawArrays(gl.POINTS, 0, 1000);
+		gl.drawArrays(gl.TRIANGLES, 0, 1000);
 	}
 
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {
