@@ -65,22 +65,15 @@ const TerrainMesh = struct {
 					out.data[0] += fx;
 					out.data[1] += fy;
 					if (i == 0) { // bottom left
-						out.data[1] += 0;
+						out.data[1] += perlin.p2do(fx, fy, 4);
+					} else if (i == 1) { // top left
+						out.data[1] += perlin.p2do(fx, fy + 1, 4);
+					} else if (i == 2) { // top right
+						out.data[1] += perlin.p2do(fx + 1, fy + 1, 4);
+					} else if (i == 3) { // bottom right
+						out.data[1] += perlin.p2do(fx + 1, fy, 4);
 					}
-
-					// if (i % 3 == 0) { // x position
-					// 	out += fx;
-					// } else if (i % 3 == 1) { // y position
-					// 	out += fy;
-					// } else if (i == 1*3-1) { // bottom left
-					// 	out = perlin.p2do(fx, fy, 4);
-					// } else if (i == 2*3-1) { // top left
-					// 	out = perlin.p2do(fx, fy + 1, 4);
-					// } else if (i == 3*3-1) { // top right
-					// 	out = perlin.p2do(fx + 1, fy + 1, 4);
-					// } else if (i == 5*3-1) { // bottom right
-					// 	out = perlin.p2do(fx + 1, fy, 4);
-					// }
+					
 					vertices[idx + i*3 + 0] = out.x();
 					vertices[idx + i*3 + 1] = out.y();
 					vertices[idx + i*3 + 2] = out.z();
