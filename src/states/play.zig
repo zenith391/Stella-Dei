@@ -129,10 +129,17 @@ pub const Planet = struct {
 
 		var i: usize = 0;
 		while (i < numPoints) : (i += 1) {
-			const point = getPoint(numPoints, i);
+			var point = getPoint(numPoints, i);
 
 			// Index into the vertices array
 			const arrayIdx = i * 3;
+
+			const phi = std.math.acos(point.z());
+			const theta = std.math.acos(point.x() / std.math.sin(phi));
+
+			const value = perlin.p2do(theta * 10, phi * 10, 4);
+			point = point.scale(1 + value*0.1);
+
 			vertices[arrayIdx + 0] = point.x() * 5;
 			vertices[arrayIdx + 1] = point.y() * 5;
 			vertices[arrayIdx + 2] = point.z() * 5;
