@@ -73,7 +73,7 @@ const TerrainMesh = struct {
 					} else if (i == 3) { // bottom right
 						out.data[1] += perlin.p2do(fx + 1, fy, 4);
 					}
-					
+
 					vertices[idx + i*3 + 0] = out.x();
 					vertices[idx + i*3 + 1] = out.y();
 					vertices[idx + i*3 + 2] = out.z();
@@ -92,17 +92,77 @@ const TerrainMesh = struct {
 		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), null);
 		gl.enableVertexAttribArray(0);
 
-		return TerrainMesh { .vao = vao };
+		return TerrainMesh { .vao = vao, };
 	}
+};
+
+pub const Planet = struct {
+	vao: gl.GLuint,
+	/// Number of points that cover the sphere
+	numPoints: usize,
+
+	// See http://extremelearning.com.au/evenly-distributing-points-on-a-sphere/
+	pub fn getPoint(numPoints: usize, idx: usize) Vec3 {
+		std.debug.assert(idx < numPoints);
+
+		const i = @intToFloat(f32, idx) + 0.5;
+		const phi = std.math.acos(1 - 2*i / @intToFloat(f32, numPoints));
+		const theta = 2 * std.math.pi * i / std.math.phi;
+		return Vec3.new(
+			std.math.cos(theta) * std.math.sin(phi),
+			std.math.sin(theta) * std.math.sin(phi),
+			std.math.cos(phi),
+		);
+	}
+
+	pub fn generate(allocator: std.mem.Allocator, numPoints: usize) !Planet {
+		var vao: gl.GLuint = undefined;
+		gl.genVertexArrays(1, &vao);
+		var vbo: gl.GLuint = undefined;
+		gl.genBuffers(1, &vbo);
+
+		gl.bindVertexArray(vao);
+		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+
+		const vertices = try allocator.alloc(f32, 3 * numPoints);
+		defer allocator.free(vertices);
+
+		var i: usize = 0;
+		while (i < numPoints) : (i += 1) {
+			const point = getPoint(numPoints, i);
+
+			// Index into the vertices array
+			const arrayIdx = i * 3;
+			vertices[arrayIdx + 0] = point.x() * 5;
+			vertices[arrayIdx + 1] = point.y() * 5;
+			vertices[arrayIdx + 2] = point.z() * 5;
+		}
+
+		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), vertices.ptr, gl.STATIC_DRAW);
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), null);
+		gl.enableVertexAttribArray(0);
+
+		return Planet {
+			.vao = vao,
+			.numPoints = numPoints
+		};
+	}
+
 };
 
 pub const PlayState = struct {
 	rot: f32 = 0,
 	cameraPos: Vec3 = Vec3.new(0, -5, 0),
 	dragStart: Vec2,
-	terrain: ?TerrainMesh = null,
+	//terrain: ?TerrainMesh = null,
+	planet: ?Planet = null,
 
 	pub fn init(game: *Game) PlayState {
+		var i: usize = 0;
+		while (i < 10) : (i += 1) {
+			std.log.err("{}", .{ Planet.getPoint(10, i) });
+		}
+
 		return PlayState {
 			.dragStart = game.window.getCursorPos()
 		};
@@ -120,11 +180,11 @@ pub const PlayState = struct {
 			self.dragStart = window.getCursorPos();
 		}
 
-		if (self.terrain == null) {
-			// TODO: we shouldn't generate terrain in render()
-			self.terrain = TerrainMesh.generate(game.allocator) catch unreachable;
+		if (self.planet == null) {
+			// TODO: we shouldn't generate planet in render()
+			self.planet = Planet.generate(game.allocator, 1000) catch unreachable;
 		}
-		const terrain = self.terrain.?;
+		const planet = self.planet.?;
 
 		const program = renderer.terrainProgram;
 		program.use();
@@ -135,13 +195,13 @@ pub const PlayState = struct {
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
-		const modelMatrix = Mat4.recompose(Vec3.new(-5, 2, -5), Vec3.new(90, 0, 0), Vec3.new(1, 1, 1));
+		const modelMatrix = Mat4.recompose(Vec3.new(-2.5, 3, -2.5), Vec3.new(90, 0, 0), Vec3.new(1, 1, 1));
 		program.setUniformMat4("modelMatrix",
 			modelMatrix);
 
 		program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
-		gl.bindVertexArray(terrain.vao);
-		gl.drawElements(gl.TRIANGLES, 6 * 10 * 10, gl.UNSIGNED_INT, null);
+		gl.bindVertexArray(planet.vao);
+		gl.drawArrays(gl.POINTS, 0, 1000);
 	}
 
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {
