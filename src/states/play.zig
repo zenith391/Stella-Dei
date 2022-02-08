@@ -43,6 +43,9 @@ const IndexPair = struct {
 pub const Planet = struct {
 	vao: gl.GLuint,
 	numTriangles: gl.GLint,
+	allocator: std.mem.Allocator,
+	vertices: []f32,
+	indices: []gl.GLuint,
 
 	const LookupMap = std.AutoHashMap(IndexPair, gl.GLuint);
 	fn vertexForEdge(lookup: *LookupMap, vertices: *std.ArrayList(f32), first: gl.GLuint, second: gl.GLuint) !gl.GLuint {
@@ -142,8 +145,16 @@ pub const Planet = struct {
 
 		return Planet {
 			.vao = vao,
-			.numTriangles = @intCast(gl.GLint, subdivided.indices.len)
+			.numTriangles = @intCast(gl.GLint, subdivided.indices.len),
+			.allocator = allocator,
+			.vertices = subdivided.vertices,
+			.indices = subdivided.indices,
 		};
+	}
+
+	pub fn deinit(self: Planet) void {
+		self.allocator.free(self.vertices);
+		self.allocator.free(self.indices);
 	}
 
 };
@@ -199,6 +210,12 @@ pub const PlayState = struct {
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {
 		if (button == .Right) {
 			self.dragStart = game.window.getCursorPos();
+		}
+	}
+
+	pub fn deinit(self: *PlayState) void {
+		if (self.planet) |planet| {
+			planet.deinit();
 		}
 	}
 

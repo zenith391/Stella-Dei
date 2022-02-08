@@ -28,6 +28,7 @@ pub const Game = struct {
 
 	pub fn setState(self: *Game, comptime NewState: type) void {
 		var state = NewState.init(self);
+		self.deinitState();
 
 		inline for (std.meta.fields(GameState)) |field| {
 			if (field.field_type == NewState) {
@@ -36,6 +37,22 @@ pub const Game = struct {
 			}
 		}
 		@compileError(@typeName(NewState) ++ " is not in the GameState union");
+	}
+
+	pub fn deinitState(self: *Game) void {
+		inline for (std.meta.fields(GameState)) |field| {
+			// if the field is active
+			if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
+				if (@hasDecl(field.field_type, "deinit")) {
+					@field(self.state, field.name).deinit();
+					return;
+				}
+			}
+		}
+	}
+
+	pub fn deinit(self: *Game) void {
+		self.deinitState();
 	}
 };
 
@@ -95,6 +112,7 @@ pub fn main() !void {
 	//try ppm.write("test.ppm", image);
 	
 	game = Game.init(&window, allocator);
+	defer game.deinit();
 	window.loop(render);
 }
 
