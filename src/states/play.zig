@@ -134,21 +134,32 @@ pub const Planet = struct {
 		gl.bindVertexArray(vao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+		
+		var subdivided: ?IndexedMesh = null;
+		var i: usize = 0;
+		while (i < numSubdivisions) : (i += 1) {
+			const oldSubdivided = subdivided;
+			const vert = if (subdivided) |s| s.vertices else icoVertices;
+			const indc = if (subdivided) |s| s.indices else icoIndices;
+			subdivided = try subdivide(allocator, vert, indc);
 
-		const subdivided = try subdivide(allocator, icoVertices, icoIndices);
+			if (oldSubdivided) |s| {
+				allocator.free(s.vertices);
+				allocator.free(s.indices);
+			}
+		}
 
-
-		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, subdivided.vertices.len * @sizeOf(f32)), subdivided.vertices.ptr, gl.STATIC_DRAW);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.indices.len * @sizeOf(f32)), subdivided.indices.ptr, gl.STATIC_DRAW);
+		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, subdivided.?.vertices.len * @sizeOf(f32)), subdivided.?.vertices.ptr, gl.STATIC_DRAW);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
 		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), null);
 		gl.enableVertexAttribArray(0);
 
 		return Planet {
 			.vao = vao,
-			.numTriangles = @intCast(gl.GLint, subdivided.indices.len),
+			.numTriangles = @intCast(gl.GLint, subdivided.?.indices.len),
 			.allocator = allocator,
-			.vertices = subdivided.vertices,
-			.indices = subdivided.indices,
+			.vertices = subdivided.?.vertices,
+			.indices = subdivided.?.indices,
 		};
 	}
 
@@ -161,7 +172,7 @@ pub const Planet = struct {
 
 pub const PlayState = struct {
 	rot: f32 = 0,
-	cameraPos: Vec3 = Vec3.new(0, -5, 0),
+	cameraPos: Vec3 = Vec3.new(0, -8, 2),
 	dragStart: Vec2,
 	planet: ?Planet = null,
 
@@ -181,11 +192,14 @@ pub const PlayState = struct {
 			const delta = window.getCursorPos().sub(self.dragStart).scale(1 / 100.0);
 			self.cameraPos = self.cameraPos.add(Vec3.new(-delta.x(), 0, delta.y()));
 			self.dragStart = window.getCursorPos();
+
+			self.cameraPos = self.cameraPos.norm()
+				.scale(15);
 		}
 
 		if (self.planet == null) {
 			// TODO: we shouldn't generate planet in render()
-			self.planet = Planet.generate(game.allocator, 1) catch unreachable;
+			self.planet = Planet.generate(game.allocator, 3) catch unreachable;
 		}
 		const planet = self.planet.?;
 
@@ -194,11 +208,12 @@ pub const PlayState = struct {
 		program.setUniformMat4("projMatrix",
 			Mat4.perspective(70, size.x() / size.y(), 0.1, 100.0));
 
-		const target = self.cameraPos.add(Vec3.new(0, 5, 2));
+		//const target = self.cameraPos.add(Vec3.new(0, 5, 2));
+		const target = Vec3.new(0, 0, 0);
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
-		const modelMatrix = Mat4.recompose(Vec3.new(-2.5, 3, -2.5), Vec3.new(90, 0, 0), Vec3.new(1, 1, 1));
+		const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(90, 0, 0), Vec3.new(10, 10, 10));
 		program.setUniformMat4("modelMatrix",
 			modelMatrix);
 
