@@ -136,16 +136,37 @@ pub const Planet = struct {
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
 		
 		var subdivided: ?IndexedMesh = null;
-		var i: usize = 0;
-		while (i < numSubdivisions) : (i += 1) {
-			const oldSubdivided = subdivided;
-			const vert = if (subdivided) |s| s.vertices else icoVertices;
-			const indc = if (subdivided) |s| s.indices else icoIndices;
-			subdivided = try subdivide(allocator, vert, indc);
+		{
+			var i: usize = 0;
+			while (i < numSubdivisions) : (i += 1) {
+				const oldSubdivided = subdivided;
+				const vert = if (subdivided) |s| s.vertices else icoVertices;
+				const indc = if (subdivided) |s| s.indices else icoIndices;
+				subdivided = try subdivide(allocator, vert, indc);
 
-			if (oldSubdivided) |s| {
-				allocator.free(s.vertices);
-				allocator.free(s.indices);
+				if (oldSubdivided) |s| {
+					allocator.free(s.vertices);
+					allocator.free(s.indices);
+				}
+			}
+		}
+
+		{
+			var i: usize = 0;
+			const vert = subdivided.?.vertices;
+			while (i < vert.len) : (i += 3) {
+				var point = Vec3.new(vert[i+0], vert[i+1], vert[i+2]);
+				// TODO: operations
+
+				var phi = std.math.acos(point.z());
+				if (phi == 0) phi = 0.001;
+				var theta = std.math.acos(point.x() / std.math.sin(phi));
+				if (std.math.isNan(theta)) theta = 0.001;
+				// TODO: 3D perlin (or simplex) noise for correct looping
+				const value = perlin.p2do(theta * 3 + 5, phi * 3 + 5, 4);
+				point = point.scale(1 + value * 0.1);
+
+				vert[i+0] = point.x(); vert[i+1] = point.y(); vert[i+2] = point.z();
 			}
 		}
 
@@ -199,7 +220,7 @@ pub const PlayState = struct {
 
 		if (self.planet == null) {
 			// TODO: we shouldn't generate planet in render()
-			self.planet = Planet.generate(game.allocator, 3) catch unreachable;
+			self.planet = Planet.generate(game.allocator, 4) catch unreachable;
 		}
 		const planet = self.planet.?;
 
