@@ -213,8 +213,12 @@ pub const PlayState = struct {
 
 		if (window.isMousePressed(.Right)) {
 			const delta = window.getCursorPos().sub(self.dragStart).scale(1 / 100.0);
-			self.cameraPos = self.cameraPos.add(Vec3.new(-delta.x(), 0, delta.y())
-				.scale(self.cameraDistance / 10));
+			const right = self.cameraPos.cross(Vec3.forward()).norm();
+			const forward = self.cameraPos.cross(Vec3.right()).norm();
+			self.cameraPos = self.cameraPos.add(
+				 right.scale(delta.x())
+				.add(forward.scale(delta.y()))
+				.scale(self.cameraDistance / 5));
 			self.dragStart = window.getCursorPos();
 
 			self.cameraPos = self.cameraPos.norm()
