@@ -42,6 +42,7 @@ pub const Window = struct {
 	window: *c.GLFWwindow,
 	mousePressed: ?fn(Window, MouseButton) void = null,
 	mouseReleased: ?fn(Window, MouseButton) void = null,
+	mouseScroll: ?fn(Window, y: f64) void = null,
 
 	fn mouseButtonCallback(window: ?*c.GLFWwindow, button: c_int, action: c_int, mods: c_int) callconv(.C) void {
 		_ = mods;
@@ -56,6 +57,14 @@ pub const Window = struct {
 			if (self.mouseReleased) |mouseReleased| {
 				mouseReleased(self.*, mouseButton);
 			}
+		}
+	}
+
+	fn mouseScrollCallback(window: ?*c.GLFWwindow, xoffset: f64, yoffset: f64) callconv(.C) void {
+		_ = xoffset;
+		const self = @ptrCast(*Window, @alignCast(@alignOf(Window), c.glfwGetWindowUserPointer(window)));
+		if (self.mouseScroll) |mouseScroll| {
+			mouseScroll(self.*, yoffset);
 		}
 	}
 
@@ -75,19 +84,20 @@ pub const Window = struct {
 	pub fn initEvents(self: *Window) void {
 		c.glfwSetWindowUserPointer(self.window, self);
 		_ = c.glfwSetMouseButtonCallback(self.window, mouseButtonCallback);
+		_ = c.glfwSetScrollCallback(self.window, mouseScrollCallback);
 	}
 
 	pub fn getSize(self: Window) Size {
-		var width:  c_int  = undefined;
-		var height: c_int  = undefined;
+		var width:  c_int = undefined;
+		var height: c_int = undefined;
 		c.glfwGetWindowSize(self.window, &width, &height);
 
 		return Size { .width = width, .height = height };
 	}
 
 	pub fn getFramebufferSize(self: Window) Size {
-		var width:  c_int  = undefined;
-		var height: c_int  = undefined;
+		var width:  c_int = undefined;
+		var height: c_int = undefined;
 		c.glfwGetFramebufferSize(self.window, &width, &height);
 
 		return Size { .width = width, .height = height };

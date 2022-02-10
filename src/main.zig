@@ -71,6 +71,19 @@ fn mousePressed(window: glfw.Window, button: glfw.MouseButton) void {
 	}
 }
 
+fn mouseScroll(window: glfw.Window, yOffset: f64) void {
+	_ = window;
+	inline for (std.meta.fields(GameState)) |field| {
+		// if the field is active
+		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
+			if (@hasDecl(field.field_type, "mouseScroll")) {
+				@field(game.state, field.name).mouseScroll(&game, yOffset);
+				return;
+			}
+		}
+	}
+}
+
 fn render(window: glfw.Window) void {
 	const size = window.getFramebufferSize();
 	gl.viewport(0, 0, size.width, size.height);
@@ -100,6 +113,7 @@ pub fn main() !void {
 
 	var window = try glfw.Window.create();
 	window.mousePressed = mousePressed;
+	window.mouseScroll = mouseScroll;
 	window.initEvents();
 
 	try gl.load({}, glfw.getProcAddress);

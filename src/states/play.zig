@@ -196,6 +196,7 @@ pub const PlayState = struct {
 	cameraPos: Vec3 = Vec3.new(0, -8, 2),
 	dragStart: Vec2,
 	planet: ?Planet = null,
+	cameraDistance: f32 = 15,
 
 	pub fn init(game: *Game) PlayState {
 		return PlayState {
@@ -211,11 +212,12 @@ pub const PlayState = struct {
 
 		if (window.isMousePressed(.Right)) {
 			const delta = window.getCursorPos().sub(self.dragStart).scale(1 / 100.0);
-			self.cameraPos = self.cameraPos.add(Vec3.new(-delta.x(), 0, delta.y()));
+			self.cameraPos = self.cameraPos.add(Vec3.new(-delta.x(), 0, delta.y())
+				.scale(self.cameraDistance / 10));
 			self.dragStart = window.getCursorPos();
 
 			self.cameraPos = self.cameraPos.norm()
-				.scale(15);
+				.scale(self.cameraDistance);
 		}
 
 		if (self.planet == null) {
@@ -247,6 +249,12 @@ pub const PlayState = struct {
 		if (button == .Right) {
 			self.dragStart = game.window.getCursorPos();
 		}
+	}
+
+	pub fn mouseScroll(self: *PlayState, _: *Game, yOffset: f64) void {
+		self.cameraDistance -= @floatCast(f32, yOffset);
+		self.cameraPos = self.cameraPos.norm()
+			.scale(self.cameraDistance);
 	}
 
 	pub fn deinit(self: *PlayState) void {
