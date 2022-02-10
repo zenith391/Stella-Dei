@@ -156,15 +156,14 @@ pub const Planet = struct {
 			const vert = subdivided.?.vertices;
 			while (i < vert.len) : (i += 3) {
 				var point = Vec3.new(vert[i+0], vert[i+1], vert[i+2]);
-				// TODO: operations
 
 				var phi = std.math.acos(point.z());
 				if (phi == 0) phi = 0.001;
 				var theta = std.math.acos(point.x() / std.math.sin(phi));
 				if (std.math.isNan(theta)) theta = 0.001;
 				// TODO: 3D perlin (or simplex) noise for correct looping
-				const value = perlin.p2do(theta * 3 + 5, phi * 3 + 5, 4);
-				point = point.scale(1 + value * 0.1);
+				const value = perlin.p2do(theta * 3 + 74, phi * 3 + 42, 6);
+				point = point.scale(1 + value * 0.05);
 
 				vert[i+0] = point.x(); vert[i+1] = point.y(); vert[i+2] = point.z();
 			}
@@ -209,8 +208,8 @@ pub const PlayState = struct {
 	pub fn render(self: *PlayState, game: *Game, renderer: *Renderer) void {
 		const window = renderer.window;
 		const size = renderer.framebufferSize;
-		//renderer.drawTexture("sun", size.x() / 2 - 125, size.y() / 2 - 125, 250, 250, self.rot);
-		//self.rot += 1;
+		// renderer.drawTexture("sun", size.x() / 2 - 125, size.y() / 2 - 125, 250, 250, self.rot);
+		// self.rot += 1;
 
 		if (window.isMousePressed(.Right)) {
 			const delta = window.getCursorPos().sub(self.dragStart).scale(1 / 100.0);
@@ -237,8 +236,7 @@ pub const PlayState = struct {
 		program.use();
 		program.setUniformMat4("projMatrix",
 			Mat4.perspective(70, size.x() / size.y(), 0.1, 100.0));
-
-		//const target = self.cameraPos.add(Vec3.new(0, 5, 2));
+		
 		const target = Vec3.new(0, 0, 0);
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));

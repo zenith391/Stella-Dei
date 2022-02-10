@@ -5,9 +5,11 @@ uniform mat4 projMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 modelMatrix;
 
-out vec3 pointPosition;
+out vec3 worldPosition;
+out vec3 localPosition;
 
 void main() {
 	gl_Position = projMatrix * viewMatrix * modelMatrix * vec4(aPos, 1);
-	pointPosition = aPos;
+	worldPosition = vec3(modelMatrix * vec4(aPos, 1));
+	localPosition = aPos;
 }
