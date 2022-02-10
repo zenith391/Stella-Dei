@@ -196,7 +196,9 @@ pub const PlayState = struct {
 	cameraPos: Vec3 = Vec3.new(0, -8, 2),
 	dragStart: Vec2,
 	planet: ?Planet = null,
+
 	cameraDistance: f32 = 15,
+	targetCameraDistance: f32 = 15,
 
 	pub fn init(game: *Game) PlayState {
 		return PlayState {
@@ -219,10 +221,15 @@ pub const PlayState = struct {
 			self.cameraPos = self.cameraPos.norm()
 				.scale(self.cameraDistance);
 		}
+		if (!std.math.approxEqAbs(f32, self.cameraDistance, self.targetCameraDistance, 0.01)) {
+			self.cameraDistance = self.cameraDistance * 0.9 + self.targetCameraDistance * 0.1;
+			self.cameraPos = self.cameraPos.norm()
+				.scale(self.cameraDistance);
+		}
 
 		if (self.planet == null) {
 			// TODO: we shouldn't generate planet in render()
-			self.planet = Planet.generate(game.allocator, 4) catch unreachable;
+			self.planet = Planet.generate(game.allocator, 5) catch unreachable;
 		}
 		const planet = self.planet.?;
 
@@ -252,9 +259,7 @@ pub const PlayState = struct {
 	}
 
 	pub fn mouseScroll(self: *PlayState, _: *Game, yOffset: f64) void {
-		self.cameraDistance -= @floatCast(f32, yOffset);
-		self.cameraPos = self.cameraPos.norm()
-			.scale(self.cameraDistance);
+		self.targetCameraDistance -= @floatCast(f32, yOffset);
 	}
 
 	pub fn deinit(self: *PlayState) void {
