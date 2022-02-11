@@ -44,7 +44,7 @@ pub const Planet = struct {
 	vao: gl.GLuint,
 	numTriangles: gl.GLint,
 	allocator: std.mem.Allocator,
-	vertices: []f32,
+	vertices: []Vec3,
 	indices: []gl.GLuint,
 	
 	elevation: []f32,
@@ -155,11 +155,13 @@ pub const Planet = struct {
 			}
 		}
 
+		const vertices    = try allocator.alloc(Vec3, subdivided.?.vertices.len / 3);
 		const elevation   = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		const temperature = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		{
 			var i: usize = 0;
 			const vert = subdivided.?.vertices;
+			defer allocator.free(vert);
 			while (i < vert.len) : (i += 3) {
 				var point = Vec3.new(vert[i+0], vert[i+1], vert[i+2]);
 
@@ -172,21 +174,20 @@ pub const Planet = struct {
 
 				elevation[i / 3] = value;
 				temperature[i / 3] = 293.15; // 20°C
-
-				vert[i+0] = point.x(); vert[i+1] = point.y(); vert[i+2] = point.z();
+				vertices[i / 3] = point;
 			}
 		}
 
-		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, subdivided.?.vertices.len * @sizeOf(f32)), subdivided.?.vertices.ptr, gl.STATIC_DRAW);
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
-		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), null);
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), null);
+		gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(*anyopaque, 3));
 		gl.enableVertexAttribArray(0);
 
 		return Planet {
 			.vao = vao,
 			.numTriangles = @intCast(gl.GLint, subdivided.?.indices.len),
 			.allocator = allocator,
-			.vertices = subdivided.?.vertices,
+			.vertices = vertices,
 			.indices = subdivided.?.indices,
 			.elevation = elevation,
 			.temperature = temperature,
@@ -196,16 +197,21 @@ pub const Planet = struct {
 	/// Upload all changes to the GPU
 	pub fn upload(self: Planet) void {
 		// TODO: optimise using gl.bufferSubData
-		var i: usize = 0;
-		const vert = self.vertices;
-		while (i < vert.len) : (i += 3) {
-			var point = Vec3.new(vert[i+0], vert[i+1], vert[i+2]);
-			point = point.norm().scale(self.elevation[i / 3]);
-			vert[i+0] = point.x(); vert[i+1] = point.y(); vert[i+2] = point.z();
+
+		// TODO: as it's reused for every upload, just pre-allocate bufData
+		var bufData = self.allocator.alloc(f32, self.vertices.len * 4) catch @panic("out of memory");
+		defer self.allocator.free(bufData);
+
+		for (self.vertices) |point, i| {
+			const transformedPoint = point.norm().scale(self.elevation[i]);
+			bufData[i*4+0] = transformedPoint.x();
+			bufData[i*4+1] = transformedPoint.y();
+			bufData[i*4+2] = transformedPoint.z();
+			bufData[i*4+3] = self.temperature[i];
 		}
 		
 		gl.bindVertexArray(self.vao);
-		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, self.vertices.len * @sizeOf(f32)), self.vertices.ptr, gl.STATIC_DRAW);
+		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STATIC_DRAW);
 	}
 
 	/// Get the index to the vertex that is the closest to the given position.
@@ -214,12 +220,10 @@ pub const Planet = struct {
 		var closest: usize = 0;
 		var closestDist: f32 = std.math.inf_f32;
 
-		var i: usize = 0;
-		while (i < self.vertices.len) : (i += 3) {
-			var point = Vec3.new(self.vertices[i+0], self.vertices[i+1], self.vertices[i+2]);
+		for (self.vertices) |point, i| {
 			const dist = point.norm().distance(pos);
 			if (dist < closestDist) {
-				closest = i / 3;
+				closest = i;
 				closestDist = dist;
 			}
 		}
@@ -303,6 +307,7 @@ pub const PlayState = struct {
 			modelMatrix);
 
 		program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
+		program.setUniformInt("displayMode", 1); // display temperature
 		gl.bindVertexArray(planet.vao);
 		gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
 	}
