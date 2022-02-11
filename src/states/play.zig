@@ -44,6 +44,7 @@ pub const Planet = struct {
 	vao: gl.GLuint,
 	numTriangles: gl.GLint,
 	allocator: std.mem.Allocator,
+	/// The *unmodified* vertices of the icosphere
 	vertices: []Vec3,
 	indices: []gl.GLuint,
 	
@@ -173,7 +174,7 @@ pub const Planet = struct {
 				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 6) * 0.05;
 
 				elevation[i / 3] = value;
-				temperature[i / 3] = 293.15; // 20°C
+				temperature[i / 3] = 0; // 20°C
 				vertices[i / 3] = point;
 			}
 		}
@@ -222,7 +223,7 @@ pub const Planet = struct {
 		var closestDist: f32 = std.math.inf_f32;
 
 		for (self.vertices) |point, i| {
-			const dist = point.norm().distance(pos);
+			const dist = point.distance(pos);
 			if (dist < closestDist) {
 				closest = i;
 				closestDist = dist;
@@ -294,15 +295,12 @@ pub const PlayState = struct {
 		}
 		const planet = self.planet.?;
 
-		// const bottomIdx = planet.getClosestTo(Vec3.new(0, 0, -1));
-		// const topIdx    = planet.getClosestTo(Vec3.new(0, 0,  1));
-		// planet.elevation[bottomIdx] = 1.5;
-		// planet.elevation[topIdx] = 1.5;
-
 		for (planet.vertices) |vert, i| {
-			const solarIllumation = 250 + (1 - std.math.fabs(vert.y())) * 70;
-			planet.temperature[i] = solarIllumation;
+			const solarIllumation = (1 - std.math.fabs(vert.y())) * 1.5;
+			const radiation = planet.temperature[i] / 300;
+			planet.temperature[i] += solarIllumation - radiation;
 		}
+		//std.log.info("[0]: {d}°C", .{ planet.temperature[0] - 273.15 });
 		planet.upload();
 
 		const program = renderer.terrainProgram;
