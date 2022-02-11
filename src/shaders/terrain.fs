@@ -19,6 +19,9 @@ void main() {
 
 	float lengthDeviation = length(localPosition) - 1;
 	vec3 objectColor = vec3(0.2f, 1.0f, 0.2f) * (lengthDeviation * 5 + 1);
+	if (lengthDeviation < 0) {
+		objectColor = vec3(0.1f, 0.3f, 0.8f); // ocean blue
+	}
 	vec3 result = (ambient + diffuse) * objectColor;
 	fragColor = vec4(result, 1.0f);
 }

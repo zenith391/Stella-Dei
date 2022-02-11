@@ -48,6 +48,8 @@ pub const Planet = struct {
 	indices: []gl.GLuint,
 	
 	elevation: []f32,
+	/// Temperature measured in Kelvin
+	temperature: []f32,
 
 	const LookupMap = std.AutoHashMap(IndexPair, gl.GLuint);
 	fn vertexForEdge(lookup: *LookupMap, vertices: *std.ArrayList(f32), first: gl.GLuint, second: gl.GLuint) !gl.GLuint {
@@ -153,7 +155,8 @@ pub const Planet = struct {
 			}
 		}
 
-		const elevation = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
+		const elevation   = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
+		const temperature = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		{
 			var i: usize = 0;
 			const vert = subdivided.?.vertices;
@@ -165,9 +168,10 @@ pub const Planet = struct {
 				var theta = std.math.acos(point.x() / std.math.sin(phi));
 				if (std.math.isNan(theta)) theta = 0.001;
 				// TODO: 3D perlin (or simplex) noise for correct looping
-				const value = perlin.p2do(theta * 3 + 74, phi * 3 + 42, 6);
-				point = point.scale(1 + value * 0.05);
-				elevation[i / 3] = 1 + value * 0.05;
+				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 6) * 0.05;
+
+				elevation[i / 3] = value;
+				temperature[i / 3] = 293.15; // 20°C
 
 				vert[i+0] = point.x(); vert[i+1] = point.y(); vert[i+2] = point.z();
 			}
@@ -185,6 +189,7 @@ pub const Planet = struct {
 			.vertices = subdivided.?.vertices,
 			.indices = subdivided.?.indices,
 			.elevation = elevation,
+			.temperature = temperature,
 		};
 	}
 
@@ -223,9 +228,10 @@ pub const Planet = struct {
 	}
 
 	pub fn deinit(self: Planet) void {
+		self.allocator.free(self.elevation);
+		self.allocator.free(self.temperature);
 		self.allocator.free(self.vertices);
 		self.allocator.free(self.indices);
-		self.allocator.free(self.elevation);
 	}
 
 };
@@ -273,14 +279,15 @@ pub const PlayState = struct {
 		if (self.planet == null) {
 			// TODO: we shouldn't generate planet in render()
 			self.planet = Planet.generate(game.allocator, 5) catch unreachable;
+			self.planet.?.upload();
 		}
 		const planet = self.planet.?;
-		const bottomIdx = planet.getClosestTo(Vec3.new(0, 0, -1));
-		const topIdx    = planet.getClosestTo(Vec3.new(0, 0,  1));
-		planet.elevation[bottomIdx] = 1.5;
-		planet.elevation[topIdx] = 1.5;
 
-		planet.upload();
+		// const bottomIdx = planet.getClosestTo(Vec3.new(0, 0, -1));
+		// const topIdx    = planet.getClosestTo(Vec3.new(0, 0,  1));
+		// planet.elevation[bottomIdx] = 1.5;
+		// planet.elevation[topIdx] = 1.5;
+		// planet.upload();
 
 		const program = renderer.terrainProgram;
 		program.use();
