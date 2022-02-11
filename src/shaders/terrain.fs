@@ -10,9 +10,10 @@ out vec4 fragColor;
 void main() {
 	vec3 ambient = 0.15 * lightColor;
 	vec3 lightPos = vec3(10, 10, 10);
-	// As we're in a sphere, the normal is simply the untransformed
-	// vector position
+
+	// This doesn't account for terrain variations
 	vec3 normal = normalize(localPosition);
+	
 	vec3 lightDir = normalize(lightPos - worldPosition);
 	vec3 diffuse = max(dot(normal, lightDir), 0.0) * lightColor;
 

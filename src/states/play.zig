@@ -46,6 +46,8 @@ pub const Planet = struct {
 	allocator: std.mem.Allocator,
 	vertices: []f32,
 	indices: []gl.GLuint,
+	
+	elevation: []f32,
 
 	const LookupMap = std.AutoHashMap(IndexPair, gl.GLuint);
 	fn vertexForEdge(lookup: *LookupMap, vertices: *std.ArrayList(f32), first: gl.GLuint, second: gl.GLuint) !gl.GLuint {
@@ -151,6 +153,7 @@ pub const Planet = struct {
 			}
 		}
 
+		const elevation = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		{
 			var i: usize = 0;
 			const vert = subdivided.?.vertices;
@@ -164,6 +167,7 @@ pub const Planet = struct {
 				// TODO: 3D perlin (or simplex) noise for correct looping
 				const value = perlin.p2do(theta * 3 + 74, phi * 3 + 42, 6);
 				point = point.scale(1 + value * 0.05);
+				elevation[i / 3] = 1 + value * 0.05;
 
 				vert[i+0] = point.x(); vert[i+1] = point.y(); vert[i+2] = point.z();
 			}
@@ -180,12 +184,48 @@ pub const Planet = struct {
 			.allocator = allocator,
 			.vertices = subdivided.?.vertices,
 			.indices = subdivided.?.indices,
+			.elevation = elevation,
 		};
+	}
+
+	/// Upload all changes to the GPU
+	pub fn upload(self: Planet) void {
+		// TODO: optimise using gl.bufferSubData
+		var i: usize = 0;
+		const vert = self.vertices;
+		while (i < vert.len) : (i += 3) {
+			var point = Vec3.new(vert[i+0], vert[i+1], vert[i+2]);
+			point = point.norm().scale(self.elevation[i / 3]);
+			vert[i+0] = point.x(); vert[i+1] = point.y(); vert[i+2] = point.z();
+		}
+		
+		gl.bindVertexArray(self.vao);
+		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, self.vertices.len * @sizeOf(f32)), self.vertices.ptr, gl.STATIC_DRAW);
+	}
+
+	/// Get the index to the vertex that is the closest to the given position.
+	/// 'pos' is assumed to be normalized.
+	pub fn getClosestTo(self: Planet, pos: Vec3) usize {
+		var closest: usize = 0;
+		var closestDist: f32 = std.math.inf_f32;
+
+		var i: usize = 0;
+		while (i < self.vertices.len) : (i += 3) {
+			var point = Vec3.new(self.vertices[i+0], self.vertices[i+1], self.vertices[i+2]);
+			const dist = point.norm().distance(pos);
+			if (dist < closestDist) {
+				closest = i / 3;
+				closestDist = dist;
+			}
+		}
+
+		return closest;
 	}
 
 	pub fn deinit(self: Planet) void {
 		self.allocator.free(self.vertices);
 		self.allocator.free(self.indices);
+		self.allocator.free(self.elevation);
 	}
 
 };
@@ -196,8 +236,8 @@ pub const PlayState = struct {
 	dragStart: Vec2,
 	planet: ?Planet = null,
 
-	cameraDistance: f32 = 15,
-	targetCameraDistance: f32 = 15,
+	cameraDistance: f32 = 1000,
+	targetCameraDistance: f32 = 30,
 
 	pub fn init(game: *Game) PlayState {
 		return PlayState {
@@ -235,6 +275,12 @@ pub const PlayState = struct {
 			self.planet = Planet.generate(game.allocator, 5) catch unreachable;
 		}
 		const planet = self.planet.?;
+		const bottomIdx = planet.getClosestTo(Vec3.new(0, 0, -1));
+		const topIdx    = planet.getClosestTo(Vec3.new(0, 0,  1));
+		planet.elevation[bottomIdx] = 1.5;
+		planet.elevation[topIdx] = 1.5;
+
+		planet.upload();
 
 		const program = renderer.terrainProgram;
 		program.use();
@@ -245,7 +291,7 @@ pub const PlayState = struct {
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
-		const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(90, 0, 0), Vec3.new(10, 10, 10));
+		const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(90, 0, 0), Vec3.new(20, 20, 20));
 		program.setUniformMat4("modelMatrix",
 			modelMatrix);
 

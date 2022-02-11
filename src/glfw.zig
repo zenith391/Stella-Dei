@@ -72,7 +72,7 @@ pub const Window = struct {
 		c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 4);
 		c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 6);
 		c.glfwWindowHint(c.GLFW_OPENGL_PROFILE, c.GLFW_OPENGL_CORE_PROFILE);
-		var window = c.glfwCreateWindow(640, 480, "Name Not Included", null, null) orelse return error.GlfwError;
+		var window = c.glfwCreateWindow(1280, 720, "Name Not Included", null, null) orelse return error.GlfwError;
 		c.glfwMakeContextCurrent(window);
 
 		return Window {
