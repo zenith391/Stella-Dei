@@ -1,9 +1,9 @@
 #version 330 core
 
 uniform vec3 lightColor;
+uniform vec3 lightDir;
 uniform int displayMode;
 
-in vec3 worldPosition;
 in vec3 localPosition;
 in float interpData;
 
@@ -12,12 +12,10 @@ out vec4 fragColor;
 void main() {
 	if (displayMode == 0) {
 		vec3 ambient = 0.15 * lightColor;
-		vec3 lightPos = vec3(0, 0, 10);
 
 		// This doesn't account for terrain variations
 		vec3 normal = normalize(localPosition);
 		
-		vec3 lightDir = normalize(lightPos - worldPosition);
 		vec3 diffuse = max(dot(normal, lightDir), 0.0) * lightColor;
 
 		float lengthDeviation = length(localPosition) - 1;

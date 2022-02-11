@@ -300,7 +300,7 @@ pub const PlayState = struct {
 			std.math.sin(sunPhi) * std.math.sin(sunTheta),
 			std.math.cos(sunTheta)
 		);
-		
+
 		for (planet.vertices) |vert, i| {
 			const solarIllumination = vert.dot(solarVector) * 1.5;
 			const radiation = planet.temperature[i] / 300;
@@ -323,6 +323,7 @@ pub const PlayState = struct {
 			modelMatrix);
 
 		program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
+		program.setUniformVec3("lightDir", solarVector);
 		program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display temperature
 		gl.bindVertexArray(planet.vao);
 		gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
