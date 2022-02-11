@@ -179,9 +179,10 @@ pub const Planet = struct {
 		}
 
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
-		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), null);
-		gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(*anyopaque, 3));
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
+		gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32)));
 		gl.enableVertexAttribArray(0);
+		gl.enableVertexAttribArray(1);
 
 		return Planet {
 			.vao = vao,
@@ -248,6 +249,12 @@ pub const PlayState = struct {
 
 	cameraDistance: f32 = 1000,
 	targetCameraDistance: f32 = 30,
+	displayMode: PlanetDisplayMode = .Normal,
+
+	const PlanetDisplayMode = enum(c_int) {
+		Normal = 0,
+		Temperature = 1,
+	};
 
 	pub fn init(game: *Game) PlayState {
 		return PlayState {
@@ -291,7 +298,12 @@ pub const PlayState = struct {
 		// const topIdx    = planet.getClosestTo(Vec3.new(0, 0,  1));
 		// planet.elevation[bottomIdx] = 1.5;
 		// planet.elevation[topIdx] = 1.5;
-		// planet.upload();
+
+		for (planet.vertices) |vert, i| {
+			const solarIllumation = 250 + (1 - std.math.fabs(vert.y())) * 70;
+			planet.temperature[i] = solarIllumation;
+		}
+		planet.upload();
 
 		const program = renderer.terrainProgram;
 		program.use();
@@ -307,7 +319,7 @@ pub const PlayState = struct {
 			modelMatrix);
 
 		program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
-		program.setUniformInt("displayMode", 1); // display temperature
+		program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display temperature
 		gl.bindVertexArray(planet.vao);
 		gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
 	}
@@ -315,6 +327,13 @@ pub const PlayState = struct {
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {
 		if (button == .Right) {
 			self.dragStart = game.window.getCursorPos();
+		}
+		if (button == .Middle) {
+			if (self.displayMode == .Normal) {
+				self.displayMode = .Temperature;
+			} else if (self.displayMode == .Temperature) {
+				self.displayMode = .Normal;
+			}
 		}
 	}
 
