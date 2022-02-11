@@ -166,15 +166,13 @@ pub const Planet = struct {
 			while (i < vert.len) : (i += 3) {
 				var point = Vec3.new(vert[i+0], vert[i+1], vert[i+2]);
 
-				var phi = std.math.acos(point.z());
-				if (phi == 0) phi = 0.001;
-				var theta = std.math.acos(point.x() / std.math.sin(phi));
-				if (std.math.isNan(theta)) theta = 0.001;
+				const theta = std.math.acos(point.z());
+				const phi = std.math.atan2(f32, point.y(), point.x());
 				// TODO: 3D perlin (or simplex) noise for correct looping
 				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 6) * 0.05;
 
 				elevation[i / 3] = value;
-				temperature[i / 3] = 0; // 20°C
+				temperature[i / 3] = 273.15; // 0°C
 				vertices[i / 3] = point;
 			}
 		}
@@ -295,10 +293,18 @@ pub const PlayState = struct {
 		}
 		const planet = self.planet.?;
 
+		const sunTheta: f32 = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 10000, 2*std.math.pi));
+		const sunPhi: f32 = 0;
+		const solarVector = Vec3.new(
+			std.math.cos(sunPhi) * std.math.sin(sunTheta),
+			std.math.sin(sunPhi) * std.math.sin(sunTheta),
+			std.math.cos(sunTheta)
+		);
+		
 		for (planet.vertices) |vert, i| {
-			const solarIllumation = (1 - std.math.fabs(vert.y())) * 1.5;
+			const solarIllumination = vert.dot(solarVector) * 1.5;
 			const radiation = planet.temperature[i] / 300;
-			planet.temperature[i] += solarIllumation - radiation;
+			planet.temperature[i] += solarIllumination - radiation;
 		}
 		//std.log.info("[0]: {d}°C", .{ planet.temperature[0] - 273.15 });
 		planet.upload();

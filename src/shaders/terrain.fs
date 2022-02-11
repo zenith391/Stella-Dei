@@ -12,7 +12,7 @@ out vec4 fragColor;
 void main() {
 	if (displayMode == 0) {
 		vec3 ambient = 0.15 * lightColor;
-		vec3 lightPos = vec3(10, 0, 10);
+		vec3 lightPos = vec3(0, 0, 10);
 
 		// This doesn't account for terrain variations
 		vec3 normal = normalize(localPosition);
