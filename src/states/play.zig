@@ -169,7 +169,7 @@ pub const Planet = struct {
 				const theta = std.math.acos(point.z());
 				const phi = std.math.atan2(f32, point.y(), point.x());
 				// TODO: 3D perlin (or simplex) noise for correct looping
-				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 6) * 0.05;
+				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * 0.05;
 
 				elevation[i / 3] = value;
 				temperature[i / 3] = 273.15; // 0°C
@@ -294,7 +294,7 @@ pub const PlayState = struct {
 		const planet = self.planet.?;
 
 		const sunTheta: f32 = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 10000, 2*std.math.pi));
-		const sunPhi: f32 = 0;
+		const sunPhi: f32 = 0.4;
 		const solarVector = Vec3.new(
 			std.math.cos(sunPhi) * std.math.sin(sunTheta),
 			std.math.sin(sunPhi) * std.math.sin(sunTheta),

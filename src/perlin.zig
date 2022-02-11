@@ -74,7 +74,7 @@ pub fn p2do(x: f32, y: f32, octaves: u32) f32 {
     var p: f32 = 0;
     while (i < octaves) : (i += 1) {
         const pow = std.math.pow(f32, 2, @intToFloat(f32, i));
-        const res = p2d(x / pow, y / pow);
+        const res = p2d(x * pow, y * pow);
         p += res / pow;
     }
 
