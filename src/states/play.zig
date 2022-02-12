@@ -43,6 +43,7 @@ const IndexPair = struct {
 pub const Planet = struct {
 	vao: gl.GLuint,
 	numTriangles: gl.GLint,
+	numSubdivisions: usize,
 	allocator: std.mem.Allocator,
 	/// The *unmodified* vertices of the icosphere
 	vertices: []Vec3,
@@ -51,6 +52,9 @@ pub const Planet = struct {
 	elevation: []f32,
 	/// Temperature measured in Kelvin
 	temperature: []f32,
+
+	// 0xFFFFFFFF in the first entry considered null and not filled
+	verticesNeighbours: [][4]u32,
 
 	const LookupMap = std.AutoHashMap(IndexPair, gl.GLuint);
 	fn vertexForEdge(lookup: *LookupMap, vertices: *std.ArrayList(f32), first: gl.GLuint, second: gl.GLuint) !gl.GLuint {
@@ -156,9 +160,10 @@ pub const Planet = struct {
 			}
 		}
 
-		const vertices    = try allocator.alloc(Vec3, subdivided.?.vertices.len / 3);
-		const elevation   = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
-		const temperature = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
+		const vertices       = try allocator.alloc(Vec3, subdivided.?.vertices.len / 3);
+		const vertNeighbours = try allocator.alloc([4]u32, subdivided.?.vertices.len / 3);
+		const elevation      = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
+		const temperature    = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		{
 			var i: usize = 0;
 			const vert = subdivided.?.vertices;
@@ -172,8 +177,12 @@ pub const Planet = struct {
 				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * 0.05;
 
 				elevation[i / 3] = value;
-				temperature[i / 3] = 273.15; // 0°C
+				temperature[i / 3] = 373.15; // 0°C
 				vertices[i / 3] = point;
+				vertNeighbours[i / 3][0] = std.math.maxInt(u32);
+				vertNeighbours[i / 3][1] = std.math.maxInt(u32);
+				vertNeighbours[i / 3][2] = std.math.maxInt(u32);
+				vertNeighbours[i / 3][3] = std.math.maxInt(u32);
 			}
 		}
 
@@ -186,8 +195,10 @@ pub const Planet = struct {
 		return Planet {
 			.vao = vao,
 			.numTriangles = @intCast(gl.GLint, subdivided.?.indices.len),
+			.numSubdivisions = numSubdivisions,
 			.allocator = allocator,
 			.vertices = vertices,
+			.verticesNeighbours = vertNeighbours,
 			.indices = subdivided.?.indices,
 			.elevation = elevation,
 			.temperature = temperature,
@@ -231,9 +242,56 @@ pub const Planet = struct {
 		return closest;
 	}
 
+	pub const Direction = enum {
+		Forward,
+		Right,
+		Left,
+		Backward,
+	};
+
+	pub fn getNeighbour(self: Planet, idx: usize, direction: Direction) usize {
+		const directionInt = @enumToInt(direction);
+
+		// This vertex's neighbours weren't found yet
+		if (self.verticesNeighbours[idx][directionInt] == std.math.maxInt(u32)) {
+			const pos = self.vertices[idx];
+			var scaleMultiplier: f32 = 1;
+			while (true) {
+				const vector = pos
+					.cross(switch (direction) {
+						.Forward => Vec3.right(),
+						.Right => Vec3.forward(),
+						.Left => Vec3.back(),
+						.Backward => Vec3.left(),
+					})
+					.norm()
+					.scale(1.0 / (4 * @intToFloat(f32, self.numSubdivisions)) * scaleMultiplier);
+				const neighbour = self.getClosestTo(pos.add(vector).norm());
+				if (neighbour != idx) {
+					if (scaleMultiplier != 1) {
+						//std.log.debug("{d}: Got scale multiplier of {d} for {}", .{ idx, scaleMultiplier, direction });
+					}
+					self.verticesNeighbours[idx][directionInt] = @intCast(u32, neighbour);
+					return neighbour;
+				} else {
+					scaleMultiplier += 0.1;
+					// this seems to happen at extremities due to cross product being zero
+					if (scaleMultiplier > 100) {
+						std.log.warn("/!\\ Couldn't find {s} neighbour for {d}", .{ direction, idx });
+						self.verticesNeighbours[idx][directionInt] = @intCast(u32, idx);
+						return idx;
+					}
+				}
+			}
+		} else {
+			return self.verticesNeighbours[idx][directionInt];
+		}
+	}
+
 	pub fn deinit(self: Planet) void {
 		self.allocator.free(self.elevation);
 		self.allocator.free(self.temperature);
+		self.allocator.free(self.verticesNeighbours);
 		self.allocator.free(self.vertices);
 		self.allocator.free(self.indices);
 	}
@@ -303,8 +361,18 @@ pub const PlayState = struct {
 
 		for (planet.vertices) |vert, i| {
 			const solarIllumination = vert.dot(solarVector) * 1.5;
+			// const radiation = 
+			// 	std.math.max(0, 0.5 - 1 / std.math.clamp(planet.temperature[i], 1, 10));
 			const radiation = planet.temperature[i] / 300;
 			planet.temperature[i] += solarIllumination - radiation;
+
+			const conductance = 0.1;
+			const factor = 5 / conductance;
+			planet.temperature[planet.getNeighbour(i, .Forward)] += planet.temperature[i] / factor;
+			planet.temperature[planet.getNeighbour(i, .Backward)] += planet.temperature[i] / factor;
+			planet.temperature[planet.getNeighbour(i, .Left)] += planet.temperature[i] / factor;
+			planet.temperature[planet.getNeighbour(i, .Right)] += planet.temperature[i] / factor;
+			planet.temperature[i] -= planet.temperature[i] / factor * 4;
 		}
 		//std.log.info("[0]: {d}°C", .{ planet.temperature[0] - 273.15 });
 		planet.upload();
@@ -312,7 +380,7 @@ pub const PlayState = struct {
 		const program = renderer.terrainProgram;
 		program.use();
 		program.setUniformMat4("projMatrix",
-			Mat4.perspective(70, size.x() / size.y(), 0.1, 100.0));
+			Mat4.perspective(70, size.x() / size.y(), 0.1, 1000.0));
 		
 		const target = Vec3.new(0, 0, 0);
 		program.setUniformMat4("viewMatrix",
@@ -343,7 +411,8 @@ pub const PlayState = struct {
 	}
 
 	pub fn mouseScroll(self: *PlayState, _: *Game, yOffset: f64) void {
-		self.targetCameraDistance -= @floatCast(f32, yOffset);
+		self.targetCameraDistance = std.math.clamp(
+			self.targetCameraDistance - @floatCast(f32, yOffset), 21, 100);
 	}
 
 	pub fn deinit(self: *PlayState) void {
