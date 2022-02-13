@@ -372,7 +372,7 @@ pub const PlayState = struct {
 		}
 		var planet = &self.planet.?;
 
-		const sunTheta: f32 = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 10000, 2*std.math.pi));
+		const sunTheta: f32 = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 1000, 2*std.math.pi));
 		const sunPhi: f32 = 0.4;
 		const solarVector = Vec3.new(
 			std.math.cos(sunPhi) * std.math.sin(sunTheta),
@@ -396,7 +396,7 @@ pub const PlayState = struct {
 			// TODO: maybe follow a logarithmic distribution?
 			const radiation = std.math.min(1, planet.temperature[i] / 3000);
 
-			const conductance = 0.6;
+			const conductance = 0.25;
 			const factor = 6 / conductance;
 			const shared = temp / factor;
 
@@ -411,7 +411,6 @@ pub const PlayState = struct {
 
 		// Finish by swapping the new temperature
 		std.mem.swap([]f32, &planet.temperature, &planet.newTemperature);
-		// std.log.info("0: {d}°C", .{ planet.temperature[0] - 273.15 });
 		planet.upload();
 
 		const program = renderer.terrainProgram;
