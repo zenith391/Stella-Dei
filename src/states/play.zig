@@ -52,9 +52,14 @@ pub const Planet = struct {
 	elevation: []f32,
 	/// Temperature measured in Kelvin
 	temperature: []f32,
+	/// Buffer array that is used to store the temperatures to be used after next update
+	newTemperature: []f32,
 
 	// 0xFFFFFFFF in the first entry considered null and not filled
-	verticesNeighbours: [][4]u32,
+	/// List of neighbours for a vertex. A vertex has 6 neighbours that arrange in hexagons
+	/// Neighbours are stored as u32 as icospheres with more than 4 billions vertices aren't worth
+	/// supporting.
+	verticesNeighbours: [][6]u32,
 
 	const LookupMap = std.AutoHashMap(IndexPair, gl.GLuint);
 	fn vertexForEdge(lookup: *LookupMap, vertices: *std.ArrayList(f32), first: gl.GLuint, second: gl.GLuint) !gl.GLuint {
@@ -161,15 +166,16 @@ pub const Planet = struct {
 		}
 
 		const vertices       = try allocator.alloc(Vec3, subdivided.?.vertices.len / 3);
-		const vertNeighbours = try allocator.alloc([4]u32, subdivided.?.vertices.len / 3);
+		const vertNeighbours = try allocator.alloc([6]u32, subdivided.?.vertices.len / 3);
 		const elevation      = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		const temperature    = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
+		const newTemp        = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		{
 			var i: usize = 0;
 			const vert = subdivided.?.vertices;
 			defer allocator.free(vert);
 			while (i < vert.len) : (i += 3) {
-				var point = Vec3.new(vert[i+0], vert[i+1], vert[i+2]);
+				var point = Vec3.fromSlice(vert[i..]);
 
 				const theta = std.math.acos(point.z());
 				const phi = std.math.atan2(f32, point.y(), point.x());
@@ -177,12 +183,11 @@ pub const Planet = struct {
 				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * 0.05;
 
 				elevation[i / 3] = value;
-				temperature[i / 3] = 373.15; // 0°C
+				temperature[i / 3] = 273.15; // 0°C
 				vertices[i / 3] = point;
-				vertNeighbours[i / 3][0] = std.math.maxInt(u32);
-				vertNeighbours[i / 3][1] = std.math.maxInt(u32);
-				vertNeighbours[i / 3][2] = std.math.maxInt(u32);
-				vertNeighbours[i / 3][3] = std.math.maxInt(u32);
+				
+				// Clear the neighbour list
+				for (vertNeighbours[i/3]) |*elem| elem.* = std.math.maxInt(u32);
 			}
 		}
 
@@ -202,6 +207,7 @@ pub const Planet = struct {
 			.indices = subdivided.?.indices,
 			.elevation = elevation,
 			.temperature = temperature,
+			.newTemperature = newTemp,
 		};
 	}
 
@@ -243,46 +249,60 @@ pub const Planet = struct {
 	}
 
 	pub const Direction = enum {
-		Forward,
-		Right,
+		ForwardLeft,
+		BackwardLeft,
 		Left,
-		Backward,
+		ForwardRight,
+		BackwardRight,
+		Right,
 	};
+
+	fn contains(list: anytype, element: usize) bool {
+		for (list.constSlice()) |item| {
+			if (item == element) return true;
+		}
+		return false;
+	}
 
 	pub fn getNeighbour(self: Planet, idx: usize, direction: Direction) usize {
 		const directionInt = @enumToInt(direction);
 
 		// This vertex's neighbours weren't found yet
 		if (self.verticesNeighbours[idx][directionInt] == std.math.maxInt(u32)) {
-			const pos = self.vertices[idx];
-			var scaleMultiplier: f32 = 1;
-			while (true) {
-				const vector = pos
-					.cross(switch (direction) {
-						.Forward => Vec3.right(),
-						.Right => Vec3.forward(),
-						.Left => Vec3.back(),
-						.Backward => Vec3.left(),
-					})
-					.norm()
-					.scale(1.0 / (4 * @intToFloat(f32, self.numSubdivisions)) * scaleMultiplier);
-				const neighbour = self.getClosestTo(pos.add(vector).norm());
-				if (neighbour != idx) {
-					if (scaleMultiplier != 1) {
-						//std.log.debug("{d}: Got scale multiplier of {d} for {}", .{ idx, scaleMultiplier, direction });
-					}
-					self.verticesNeighbours[idx][directionInt] = @intCast(u32, neighbour);
-					return neighbour;
-				} else {
-					scaleMultiplier += 0.1;
-					// this seems to happen at extremities due to cross product being zero
-					if (scaleMultiplier > 100) {
-						std.log.warn("/!\\ Couldn't find {s} neighbour for {d}", .{ direction, idx });
-						self.verticesNeighbours[idx][directionInt] = @intCast(u32, idx);
-						return idx;
-					}
+			const point = self.vertices[idx];
+			var candidates = std.BoundedArray(usize, 6).init(0) catch unreachable;
+
+			// Loop through all triangles
+			var i: usize = 0;
+			while (i < self.indices.len) : (i += 3) {
+				const aIdx = self.indices[i+0];
+				const bIdx = self.indices[i+1];
+				const cIdx = self.indices[i+2];
+				const a = self.vertices[aIdx];
+				const b = self.vertices[bIdx];
+				const c = self.vertices[cIdx];
+
+				// If one of the triangle's point is what we have, add the other points of the triangle
+				if (a.eql(point)) {
+					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
+					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
+				} else if (b.eql(point)) {
+					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
+					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
+				} else if (c.eql(point)) {
+					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
+					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
 				}
 			}
+			// std.log.debug("{d}: {d} candidates", .{ idx, candidates.len });
+			if (candidates.len == 5) {
+				// TODO: just fix the bug instead but only the first few vertices seem to have this bug
+				candidates.appendAssumeCapacity(idx);
+			}
+
+			self.verticesNeighbours[idx][directionInt] = @intCast(u32, candidates.get(directionInt));
+			// TODO: account for the requested direction
+			return candidates.get(directionInt);
 		} else {
 			return self.verticesNeighbours[idx][directionInt];
 		}
@@ -290,6 +310,7 @@ pub const Planet = struct {
 
 	pub fn deinit(self: Planet) void {
 		self.allocator.free(self.elevation);
+		self.allocator.free(self.newTemperature);
 		self.allocator.free(self.temperature);
 		self.allocator.free(self.verticesNeighbours);
 		self.allocator.free(self.vertices);
@@ -346,10 +367,10 @@ pub const PlayState = struct {
 
 		if (self.planet == null) {
 			// TODO: we shouldn't generate planet in render()
-			self.planet = Planet.generate(game.allocator, 5) catch unreachable;
+			self.planet = Planet.generate(game.allocator, 4) catch unreachable;
 			self.planet.?.upload();
 		}
-		const planet = self.planet.?;
+		var planet = &self.planet.?;
 
 		const sunTheta: f32 = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 10000, 2*std.math.pi));
 		const sunPhi: f32 = 0.4;
@@ -359,22 +380,38 @@ pub const PlayState = struct {
 			std.math.cos(sunTheta)
 		);
 
-		for (planet.vertices) |vert, i| {
-			const solarIllumination = vert.dot(solarVector) * 1.5;
-			// const radiation = 
-			// 	std.math.max(0, 0.5 - 1 / std.math.clamp(planet.temperature[i], 1, 10));
-			const radiation = planet.temperature[i] / 300;
-			planet.temperature[i] += solarIllumination - radiation;
-
-			const conductance = 0.1;
-			const factor = 5 / conductance;
-			planet.temperature[planet.getNeighbour(i, .Forward)] += planet.temperature[i] / factor;
-			planet.temperature[planet.getNeighbour(i, .Backward)] += planet.temperature[i] / factor;
-			planet.temperature[planet.getNeighbour(i, .Left)] += planet.temperature[i] / factor;
-			planet.temperature[planet.getNeighbour(i, .Right)] += planet.temperature[i] / factor;
-			planet.temperature[i] -= planet.temperature[i] / factor * 4;
+		const newTemp = planet.newTemperature;
+		// Fill newTemp with the current temperatures
+		for (planet.vertices) |_, i| {
+			newTemp[i] = std.math.max(0, planet.temperature[i]); // temperature may never go below 0°K
 		}
-		//std.log.info("[0]: {d}°C", .{ planet.temperature[0] - 273.15 });
+
+		// Do the heat simulation
+		for (planet.vertices) |vert, i| {
+			// Temperature in the current cell
+			const temp = planet.temperature[i];
+
+			const solarIllumination = std.math.max(0, vert.dot(solarVector) * 0.4);
+
+			// TODO: maybe follow a logarithmic distribution?
+			const radiation = std.math.min(1, planet.temperature[i] / 3000);
+
+			const conductance = 0.6;
+			const factor = 6 / conductance;
+			const shared = temp / factor;
+
+			newTemp[planet.getNeighbour(i, .ForwardLeft)] += shared;
+			newTemp[planet.getNeighbour(i, .ForwardRight)] += shared;
+			newTemp[planet.getNeighbour(i, .BackwardLeft)] += shared;
+			newTemp[planet.getNeighbour(i, .BackwardRight)] += shared;
+			newTemp[planet.getNeighbour(i, .Left)] += shared;
+			newTemp[planet.getNeighbour(i, .Right)] += shared;
+			newTemp[i] += solarIllumination - radiation - (shared * 6);
+		}
+
+		// Finish by swapping the new temperature
+		std.mem.swap([]f32, &planet.temperature, &planet.newTemperature);
+		// std.log.info("0: {d}°C", .{ planet.temperature[0] - 273.15 });
 		planet.upload();
 
 		const program = renderer.terrainProgram;
