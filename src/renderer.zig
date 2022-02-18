@@ -2,6 +2,7 @@ const std    = @import("std");
 const gl     = @import("gl");
 const za     = @import("zalgebra");
 const zigimg = @import("zigimg");
+const nk     = @import("nuklear.zig");
 const Window = @import("glfw.zig").Window;
 const log    = std.log.scoped(.renderer);
 
@@ -32,6 +33,26 @@ pub const Renderer = struct {
 
 	// Graphics state
 	color: Vec3 = Vec3.one(),
+	nkContext: nk.nk_context,
+	nkCommands: nk.nk_buffer,
+	nkVertices: nk.nk_buffer,
+	nkIndices: nk.nk_buffer,
+	nkAllocator: *nk.nk_allocator,
+
+	fn nkAlloc(userdata: nk.nk_handle, old: ?*anyopaque, nsize: usize) callconv(.C) ?*anyopaque {
+		_ = userdata; _ = old; _ = nsize;
+		const allocator = @ptrCast(*Allocator, @alignCast(@alignOf(Allocator), userdata.ptr)).*;
+		if (old) |old_buf| {
+			return (allocator.realloc(
+				@as([]u8, @ptrCast([*]u8, old_buf)[0..1]), nsize) catch unreachable).ptr;
+		} else {
+			return (allocator.alloc(u8, nsize) catch unreachable).ptr;
+		}
+	}
+
+	fn nkFree(userdata: nk.nk_handle, old: ?*anyopaque) callconv(.C) void {
+		_ = userdata; _ = old;
+	}
 
 	pub fn init(allocator: Allocator, window: *Window) !Renderer {
 		const colorProgram = try ShaderProgram.createFromName("color");
@@ -61,6 +82,40 @@ pub const Renderer = struct {
 		imageProgram.setUniformMat4("projMatrix",
 			Mat4.orthographic(0, 1, 1, 0, 0, 10));
 
+		// allocate the allocator with the allocator so it can fit in a pointer
+		const allocatorPtr = try allocator.create(Allocator);
+		allocatorPtr.* = allocator;
+		var nkAllocator = try allocator.create(nk.nk_allocator);
+		nkAllocator.* = nk.nk_allocator {
+			.userdata = .{ .ptr = allocatorPtr },
+			.alloc = nkAlloc,
+			.free = nkFree,
+		};
+
+		var fontAtlas: nk.nk_font_atlas = undefined;
+		nk.nk_font_atlas_init(&fontAtlas, nkAllocator);
+		nk.nk_font_atlas_begin(&fontAtlas);
+		const font: *nk.nk_font = nk.nk_font_atlas_add_default(&fontAtlas, 12.0, null).?;
+
+		var imgWidth: c_int = undefined;
+		var imgHeight: c_int = undefined;
+		
+		const img = nk.nk_font_atlas_bake(&fontAtlas, &imgWidth, &imgHeight, nk.NK_FONT_ATLAS_RGBA32);
+		_ = img;
+		nk.nk_font_atlas_end(&fontAtlas, nk.nk_handle_id(0), 0);
+		
+		var nkCtx: nk.nk_context = undefined;
+		if (nk.nk_init(&nkCtx, nkAllocator, &font.handle) == 0) {
+			return error.NuklearError;
+		}
+
+		var cmds: nk.nk_buffer = undefined;
+		var verts: nk.nk_buffer = undefined;
+		var idx: nk.nk_buffer = undefined;
+		nk.nk_buffer_init(&cmds, nkAllocator, 4096);
+		nk.nk_buffer_init(&verts, nkAllocator, 4096);
+		nk.nk_buffer_init(&idx, nkAllocator, 4096);
+
 		return Renderer {
 			.window = window,
 			.textureCache = TextureCache.init(allocator),
@@ -68,7 +123,12 @@ pub const Renderer = struct {
 			.imageProgram = imageProgram,
 			.terrainProgram = terrainProgram,
 			.quadVao = vao,
-			.framebufferSize = undefined
+			.framebufferSize = undefined,
+			.nkContext = nkCtx,
+			.nkCommands = cmds,
+			.nkVertices = verts,
+			.nkIndices = idx,
+			.nkAllocator = nkAllocator,
 		};
 	}
 
@@ -115,6 +175,54 @@ pub const Renderer = struct {
 		);
 	}
 
+	pub fn startUI(self: *Renderer) void {
+		nk.nk_input_begin(&self.nkContext);
+		// TODO: input
+		nk.nk_input_end(&self.nkContext);
+
+	}
+
+	pub fn endUI(self: *Renderer) void {
+		const vertexLayout = [_]nk.nk_draw_vertex_layout_element {
+			.{ .attribute = nk.NK_VERTEX_POSITION, .format = nk.NK_FORMAT_FLOAT, .offset = 0 },
+			.{ .attribute = nk.NK_VERTEX_COLOR, .format = nk.NK_FORMAT_R8G8B8A8, .offset = 8 },
+			// (NK_VERTEX_LAYOUT_END)
+			.{ .attribute = nk.NK_VERTEX_ATTRIBUTE_COUNT, .format = nk.NK_FORMAT_COUNT, .offset = 0 },
+		};
+
+		const convertConfig = nk.nk_convert_config {
+			.global_alpha = 1.0,
+			.line_AA = nk.NK_ANTI_ALIASING_ON,
+			.shape_AA = nk.NK_ANTI_ALIASING_ON,
+			.vertex_layout = &vertexLayout,
+			.vertex_size = 2 * @sizeOf(f32),
+			.vertex_alignment = @alignOf(f32),
+			.circle_segment_count = 22,
+			.curve_segment_count = 22,
+			.arc_segment_count = 22,
+			.@"null" = .{
+				.texture = .{ .id = 0 },
+				.uv = .{ .x = 0, .y = 0 }
+			},
+		};
+
+		if (nk.nk_convert(&self.nkContext, &self.nkCommands, &self.nkVertices, &self.nkIndices, &convertConfig) != 0) {
+			std.log.warn("nk_convert error", .{});
+		}
+
+		var command = nk.nk__draw_begin(&self.nkContext, &self.nkCommands);
+		std.log.info("---", .{ });
+		while (command) |cmd| {
+			std.log.info("{any}", .{ cmd.* });
+			command = nk.nk__draw_next(cmd, &self.nkCommands, &self.nkContext);
+		}
+
+		nk.nk_clear(&self.nkContext);
+		nk.nk_buffer_clear(&self.nkCommands);
+		nk.nk_buffer_clear(&self.nkVertices);
+		nk.nk_buffer_clear(&self.nkIndices);
+	}
+
 	pub fn deinit(self: *Renderer) void {
 		self.textureCache.deinit();
 	}
@@ -127,8 +235,15 @@ pub const Texture = struct {
 		var file = try std.fs.cwd().openFile(path, .{});
 		defer file.close();
 
-		var image = try zigimg.Image.fromFile(allocator, &file);
+		// Manually only allow loading PNG files for faster compilation and lower executable size
+		//var image = try zigimg.Image.fromFile(allocator, &file);
+		var image = zigimg.Image.init(allocator);
 		defer image.deinit();
+		var streamSource = std.io.StreamSource{ .file = file };
+		const imageInfo = try zigimg.png.PNG.formatInterface().readForImage(allocator, streamSource.reader(),
+			streamSource.seekableStream(), &image.pixels);
+		image.width = imageInfo.width;
+		image.height = imageInfo.height;
 
 		const first = @ptrCast([*]u8, &image.pixels.?.Rgba32[0]);
 		const pixels = first[0..image.width*image.height*4];

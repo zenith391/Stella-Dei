@@ -1,6 +1,7 @@
 const std = @import("std");
 const gl = @import("gl");
 const za = @import("zalgebra");
+const nk = @import("../nuklear.zig");
 
 const perlin = @import("../perlin.zig");
 
@@ -183,7 +184,8 @@ pub const Planet = struct {
 				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * 0.05;
 
 				elevation[i / 3] = value;
-				temperature[i / 3] = 273.15; // 0°C
+				temperature[i / 3] = (perlin.p2do(theta * 10 + 1, phi * 10 + 1, 6) + 1) * 300; // 0°C
+				//temperature[i/3] = 300;
 				vertices[i / 3] = point;
 				
 				// Clear the neighbour list
@@ -340,6 +342,10 @@ pub const PlayState = struct {
 		};
 	}
 
+	// fn conduct(planet: *Planet, newTemp: []f32, temp: f32, target: usize) void {
+
+	// }
+
 	pub fn render(self: *PlayState, game: *Game, renderer: *Renderer) void {
 		const window = renderer.window;
 		const size = renderer.framebufferSize;
@@ -396,8 +402,8 @@ pub const PlayState = struct {
 			// TODO: maybe follow a logarithmic distribution?
 			const radiation = std.math.min(1, planet.temperature[i] / 3000);
 
-			const conductance = 0.25;
-			const factor = 6 / conductance;
+			const conductivity = 0.25;
+			const factor = 6 / conductivity;
 			const shared = temp / factor;
 
 			newTemp[planet.getNeighbour(i, .ForwardLeft)] += shared;
@@ -408,6 +414,17 @@ pub const PlayState = struct {
 			newTemp[planet.getNeighbour(i, .Right)] += shared;
 			newTemp[i] += solarIllumination - radiation - (shared * 6);
 		}
+
+		// const dt = 0.1;
+		// for (planet.vertices) |vert, i| {
+		// 	const alpha = 1.15; // thermal diffusivity
+		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .ForwardLeft));
+		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .ForwardRight));
+		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .BackwardLeft));
+		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .BackwardRight));
+		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .Left));
+		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .Right));
+		// }
 
 		// Finish by swapping the new temperature
 		std.mem.swap([]f32, &planet.temperature, &planet.newTemperature);
@@ -449,6 +466,16 @@ pub const PlayState = struct {
 	pub fn mouseScroll(self: *PlayState, _: *Game, yOffset: f64) void {
 		self.targetCameraDistance = std.math.clamp(
 			self.targetCameraDistance - @floatCast(f32, yOffset), 21, 100);
+	}
+
+	pub fn renderUI(self: *PlayState, game: *Game, renderer: *Renderer) void {
+		_ = self;
+		_ = game;
+
+		if (nk.nk_begin(&renderer.nkContext, "Test", .{ .x = 10, .y = 10, .w = 100, .h = 100}, 0) != 0) {
+
+		}
+		nk.nk_end(&renderer.nkContext);
 	}
 
 	pub fn deinit(self: *PlayState) void {

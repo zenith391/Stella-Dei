@@ -95,9 +95,19 @@ fn render(window: glfw.Window) void {
 		// if the field is active
 		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
 			@field(game.state, field.name).render(&game, &renderer);
-			return;
 		}
 	}
+
+	renderer.startUI();
+	inline for (std.meta.fields(GameState)) |field| {
+		// if the field is active
+		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
+			if (comptime @hasDecl(field.field_type, "renderUI")) {
+				@field(game.state, field.name).renderUI(&game, &renderer);
+			}
+		}
+	}
+	renderer.endUI();
 }
 
 const perlin = @import("perlin.zig").p2d;

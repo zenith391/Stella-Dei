@@ -83,6 +83,8 @@ pub fn build(b: *std.build.Builder) void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
     deps.addAllTo(exe);
+    exe.addIncludePath("deps");
+    exe.addCSourceFile("deps/nuklear.c", &.{});
     exe.install();
 
     const run_cmd = exe.run();
