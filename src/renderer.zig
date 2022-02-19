@@ -72,10 +72,12 @@ pub const Renderer = struct {
 		gl.bindVertexArray(nkVao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, nkVbo);
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, nkVbo);
-		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
-		gl.vertexAttribPointer(1, 4, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @intToPtr(?*anyopaque, 2 * @sizeOf(f32)));
+		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
+		gl.vertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 2 * @sizeOf(f32)));
+		gl.vertexAttribPointer(2, 4, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 4 * @sizeOf(f32)));
 		gl.enableVertexAttribArray(0);
 		gl.enableVertexAttribArray(1);
+		gl.enableVertexAttribArray(2);
 
 		// TODO: disable depth test in 2D (it causes blending problems)
 		gl.enable(gl.DEPTH_TEST);
@@ -85,28 +87,33 @@ pub const Renderer = struct {
 		const nkAllocator = try NkAllocator.init(allocator);
 
 		var fontAtlas: nk.nk_font_atlas = undefined;
-		nk.nk_font_atlas_init(&fontAtlas, nkAllocator.nk);
+		nk.nk_font_atlas_init(&fontAtlas, &nkAllocator.nk);
 		nk.nk_font_atlas_begin(&fontAtlas);
-		const font: *nk.nk_font = nk.nk_font_atlas_add_default(&fontAtlas, 12.0, null).?;
+		var fontConfig = nk.nk_font_config(16.0);
+		fontConfig.oversample_h = 6;
+		fontConfig.oversample_v = 6;
+
+		const font: *nk.nk_font = nk.nk_font_atlas_add_default(&fontAtlas, 16.0, &fontConfig).?;
 
 		var imgWidth: c_int = undefined;
 		var imgHeight: c_int = undefined;
 		
-		const img = nk.nk_font_atlas_bake(&fontAtlas, &imgWidth, &imgHeight, nk.NK_FONT_ATLAS_RGBA32);
-		_ = img;
-		nk.nk_font_atlas_end(&fontAtlas, nk.nk_handle_id(2), 0);
+		const img = @ptrCast([*]const u8, nk.nk_font_atlas_bake(&fontAtlas, &imgWidth, &imgHeight, nk.NK_FONT_ATLAS_RGBA32).?);
+		const atlasTex = Texture.createFromData(@intCast(usize, imgWidth), @intCast(usize, imgHeight),
+			img[0..@intCast(usize, imgWidth*imgHeight)]);
+		nk.nk_font_atlas_end(&fontAtlas, nk.nk_handle_id(@intCast(c_int, atlasTex.texture)), 0);
 		
 		var nkCtx: nk.nk_context = undefined;
-		if (nk.nk_init(&nkCtx, nkAllocator.nk, &font.handle) == 0) {
+		if (nk.nk_init(&nkCtx, &nkAllocator.nk, &font.handle) == 0) {
 			return error.NuklearError;
 		}
 
 		var cmds: nk.nk_buffer = undefined;
 		var verts: nk.nk_buffer = undefined;
 		var idx: nk.nk_buffer = undefined;
-		nk.nk_buffer_init(&cmds, nkAllocator.nk, 4096);
-		nk.nk_buffer_init(&verts, nkAllocator.nk, 4096);
-		nk.nk_buffer_init(&idx, nkAllocator.nk, 4096);
+		nk.nk_buffer_init(&cmds, &nkAllocator.nk, 8192);
+		nk.nk_buffer_init(&verts, &nkAllocator.nk, 8192*2);
+		nk.nk_buffer_init(&idx, &nkAllocator.nk, 8192);
 
 		return Renderer {
 			.window = window,
@@ -187,8 +194,9 @@ pub const Renderer = struct {
 	pub fn endUI(self: *Renderer) void {
 		const vertexLayout = [_]nk.nk_draw_vertex_layout_element {
 			.{ .attribute = nk.NK_VERTEX_POSITION, .format = nk.NK_FORMAT_FLOAT, .offset = 0 },
-			.{ .attribute = nk.NK_VERTEX_COLOR, .format = nk.NK_FORMAT_R32G32B32A32_FLOAT, .offset = 8 },
-			// (NK_VERTEX_LAYOUT_END)
+			.{ .attribute = nk.NK_VERTEX_TEXCOORD, .format = nk.NK_FORMAT_FLOAT, .offset = 8 },
+			.{ .attribute = nk.NK_VERTEX_COLOR, .format = nk.NK_FORMAT_R32G32B32A32_FLOAT, .offset = 16 },
+			// end of vertex layout
 			.{ .attribute = nk.NK_VERTEX_ATTRIBUTE_COUNT, .format = nk.NK_FORMAT_COUNT, .offset = 0 },
 		};
 
@@ -197,7 +205,7 @@ pub const Renderer = struct {
 			.line_AA = nk.NK_ANTI_ALIASING_ON,
 			.shape_AA = nk.NK_ANTI_ALIASING_ON,
 			.vertex_layout = &vertexLayout,
-			.vertex_size = 6 * @sizeOf(f32),
+			.vertex_size = 8 * @sizeOf(f32),
 			.vertex_alignment = @alignOf(f32),
 			.circle_segment_count = 22,
 			.curve_segment_count = 22,
@@ -214,6 +222,11 @@ pub const Renderer = struct {
 
 		gl.disable(gl.DEPTH_TEST);
 		defer gl.enable(gl.DEPTH_TEST);
+		gl.enable(gl.SCISSOR_TEST);
+		defer gl.disable(gl.SCISSOR_TEST);
+
+		gl.enable(gl.BLEND);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
 		self.nuklearProgram.use();
 		self.nuklearProgram.setUniformMat4("projMatrix",
@@ -222,17 +235,28 @@ pub const Renderer = struct {
 		gl.bindVertexArray(self.nuklearVao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, self.nuklearVbo);
 		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkVertices)),
-			nk.nk_buffer_memory_const(&self.nkVertices), gl.STATIC_DRAW);
+			nk.nk_buffer_memory_const(&self.nkVertices), gl.STREAM_DRAW);
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.nuklearEbo);
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkIndices)),
-			nk.nk_buffer_memory_const(&self.nkIndices), gl.STATIC_DRAW);
+			nk.nk_buffer_memory_const(&self.nkIndices), gl.STREAM_DRAW);
+		gl.activeTexture(gl.TEXTURE0);
+		self.nuklearProgram.setUniformInt("uTexture", 0);
 
 		var command = nk.nk__draw_begin(&self.nkContext, &self.nkCommands);
 		var offset: usize = 0;
 		while (command) |cmd| {
 			if (cmd.*.elem_count > 0) {
+				self.nuklearProgram.setUniformInt("useTexture", if (cmd.*.texture.id != 0) 1 else 0); // not null texture
+				gl.bindTexture(gl.TEXTURE_2D, @intCast(gl.GLuint, cmd.*.texture.id));
+				const clip = cmd.*.clip_rect;
+				gl.scissor(
+					@floatToInt(gl.GLint, clip.x),
+					@floatToInt(gl.GLint, self.framebufferSize.y() - (clip.y + clip.h)),
+					@floatToInt(gl.GLint, clip.w),
+					@floatToInt(gl.GLint, clip.h),
+				);
 				gl.drawElements(gl.TRIANGLES, @intCast(gl.GLint, cmd.*.elem_count), gl.UNSIGNED_SHORT, 
-					@intToPtr(?*anyopaque, offset));
+					@intToPtr(?*anyopaque, offset * 2));
 			}
 			offset += cmd.*.elem_count;
 			command = nk.nk__draw_next(cmd, &self.nkCommands, &self.nkContext);
@@ -441,7 +465,7 @@ const ShaderProgram = struct {
 
 /// Utility struct to wrap a std.mem.Allocator as a nk_allocator
 const NkAllocator = struct {
-	nk: *nk.nk_allocator,
+	nk: nk.nk_allocator,
 	/// As Nuklear doesn't keep track of allocation sizes, we keep the size of each
 	/// allocation associated to its pointer.
 	allocationSizes: std.AutoHashMap(*anyopaque, usize),
@@ -471,15 +495,12 @@ const NkAllocator = struct {
 
 	pub fn init(allocator: Allocator) !*NkAllocator {
 		const obj = try allocator.create(NkAllocator);
-		var nkAllocator = try allocator.create(nk.nk_allocator);
-		nkAllocator.* = nk.nk_allocator {
-			.userdata = .{ .ptr = obj },
-			.alloc = nkAlloc,
-			.free = nkFree,
-		};
-
 		obj.* = NkAllocator {
-			.nk = nkAllocator,
+			.nk = nk.nk_allocator {
+				.userdata = .{ .ptr = obj },
+				.alloc = nkAlloc,
+				.free = nkFree,
+			},
 			.allocationSizes = std.AutoHashMap(*anyopaque, usize).init(allocator)
 		};
 		return obj;
@@ -488,7 +509,6 @@ const NkAllocator = struct {
 	pub fn deinit(self: *NkAllocator) void {
 		const allocator = self.allocationSizes.allocator;
 		self.allocationSizes.deinit();
-		allocator.destroy(self.nk);
 		allocator.destroy(self);
 	}
 

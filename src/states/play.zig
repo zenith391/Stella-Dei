@@ -334,6 +334,9 @@ pub const PlayState = struct {
 	cameraDistance: f32 = 1000,
 	targetCameraDistance: f32 = 30,
 	displayMode: PlanetDisplayMode = .Normal,
+	/// Inclination of rotation, in radians
+	planetInclination: f32 = 0.4,
+	sunPower: f32 = 0.4,
 
 	const PlanetDisplayMode = enum(c_int) {
 		Normal = 0,
@@ -353,8 +356,6 @@ pub const PlayState = struct {
 	pub fn render(self: *PlayState, game: *Game, renderer: *Renderer) void {
 		const window = renderer.window;
 		const size = renderer.framebufferSize;
-		// renderer.drawTexture("sun", size.x() / 2 - 125, size.y() / 2 - 125, 250, 250, self.rot);
-		// self.rot += 1;
 
 		if (window.isMousePressed(.Right)) {
 			const delta = window.getCursorPos().sub(self.dragStart).scale(1 / 100.0);
@@ -383,7 +384,7 @@ pub const PlayState = struct {
 		var planet = &self.planet.?;
 
 		const sunTheta: f32 = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 1000, 2*std.math.pi));
-		const sunPhi: f32 = 0.4;
+		const sunPhi: f32 = self.planetInclination;
 		const solarVector = Vec3.new(
 			std.math.cos(sunPhi) * std.math.sin(sunTheta),
 			std.math.sin(sunPhi) * std.math.sin(sunTheta),
@@ -401,7 +402,7 @@ pub const PlayState = struct {
 			// Temperature in the current cell
 			const temp = planet.temperature[i];
 
-			const solarIllumination = std.math.max(0, vert.dot(solarVector) * 0.4);
+			const solarIllumination = std.math.max(0, vert.dot(solarVector) * self.sunPower);
 
 			// TODO: maybe follow a logarithmic distribution?
 			const radiation = std.math.min(1, planet.temperature[i] / 3000);
@@ -476,8 +477,12 @@ pub const PlayState = struct {
 		_ = self;
 		_ = game;
 
-		if (nk.nk_begin(&renderer.nkContext, "Test", .{ .x = 10, .y = 10, .w = 100, .h = 100}, 0) != 0) {
-
+		if (nk.nk_begin(&renderer.nkContext, "Planet Control", .{ .x = 100, .y = 100, .w = 600, .h = 150}, 
+			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_MOVABLE | nk.NK_WINDOW_TITLE | nk.NK_WINDOW_SCALABLE) != 0) {
+			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
+			nk.nk_property_float(&renderer.nkContext, "Planet Inclination", 0, &self.planetInclination, 3.14, 0.1, 0.01);
+			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
+			nk.nk_property_float(&renderer.nkContext, "Sun Power", 0, &self.sunPower, 10, 0.1, 0.002);
 		}
 		nk.nk_end(&renderer.nkContext);
 	}
