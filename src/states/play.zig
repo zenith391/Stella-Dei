@@ -338,6 +338,8 @@ pub const PlayState = struct {
 	planetInclination: f32 = 0.4,
 	sunPower: f32 = 0.4,
 	conductivity: f32 = 0.25,
+	/// The time it takes for the planet to do a full rotation, in seconds
+	planetRotationTime: f32 = 1,
 
 	const PlanetDisplayMode = enum(c_int) {
 		Normal = 0,
@@ -384,7 +386,8 @@ pub const PlayState = struct {
 		}
 		var planet = &self.planet.?;
 
-		const sunTheta: f32 = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 1000, 2*std.math.pi));
+		const sunTheta: f32 = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 
+			(self.planetRotationTime * std.time.ms_per_s), 2*std.math.pi));
 		const sunPhi: f32 = self.planetInclination;
 		const solarVector = Vec3.new(
 			std.math.cos(sunPhi) * std.math.sin(sunTheta),
@@ -481,10 +484,15 @@ pub const PlayState = struct {
 			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_MOVABLE | nk.NK_WINDOW_TITLE | nk.NK_WINDOW_SCALABLE) != 0) {
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
 			nk.nk_property_float(&renderer.nkContext, "Planet Inclination", 0, &self.planetInclination, 3.14, 0.1, 0.01);
+
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
 			nk.nk_property_float(&renderer.nkContext, "Sun Power", 0, &self.sunPower, 10, 0.01, 0.002);
+
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Surface Conductivity", 0.001, &self.conductivity, 1, 0.1, 0.02);
+			nk.nk_property_float(&renderer.nkContext, "Surface Conductivity", 0.0001, &self.conductivity, 1, 0.1, 0.001);
+			
+			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
+			nk.nk_property_float(&renderer.nkContext, "Rotation Speed (s)", 0.0001, &self.planetRotationTime, 60000, 0.1, 0.001);
 		}
 		nk.nk_end(&renderer.nkContext);
 	}
