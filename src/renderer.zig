@@ -37,22 +37,8 @@ pub const Renderer = struct {
 	nkCommands: nk.nk_buffer,
 	nkVertices: nk.nk_buffer,
 	nkIndices: nk.nk_buffer,
-	nkAllocator: *nk.nk_allocator,
-
-	fn nkAlloc(userdata: nk.nk_handle, old: ?*anyopaque, nsize: usize) callconv(.C) ?*anyopaque {
-		_ = userdata; _ = old; _ = nsize;
-		const allocator = @ptrCast(*Allocator, @alignCast(@alignOf(Allocator), userdata.ptr)).*;
-		if (old) |old_buf| {
-			return (allocator.realloc(
-				@as([]u8, @ptrCast([*]u8, old_buf)[0..1]), nsize) catch unreachable).ptr;
-		} else {
-			return (allocator.alloc(u8, nsize) catch unreachable).ptr;
-		}
-	}
-
-	fn nkFree(userdata: nk.nk_handle, old: ?*anyopaque) callconv(.C) void {
-		_ = userdata; _ = old;
-	}
+	nkAllocator: *NkAllocator,
+	nkFontAtlas: nk.nk_font_atlas,
 
 	pub fn init(allocator: Allocator, window: *Window) !Renderer {
 		const colorProgram = try ShaderProgram.createFromName("color");
@@ -82,18 +68,10 @@ pub const Renderer = struct {
 		imageProgram.setUniformMat4("projMatrix",
 			Mat4.orthographic(0, 1, 1, 0, 0, 10));
 
-		// allocate the allocator with the allocator so it can fit in a pointer
-		const allocatorPtr = try allocator.create(Allocator);
-		allocatorPtr.* = allocator;
-		var nkAllocator = try allocator.create(nk.nk_allocator);
-		nkAllocator.* = nk.nk_allocator {
-			.userdata = .{ .ptr = allocatorPtr },
-			.alloc = nkAlloc,
-			.free = nkFree,
-		};
+		const nkAllocator = try NkAllocator.init(allocator);
 
 		var fontAtlas: nk.nk_font_atlas = undefined;
-		nk.nk_font_atlas_init(&fontAtlas, nkAllocator);
+		nk.nk_font_atlas_init(&fontAtlas, nkAllocator.nk);
 		nk.nk_font_atlas_begin(&fontAtlas);
 		const font: *nk.nk_font = nk.nk_font_atlas_add_default(&fontAtlas, 12.0, null).?;
 
@@ -102,19 +80,19 @@ pub const Renderer = struct {
 		
 		const img = nk.nk_font_atlas_bake(&fontAtlas, &imgWidth, &imgHeight, nk.NK_FONT_ATLAS_RGBA32);
 		_ = img;
-		nk.nk_font_atlas_end(&fontAtlas, nk.nk_handle_id(0), 0);
+		nk.nk_font_atlas_end(&fontAtlas, nk.nk_handle_id(2), 0);
 		
 		var nkCtx: nk.nk_context = undefined;
-		if (nk.nk_init(&nkCtx, nkAllocator, &font.handle) == 0) {
+		if (nk.nk_init(&nkCtx, nkAllocator.nk, &font.handle) == 0) {
 			return error.NuklearError;
 		}
 
 		var cmds: nk.nk_buffer = undefined;
 		var verts: nk.nk_buffer = undefined;
 		var idx: nk.nk_buffer = undefined;
-		nk.nk_buffer_init(&cmds, nkAllocator, 4096);
-		nk.nk_buffer_init(&verts, nkAllocator, 4096);
-		nk.nk_buffer_init(&idx, nkAllocator, 4096);
+		nk.nk_buffer_init(&cmds, nkAllocator.nk, 4096);
+		nk.nk_buffer_init(&verts, nkAllocator.nk, 4096);
+		nk.nk_buffer_init(&idx, nkAllocator.nk, 4096);
 
 		return Renderer {
 			.window = window,
@@ -129,6 +107,7 @@ pub const Renderer = struct {
 			.nkVertices = verts,
 			.nkIndices = idx,
 			.nkAllocator = nkAllocator,
+			.nkFontAtlas = fontAtlas,
 		};
 	}
 
@@ -225,6 +204,13 @@ pub const Renderer = struct {
 
 	pub fn deinit(self: *Renderer) void {
 		self.textureCache.deinit();
+
+		nk.nk_buffer_free(&self.nkCommands);
+		nk.nk_buffer_free(&self.nkVertices);
+		nk.nk_buffer_free(&self.nkIndices);
+		nk.nk_font_atlas_clear(&self.nkFontAtlas);
+		nk.nk_free(&self.nkContext);
+		self.nkAllocator.deinit();
 	}
 };
 
@@ -251,6 +237,7 @@ pub const Texture = struct {
 		return createFromData(image.width, image.height, pixels);
 	}
 
+	/// Assumes RGBA32
 	pub fn createFromData(width: usize, height: usize, data: []const u8) Texture {
 		var texture: gl.GLuint = undefined;
 		gl.genTextures(1, &texture);
@@ -406,6 +393,61 @@ const ShaderProgram = struct {
 
 	pub fn use(self: ShaderProgram) void {
 		gl.useProgram(self.program);
+	}
+
+};
+
+/// Utility struct to wrap a std.mem.Allocator as a nk_allocator
+const NkAllocator = struct {
+	nk: *nk.nk_allocator,
+	/// As Nuklear doesn't keep track of allocation sizes, we keep the size of each
+	/// allocation associated to its pointer.
+	allocationSizes: std.AutoHashMap(*anyopaque, usize),
+
+	fn nkAlloc(userdata: nk.nk_handle, old: ?*anyopaque, nsize: usize) callconv(.C) ?*anyopaque {
+		const self = @ptrCast(*NkAllocator, @alignCast(@alignOf(NkAllocator), userdata.ptr));
+		const allocator = self.allocationSizes.allocator;
+		if (old) |old_buf| {
+			const size = self.allocationSizes.get(old_buf).?;
+			return (allocator.realloc(
+				@as([]u8, @ptrCast([*]u8, old_buf)[0..size]), nsize) catch unreachable).ptr;
+		} else {
+			const ptr = (allocator.alloc(u8, nsize) catch return null).ptr;
+			self.allocationSizes.put(ptr, nsize) catch return null;
+			return ptr;
+		}
+	}
+
+	fn nkFree(userdata: nk.nk_handle, old: ?*anyopaque) callconv(.C) void {
+		const self = @ptrCast(*NkAllocator, @alignCast(@alignOf(NkAllocator), userdata.ptr)).*;
+		const allocator = self.allocationSizes.allocator;
+		if (old) |old_buf| {
+			const size = self.allocationSizes.get(old_buf).?;
+			allocator.free(@as([]u8, @ptrCast([*]u8, old)[0..size]));
+		}
+	}
+
+	pub fn init(allocator: Allocator) !*NkAllocator {
+		const obj = try allocator.create(NkAllocator);
+		var nkAllocator = try allocator.create(nk.nk_allocator);
+		nkAllocator.* = nk.nk_allocator {
+			.userdata = .{ .ptr = obj },
+			.alloc = nkAlloc,
+			.free = nkFree,
+		};
+
+		obj.* = NkAllocator {
+			.nk = nkAllocator,
+			.allocationSizes = std.AutoHashMap(*anyopaque, usize).init(allocator)
+		};
+		return obj;
+	}
+
+	pub fn deinit(self: *NkAllocator) void {
+		const allocator = self.allocationSizes.allocator;
+		self.allocationSizes.deinit();
+		allocator.destroy(self.nk);
+		allocator.destroy(self);
 	}
 
 };
