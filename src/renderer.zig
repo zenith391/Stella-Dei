@@ -174,9 +174,14 @@ pub const Renderer = struct {
 
 	pub fn startUI(self: *Renderer) void {
 		nk.nk_input_begin(&self.nkContext);
-		// TODO: input
-		nk.nk_input_end(&self.nkContext);
 
+		const cursorPos = self.window.getCursorPos();
+		nk.nk_input_motion(&self.nkContext,
+			@floatToInt(c_int, cursorPos.x()), @floatToInt(c_int, cursorPos.y()));
+		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_LEFT, @floatToInt(c_int, cursorPos.x()),
+			@floatToInt(c_int, cursorPos.y()), if (self.window.isMousePressed(.Left)) 1 else 0);
+
+		nk.nk_input_end(&self.nkContext);
 	}
 
 	pub fn endUI(self: *Renderer) void {
@@ -225,8 +230,10 @@ pub const Renderer = struct {
 		var command = nk.nk__draw_begin(&self.nkContext, &self.nkCommands);
 		var offset: usize = 0;
 		while (command) |cmd| {
-			gl.drawElements(gl.TRIANGLES, @intCast(gl.GLint, cmd.*.elem_count), gl.UNSIGNED_SHORT, 
-				@intToPtr(?*anyopaque, offset));
+			if (cmd.*.elem_count > 0) {
+				gl.drawElements(gl.TRIANGLES, @intCast(gl.GLint, cmd.*.elem_count), gl.UNSIGNED_SHORT, 
+					@intToPtr(?*anyopaque, offset));
+			}
 			offset += cmd.*.elem_count;
 			command = nk.nk__draw_next(cmd, &self.nkCommands, &self.nkContext);
 		}

@@ -43,6 +43,8 @@ const IndexPair = struct {
 
 pub const Planet = struct {
 	vao: gl.GLuint,
+	vbo: gl.GLuint,
+
 	numTriangles: gl.GLint,
 	numSubdivisions: usize,
 	allocator: std.mem.Allocator,
@@ -201,6 +203,7 @@ pub const Planet = struct {
 
 		return Planet {
 			.vao = vao,
+			.vbo = vbo,
 			.numTriangles = @intCast(gl.GLint, subdivided.?.indices.len),
 			.numSubdivisions = numSubdivisions,
 			.allocator = allocator,
@@ -230,6 +233,7 @@ pub const Planet = struct {
 		}
 		
 		gl.bindVertexArray(self.vao);
+		gl.bindBuffer(gl.ARRAY_BUFFER, self.vbo);
 		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STATIC_DRAW);
 	}
 
