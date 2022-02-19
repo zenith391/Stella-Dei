@@ -337,6 +337,7 @@ pub const PlayState = struct {
 	/// Inclination of rotation, in radians
 	planetInclination: f32 = 0.4,
 	sunPower: f32 = 0.4,
+	conductivity: f32 = 0.25,
 
 	const PlanetDisplayMode = enum(c_int) {
 		Normal = 0,
@@ -407,8 +408,7 @@ pub const PlayState = struct {
 			// TODO: maybe follow a logarithmic distribution?
 			const radiation = std.math.min(1, planet.temperature[i] / 3000);
 
-			const conductivity = 0.25;
-			const factor = 6 / conductivity;
+			const factor = 6 / self.conductivity;
 			const shared = temp / factor;
 
 			newTemp[planet.getNeighbour(i, .ForwardLeft)] += shared;
@@ -482,7 +482,9 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
 			nk.nk_property_float(&renderer.nkContext, "Planet Inclination", 0, &self.planetInclination, 3.14, 0.1, 0.01);
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Sun Power", 0, &self.sunPower, 10, 0.1, 0.002);
+			nk.nk_property_float(&renderer.nkContext, "Sun Power", 0, &self.sunPower, 10, 0.01, 0.002);
+			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
+			nk.nk_property_float(&renderer.nkContext, "Surface Conductivity", 0.001, &self.conductivity, 1, 0.1, 0.02);
 		}
 		nk.nk_end(&renderer.nkContext);
 	}
