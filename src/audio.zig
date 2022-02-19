@@ -37,6 +37,7 @@ pub const AudioSubsystem = struct {
 	}
 
 	pub fn deinit(self: *AudioSubsystem) void {
+		self.musicManager.deinit();
 		c.ma_engine_uninit(self.engine);
 		self.allocator.destroy(self.engine);
 	}
@@ -91,5 +92,13 @@ pub const MusicManager = struct {
 			}
 		}
 
+	}
+
+	pub fn deinit(self: *MusicManager) void {
+		if (self.currentlyPlaying) |sound| {
+			c.ma_sound_uninit(sound);
+			self.allocator.destroy(sound);
+			self.currentlyPlaying = null;
+		}
 	}
 };
