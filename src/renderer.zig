@@ -28,7 +28,12 @@ pub const Renderer = struct {
 	colorProgram: ShaderProgram,
 	imageProgram: ShaderProgram,
 	terrainProgram: ShaderProgram,
+	/// Shader program used for Nuklear UI
+	nuklearProgram: ShaderProgram,
 	quadVao: gl.GLuint,
+	nuklearVao: gl.GLuint,
+	nuklearVbo: gl.GLuint,
+	nuklearEbo: gl.GLuint,
 	framebufferSize: Vec2,
 
 	// Graphics state
@@ -44,6 +49,7 @@ pub const Renderer = struct {
 		const colorProgram = try ShaderProgram.createFromName("color");
 		const imageProgram = try ShaderProgram.createFromName("image");
 		const terrainProgram = try ShaderProgram.createFromName("terrain");
+		const nuklearProgram = try ShaderProgram.createFromName("nuklear");
 
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
@@ -56,17 +62,25 @@ pub const Renderer = struct {
 		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 2 * @sizeOf(f32), null);
 		gl.enableVertexAttribArray(0);
 
+		var nkVao: gl.GLuint = undefined;
+		gl.genVertexArrays(1, &nkVao);
+		var nkVbo: gl.GLuint = undefined;
+		gl.genBuffers(1, &nkVbo);
+		var nkEbo: gl.GLuint = undefined;
+		gl.genBuffers(1, &nkEbo);
+
+		gl.bindVertexArray(nkVao);
+		gl.bindBuffer(gl.ARRAY_BUFFER, nkVbo);
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, nkVbo);
+		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
+		gl.vertexAttribPointer(1, 4, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @intToPtr(?*anyopaque, 2 * @sizeOf(f32)));
+		gl.enableVertexAttribArray(0);
+		gl.enableVertexAttribArray(1);
+
 		// TODO: disable depth test in 2D (it causes blending problems)
 		gl.enable(gl.DEPTH_TEST);
 		gl.enable(gl.BLEND);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-		colorProgram.use();
-		colorProgram.setUniformMat4("projMatrix",
-			Mat4.orthographic(0, 1, 1, 0, 0, 10));
-		imageProgram.use();
-		imageProgram.setUniformMat4("projMatrix",
-			Mat4.orthographic(0, 1, 1, 0, 0, 10));
 
 		const nkAllocator = try NkAllocator.init(allocator);
 
@@ -100,7 +114,11 @@ pub const Renderer = struct {
 			.colorProgram = colorProgram,
 			.imageProgram = imageProgram,
 			.terrainProgram = terrainProgram,
+			.nuklearProgram = nuklearProgram,
 			.quadVao = vao,
+			.nuklearVao = nkVao,
+			.nuklearVbo = nkVbo,
+			.nuklearEbo = nkEbo,
 			.framebufferSize = undefined,
 			.nkContext = nkCtx,
 			.nkCommands = cmds,
@@ -164,7 +182,7 @@ pub const Renderer = struct {
 	pub fn endUI(self: *Renderer) void {
 		const vertexLayout = [_]nk.nk_draw_vertex_layout_element {
 			.{ .attribute = nk.NK_VERTEX_POSITION, .format = nk.NK_FORMAT_FLOAT, .offset = 0 },
-			.{ .attribute = nk.NK_VERTEX_COLOR, .format = nk.NK_FORMAT_R8G8B8A8, .offset = 8 },
+			.{ .attribute = nk.NK_VERTEX_COLOR, .format = nk.NK_FORMAT_R32G32B32A32_FLOAT, .offset = 8 },
 			// (NK_VERTEX_LAYOUT_END)
 			.{ .attribute = nk.NK_VERTEX_ATTRIBUTE_COUNT, .format = nk.NK_FORMAT_COUNT, .offset = 0 },
 		};
@@ -174,7 +192,7 @@ pub const Renderer = struct {
 			.line_AA = nk.NK_ANTI_ALIASING_ON,
 			.shape_AA = nk.NK_ANTI_ALIASING_ON,
 			.vertex_layout = &vertexLayout,
-			.vertex_size = 2 * @sizeOf(f32),
+			.vertex_size = 6 * @sizeOf(f32),
 			.vertex_alignment = @alignOf(f32),
 			.circle_segment_count = 22,
 			.curve_segment_count = 22,
@@ -189,10 +207,27 @@ pub const Renderer = struct {
 			std.log.warn("nk_convert error", .{});
 		}
 
+		gl.disable(gl.DEPTH_TEST);
+		defer gl.enable(gl.DEPTH_TEST);
+
+		self.nuklearProgram.use();
+		self.nuklearProgram.setUniformMat4("projMatrix",
+			Mat4.orthographic(0, self.framebufferSize.x(), self.framebufferSize.y(), 0, 0, 10));
+
+		gl.bindVertexArray(self.nuklearVao);
+		gl.bindBuffer(gl.ARRAY_BUFFER, self.nuklearVbo);
+		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkVertices)),
+			nk.nk_buffer_memory_const(&self.nkVertices), gl.STATIC_DRAW);
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.nuklearEbo);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkIndices)),
+			nk.nk_buffer_memory_const(&self.nkIndices), gl.STATIC_DRAW);
+
 		var command = nk.nk__draw_begin(&self.nkContext, &self.nkCommands);
-		std.log.info("---", .{ });
+		var offset: usize = 0;
 		while (command) |cmd| {
-			std.log.info("{any}", .{ cmd.* });
+			gl.drawElements(gl.TRIANGLES, @intCast(gl.GLint, cmd.*.elem_count), gl.UNSIGNED_SHORT, 
+				@intToPtr(?*anyopaque, offset));
+			offset += cmd.*.elem_count;
 			command = nk.nk__draw_next(cmd, &self.nkCommands, &self.nkContext);
 		}
 
