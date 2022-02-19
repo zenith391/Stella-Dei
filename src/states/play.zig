@@ -482,10 +482,7 @@ pub const PlayState = struct {
 			self.targetCameraDistance - @floatCast(f32, yOffset), 21, 100);
 	}
 
-	pub fn renderUI(self: *PlayState, game: *Game, renderer: *Renderer) void {
-		_ = self;
-		_ = game;
-
+	pub fn renderUI(self: *PlayState, _: *Game, renderer: *Renderer) void {
 		if (nk.nk_begin(&renderer.nkContext, "Planet Control", .{ .x = 100, .y = 100, .w = 600, .h = 150}, 
 			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_MOVABLE | nk.NK_WINDOW_TITLE | nk.NK_WINDOW_SCALABLE) != 0) {
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);

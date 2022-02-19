@@ -18,7 +18,7 @@ pub const AudioSubsystem = struct {
 		return AudioSubsystem {
 			.engine = engine,
 			.allocator = allocator,
-			.musicManager = .{ .allocator = allocator }
+			.musicManager = MusicManager.init(allocator)
 		};
 	}
 
@@ -30,6 +30,10 @@ pub const AudioSubsystem = struct {
 
 	pub fn playSoundTrack(self: *AudioSubsystem, soundTrack: SoundTrack) void {
 		self.musicManager.soundTrack = soundTrack;
+
+		const random = self.musicManager.prng.random();
+		self.musicManager.soundTrack.position = random.uintLessThanBiased(usize, soundTrack.items.len);
+		self.musicManager.nextMusicTime = std.time.milliTimestamp() + random.intRangeAtMostBiased(i64, 5000, 20000);
 	}
 
 	pub fn update(self: *AudioSubsystem) void {
@@ -64,8 +68,17 @@ pub const SoundTrack = struct {
 
 pub const MusicManager = struct {
 	soundTrack: SoundTrack = SoundTrack.silence,
+	nextMusicTime: i64 = std.math.minInt(i64),
 	currentlyPlaying: ?*c.ma_sound = null,
 	allocator: Allocator,
+	prng: std.rand.DefaultPrng,
+
+	pub fn init(allocator: Allocator) MusicManager {
+		return MusicManager {
+			.allocator = allocator,
+			.prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()))
+		};
+	}
 
 	pub fn update(self: *MusicManager) void {
 		const subsystem = @fieldParentPtr(AudioSubsystem, "musicManager", self);
@@ -74,8 +87,12 @@ pub const MusicManager = struct {
 				c.ma_sound_uninit(sound);
 				self.allocator.destroy(sound);
 				self.currentlyPlaying = null;
+
+				// add a silence moment that can last from 15 to 30 seconds
+				const random = self.prng.random();
+				self.nextMusicTime = std.time.milliTimestamp() + random.intRangeAtMostBiased(i64, 15000, 30000);
 			}
-		} else {
+		} else if (std.time.milliTimestamp() >= self.nextMusicTime) { // time for the next music to play
 			if (self.soundTrack.getNextItem()) |nextItem| {
 				const sound = self.allocator.create(c.ma_sound) catch return;
 				if (c.ma_sound_init_from_file(subsystem.engine, nextItem, c.MA_SOUND_FLAG_ASYNC |

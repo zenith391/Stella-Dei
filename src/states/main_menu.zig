@@ -1,4 +1,5 @@
 const std = @import("std");
+const nk = @import("../nuklear.zig");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
 const MouseButton = @import("../glfw.zig").MouseButton;
@@ -22,6 +23,11 @@ pub const MainMenuState = struct {
 		if (button == .Right) {
 			game.setState(@import("play.zig").PlayState);
 		}
+	}
+
+	pub fn renderUI(_: *MainMenuState, _: *Game, renderer: *Renderer) void {
+		_ = renderer;
+		// TODO
 	}
 
 };
