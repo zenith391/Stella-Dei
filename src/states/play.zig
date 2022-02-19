@@ -8,6 +8,7 @@ const perlin = @import("../perlin.zig");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
 const MouseButton = @import("../glfw.zig").MouseButton;
+const SoundTrack = @import("../audio.zig").SoundTrack;
 
 const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
@@ -347,6 +348,10 @@ pub const PlayState = struct {
 	};
 
 	pub fn init(game: *Game) PlayState {
+		const soundTrack = SoundTrack { .items = &.{
+			"assets/music1.mp3"
+		}};
+		game.audio.playSoundTrack(soundTrack);
 		return PlayState {
 			.dragStart = game.window.getCursorPos()
 		};

@@ -93,6 +93,8 @@ fn mouseScroll(window: glfw.Window, yOffset: f64) void {
 }
 
 fn render(window: glfw.Window) void {
+	game.audio.update();
+	
 	const size = window.getFramebufferSize();
 	gl.viewport(0, 0, size.width, size.height);
 	gl.clearColor(0, 0, 0, 1);

@@ -86,7 +86,7 @@ pub fn build(b: *std.build.Builder) void {
     exe.addIncludePath("deps");
     exe.addCSourceFile("deps/nuklear.c", &.{});
     exe.addCSourceFile("deps/miniaudio.c", &.{
-        "-fno-sanitize=undefined"
+        "-fno-sanitize=undefined" // disable UBSAN (due to false positives)
     });
     exe.install();
 
