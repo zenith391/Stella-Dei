@@ -5,6 +5,7 @@ const za   = @import("zalgebra");
 
 const Renderer = @import("renderer.zig").Renderer;
 const Texture = @import("renderer.zig").Texture;
+const AudioSubsystem = @import("audio.zig").AudioSubsystem;
 
 var renderer: Renderer = undefined;
 var texture: Texture = undefined;
@@ -19,11 +20,17 @@ pub const GameState = union(enum) {
 
 pub const Game = struct {
 	state: GameState,
+	audio: AudioSubsystem,
 	window: *glfw.Window,
 	allocator: std.mem.Allocator,
 
-	pub fn init(window: *glfw.Window, allocator: std.mem.Allocator) Game {
-		return Game { .state = .MainMenu, .window = window, .allocator = allocator };
+	pub fn init(allocator: std.mem.Allocator, window: *glfw.Window) !Game {
+		return Game {
+			.state = .MainMenu,
+			.audio = try AudioSubsystem.init(allocator),
+			.window = window,
+			.allocator = allocator,
+		};
 	}
 
 	pub fn setState(self: *Game, comptime NewState: type) void {
@@ -53,6 +60,7 @@ pub const Game = struct {
 
 	pub fn deinit(self: *Game) void {
 		self.deinitState();
+		self.audio.deinit();
 	}
 };
 
@@ -130,12 +138,8 @@ pub fn main() !void {
 
 	renderer = try Renderer.init(allocator, &window);
 	defer renderer.deinit();
-
-	//var image = try ppm.Image.generate(allocator, 100, 100, perlin);
-	//defer image.deinit();
-	//try ppm.write("test.ppm", image);
 	
-	game = Game.init(&window, allocator);
+	game = try Game.init(allocator, &window);
 	defer game.deinit();
 	window.loop(render);
 }

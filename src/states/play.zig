@@ -483,16 +483,16 @@ pub const PlayState = struct {
 		if (nk.nk_begin(&renderer.nkContext, "Planet Control", .{ .x = 100, .y = 100, .w = 600, .h = 150}, 
 			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_MOVABLE | nk.NK_WINDOW_TITLE | nk.NK_WINDOW_SCALABLE) != 0) {
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Planet Inclination", 0, &self.planetInclination, 3.14, 0.1, 0.01);
+			nk.nk_property_float(&renderer.nkContext, "Planet Inclination (rad)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
 
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Sun Power", 0, &self.sunPower, 10, 0.01, 0.002);
+			nk.nk_property_float(&renderer.nkContext, "Sun Power (W)", 0, &self.sunPower, 10, 0.01, 0.002);
 
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
 			nk.nk_property_float(&renderer.nkContext, "Surface Conductivity", 0.0001, &self.conductivity, 1, 0.1, 0.001);
 			
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Rotation Speed (s)", 0.0001, &self.planetRotationTime, 60000, 0.1, 0.001);
+			nk.nk_property_float(&renderer.nkContext, "Rotation Speed (s)", 0.0001, &self.planetRotationTime, 60000, 1, 0.01);
 		}
 		nk.nk_end(&renderer.nkContext);
 	}

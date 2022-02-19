@@ -85,6 +85,9 @@ pub fn build(b: *std.build.Builder) void {
     deps.addAllTo(exe);
     exe.addIncludePath("deps");
     exe.addCSourceFile("deps/nuklear.c", &.{});
+    exe.addCSourceFile("deps/miniaudio.c", &.{
+        "-fno-sanitize=undefined"
+    });
     exe.install();
 
     const run_cmd = exe.run();
