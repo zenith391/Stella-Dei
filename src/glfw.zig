@@ -1,6 +1,7 @@
 const c = @import("glfw-c.zig");
 const za = @import("zalgebra");
 const std = @import("std");
+const tracy = @import("vendor/tracy.zig");
 
 const Vec2 = za.Vec2;
 
@@ -131,6 +132,7 @@ pub const Window = struct {
 
 			c.glfwSwapBuffers(self.window);
 			c.glfwPollEvents();
+			tracy.FrameMark();
 		}
 	}
 

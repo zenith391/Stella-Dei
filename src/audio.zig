@@ -1,4 +1,5 @@
 const std = @import("std");
+const tracy = @import("vendor/tracy.zig");
 const Allocator = std.mem.Allocator;
 const c = @cImport({
 	@cInclude("miniaudio.h");
@@ -37,6 +38,8 @@ pub const AudioSubsystem = struct {
 	}
 
 	pub fn update(self: *AudioSubsystem) void {
+		const zone = tracy.ZoneN(@src(), "Update audio subsystem");
+		defer zone.End();
 		self.musicManager.update();
 	}
 
@@ -84,6 +87,9 @@ pub const MusicManager = struct {
 		const subsystem = @fieldParentPtr(AudioSubsystem, "musicManager", self);
 		if (self.currentlyPlaying) |sound| {
 			if (c.ma_sound_at_end(sound) != 0) {
+				const zone = tracy.ZoneN(@src(), "Destroy current music");
+				defer zone.End();
+
 				c.ma_sound_uninit(sound);
 				self.allocator.destroy(sound);
 				self.currentlyPlaying = null;
@@ -94,6 +100,10 @@ pub const MusicManager = struct {
 			}
 		} else if (std.time.milliTimestamp() >= self.nextMusicTime) { // time for the next music to play
 			if (self.soundTrack.getNextItem()) |nextItem| {
+				const zone = tracy.ZoneN(@src(), "Load next music");
+				defer zone.End();
+				zone.Text(nextItem);
+
 				const sound = self.allocator.create(c.ma_sound) catch return;
 				if (c.ma_sound_init_from_file(subsystem.engine, nextItem, c.MA_SOUND_FLAG_ASYNC |
 					c.MA_SOUND_FLAG_NO_PITCH | c.MA_SOUND_FLAG_NO_SPATIALIZATION, null, null, sound) != c.MA_SUCCESS) {

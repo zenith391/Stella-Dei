@@ -96,6 +96,9 @@ fn mouseScroll(window: glfw.Window, yOffset: f64) void {
 fn render(window: glfw.Window) void {
 	game.audio.update();
 	
+	const zone = tracy.ZoneN(@src(), "Render");
+	defer zone.End();
+	
 	const size = window.getFramebufferSize();
 	gl.viewport(0, 0, size.width, size.height);
 	gl.clearColor(0, 0, 0, 1);
@@ -122,14 +125,16 @@ fn render(window: glfw.Window) void {
 }
 
 const perlin = @import("perlin.zig").p2d;
-const ppm = @import("ppm.zig");
 
 pub fn main() !void {
 	var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
 	defer _ = gpa.deinit();
-	const allocator = gpa.allocator();
+
+	var tracyAlloc = @import("tracy_allocator.zig").TracyAllocator.init(gpa.allocator());
+	const allocator = tracyAlloc.allocator();
 
 	tracy.InitThread();
+	tracy.SetThreadName("Main Thread");
 
 	try glfw.init();
 	defer glfw.deinit();

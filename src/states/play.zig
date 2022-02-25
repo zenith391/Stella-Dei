@@ -2,6 +2,7 @@ const std = @import("std");
 const gl = @import("gl");
 const za = @import("zalgebra");
 const nk = @import("../nuklear.zig");
+const tracy = @import("../vendor/tracy.zig");
 
 const perlin = @import("../perlin.zig");
 
@@ -142,8 +143,8 @@ pub const Planet = struct {
 	}
 
 	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize) !Planet {
-		_ = allocator;
-		_ = numSubdivisions;
+		const zone = tracy.ZoneN(@src(), "Generate planet");
+		defer zone.End();
 
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
@@ -223,6 +224,9 @@ pub const Planet = struct {
 
 	/// Upload all changes to the GPU
 	pub fn upload(self: Planet) void {
+		const zone = tracy.ZoneN(@src(), "Planet GPU Upload");
+		defer zone.End();
+		
 		// TODO: as it's reused for every upload, just pre-allocate bufData
 		const bufData = self.bufData;
 
@@ -237,23 +241,6 @@ pub const Planet = struct {
 		gl.bindVertexArray(self.vao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, self.vbo);
 		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STATIC_DRAW);
-	}
-
-	/// Get the index to the vertex that is the closest to the given position.
-	/// 'pos' is assumed to be normalized.
-	pub fn getClosestTo(self: Planet, pos: Vec3) usize {
-		var closest: usize = 0;
-		var closestDist: f32 = std.math.inf_f32;
-
-		for (self.vertices) |point, i| {
-			const dist = point.distance(pos);
-			if (dist < closestDist) {
-				closest = i;
-				closestDist = dist;
-			}
-		}
-
-		return closest;
 	}
 
 	pub const Direction = enum {
@@ -272,6 +259,7 @@ pub const Planet = struct {
 		return false;
 	}
 
+	// Note: If pre-computed, this is an highly parallelizable task
 	pub fn getNeighbour(self: Planet, idx: usize, direction: Direction) usize {
 		const directionInt = @enumToInt(direction);
 
@@ -391,7 +379,7 @@ pub const PlayState = struct {
 
 		if (self.planet == null) {
 			// TODO: we shouldn't generate planet in render()
-			self.planet = Planet.generate(game.allocator, 4) catch unreachable;
+			self.planet = Planet.generate(game.allocator, 5) catch unreachable;
 			self.planet.?.upload();
 		}
 		var planet = &self.planet.?;
@@ -405,47 +393,52 @@ pub const PlayState = struct {
 			std.math.cos(sunTheta)
 		);
 
-		const newTemp = planet.newTemperature;
-		// Fill newTemp with the current temperatures
-		for (planet.vertices) |_, i| {
-			newTemp[i] = std.math.max(0, planet.temperature[i]); // temperature may never go below 0°K
+		{
+			const zone = tracy.ZoneN(@src(), "Simulate planet");
+			defer zone.End();
+
+			const newTemp = planet.newTemperature;
+			// Fill newTemp with the current temperatures
+			for (planet.vertices) |_, i| {
+				newTemp[i] = std.math.max(0, planet.temperature[i]); // temperature may never go below 0°K
+			}
+
+			// Do the heat simulation
+			for (planet.vertices) |vert, i| {
+				// Temperature in the current cell
+				const temp = planet.temperature[i];
+
+				const solarIllumination = std.math.max(0, vert.dot(solarVector) * self.sunPower);
+
+				// TODO: maybe follow a logarithmic distribution?
+				const radiation = std.math.min(1, planet.temperature[i] / 3000);
+
+				const factor = 6 / self.conductivity;
+				const shared = temp / factor;
+
+				newTemp[planet.getNeighbour(i, .ForwardLeft)] += shared;
+				newTemp[planet.getNeighbour(i, .ForwardRight)] += shared;
+				newTemp[planet.getNeighbour(i, .BackwardLeft)] += shared;
+				newTemp[planet.getNeighbour(i, .BackwardRight)] += shared;
+				newTemp[planet.getNeighbour(i, .Left)] += shared;
+				newTemp[planet.getNeighbour(i, .Right)] += shared;
+				newTemp[i] += solarIllumination - radiation - (shared * 6);
+			}
+
+			// const dt = 0.1;
+			// for (planet.vertices) |vert, i| {
+			// 	const alpha = 1.15; // thermal diffusivity
+			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .ForwardLeft));
+			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .ForwardRight));
+			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .BackwardLeft));
+			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .BackwardRight));
+			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .Left));
+			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .Right));
+			// }
+
+			// Finish by swapping the new temperature
+			std.mem.swap([]f32, &planet.temperature, &planet.newTemperature);
 		}
-
-		// Do the heat simulation
-		for (planet.vertices) |vert, i| {
-			// Temperature in the current cell
-			const temp = planet.temperature[i];
-
-			const solarIllumination = std.math.max(0, vert.dot(solarVector) * self.sunPower);
-
-			// TODO: maybe follow a logarithmic distribution?
-			const radiation = std.math.min(1, planet.temperature[i] / 3000);
-
-			const factor = 6 / self.conductivity;
-			const shared = temp / factor;
-
-			newTemp[planet.getNeighbour(i, .ForwardLeft)] += shared;
-			newTemp[planet.getNeighbour(i, .ForwardRight)] += shared;
-			newTemp[planet.getNeighbour(i, .BackwardLeft)] += shared;
-			newTemp[planet.getNeighbour(i, .BackwardRight)] += shared;
-			newTemp[planet.getNeighbour(i, .Left)] += shared;
-			newTemp[planet.getNeighbour(i, .Right)] += shared;
-			newTemp[i] += solarIllumination - radiation - (shared * 6);
-		}
-
-		// const dt = 0.1;
-		// for (planet.vertices) |vert, i| {
-		// 	const alpha = 1.15; // thermal diffusivity
-		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .ForwardLeft));
-		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .ForwardRight));
-		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .BackwardLeft));
-		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .BackwardRight));
-		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .Left));
-		// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .Right));
-		// }
-
-		// Finish by swapping the new temperature
-		std.mem.swap([]f32, &planet.temperature, &planet.newTemperature);
 		planet.upload();
 
 		const program = renderer.terrainProgram;

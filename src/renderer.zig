@@ -3,6 +3,7 @@ const gl     = @import("gl");
 const za     = @import("zalgebra");
 const zigimg = @import("zigimg");
 const nk     = @import("nuklear.zig");
+const tracy  = @import("vendor/tracy.zig");
 const Window = @import("glfw.zig").Window;
 const log    = std.log.scoped(.renderer);
 
@@ -46,6 +47,9 @@ pub const Renderer = struct {
 	nkFontAtlas: nk.nk_font_atlas,
 
 	pub fn init(allocator: Allocator, window: *Window) !Renderer {
+		const zone = tracy.ZoneN(@src(), "Init renderer");
+		defer zone.End();
+		
 		const colorProgram = try ShaderProgram.createFromName("color");
 		const imageProgram = try ShaderProgram.createFromName("image");
 		const terrainProgram = try ShaderProgram.createFromName("terrain");
@@ -192,6 +196,9 @@ pub const Renderer = struct {
 	}
 
 	pub fn endUI(self: *Renderer) void {
+		const zone = tracy.ZoneN(@src(), "Draw Nuklear UI");
+		defer zone.End();
+
 		const vertexLayout = [_]nk.nk_draw_vertex_layout_element {
 			.{ .attribute = nk.NK_VERTEX_POSITION, .format = nk.NK_FORMAT_FLOAT, .offset = 0 },
 			.{ .attribute = nk.NK_VERTEX_TEXCOORD, .format = nk.NK_FORMAT_FLOAT, .offset = 8 },
@@ -284,6 +291,10 @@ pub const Texture = struct {
 	texture: gl.GLuint,
 
 	pub fn createFromPath(allocator: Allocator, path: []const u8) !Texture {
+		const zone = tracy.ZoneN(@src(), "Load texture");
+		defer zone.End();
+		zone.Text(path);
+
 		var file = try std.fs.cwd().openFile(path, .{});
 		defer file.close();
 
@@ -305,6 +316,9 @@ pub const Texture = struct {
 
 	/// Assumes RGBA32
 	pub fn createFromData(width: usize, height: usize, data: []const u8) Texture {
+		const zone = tracy.ZoneN(@src(), "Upload RGBA texture");
+		defer zone.End();
+
 		var texture: gl.GLuint = undefined;
 		gl.genTextures(1, &texture);
 		gl.bindTexture(gl.TEXTURE_2D, texture);

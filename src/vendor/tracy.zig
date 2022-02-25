@@ -362,11 +362,11 @@ const tracy_full = struct {
             c.___tracy_emit_memory_alloc(ptr, size, 0);
         }
     }
-    pub inline fn Free(ptr: ?*const anyopaque, size: usize) void {
+    pub inline fn Free(ptr: ?*const anyopaque) void {
         if (has_callstack_support) {
             c.___tracy_emit_memory_free_callstack(ptr, callstack_enabled, 0);
         } else {
-            c.___tracy_emit_memory_free(ptr, size, 0);
+            c.___tracy_emit_memory_free(ptr, 0);
         }
     }
     pub inline fn SecureAlloc(ptr: ?*const anyopaque, size: usize) void {
@@ -376,18 +376,18 @@ const tracy_full = struct {
             c.___tracy_emit_memory_alloc(ptr, size, 1);
         }
     }
-    pub inline fn SecureFree(ptr: ?*const anyopaque, size: usize) void {
+    pub inline fn SecureFree(ptr: ?*const anyopaque) void {
         if (has_callstack_support) {
             c.___tracy_emit_memory_free_callstack(ptr, callstack_enabled, 1);
         } else {
-            c.___tracy_emit_memory_free(ptr, size, 1);
+            c.___tracy_emit_memory_free(ptr, 1);
         }
     }
     pub inline fn AllocS(ptr: ?*const anyopaque, size: usize, depth: c_int) void {
         if (has_callstack_support) {
             c.___tracy_emit_memory_alloc_callstack(ptr, size, depth, 0);
         } else {
-            c.___tracy_emit_memory_alloc(ptr, size, 0);
+            c.___tracy_emit_memory_alloc(ptr, 0);
         }
     }
     pub inline fn FreeS(ptr: ?*const anyopaque, depth: c_int) void {
