@@ -1,7 +1,8 @@
-const std  = @import("std");
-const gl   = @import("gl");
-const glfw = @import("glfw.zig");
-const za   = @import("zalgebra");
+const std   = @import("std");
+const gl    = @import("gl");
+const glfw  = @import("glfw.zig");
+const za    = @import("zalgebra");
+const tracy = @import("vendor/tracy.zig");
 
 const Renderer = @import("renderer.zig").Renderer;
 const Texture = @import("renderer.zig").Texture;
@@ -127,6 +128,8 @@ pub fn main() !void {
 	var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
 	defer _ = gpa.deinit();
 	const allocator = gpa.allocator();
+
+	tracy.InitThread();
 
 	try glfw.init();
 	defer glfw.deinit();

@@ -11,5 +11,8 @@ dev_dependencies:
       license: EUPL-1.2
       main: exports/gl_4v6.zig
     - src: git https://github.com/zigimg/zigimg
+    - src: git https://github.com/SpexGuy/Zig-Tracy
+      name: zig-tracy
+      main: tracy.zig
     - src: system_lib c
     - src: system_lib glfw

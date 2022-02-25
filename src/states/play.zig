@@ -52,6 +52,9 @@ pub const Planet = struct {
 	/// The *unmodified* vertices of the icosphere
 	vertices: []Vec3,
 	indices: []gl.GLuint,
+	/// Slice changed during each upload() call, it contains the data
+	/// that will be stored in the VBO.
+	bufData: []f32,
 	
 	elevation: []f32,
 	/// Temperature measured in Kelvin
@@ -214,16 +217,14 @@ pub const Planet = struct {
 			.elevation = elevation,
 			.temperature = temperature,
 			.newTemperature = newTemp,
+			.bufData = try allocator.alloc(f32, vertices.len * 4)
 		};
 	}
 
 	/// Upload all changes to the GPU
 	pub fn upload(self: Planet) void {
-		// TODO: optimise using gl.bufferSubData
-
 		// TODO: as it's reused for every upload, just pre-allocate bufData
-		var bufData = self.allocator.alloc(f32, self.vertices.len * 4) catch @panic("out of memory");
-		defer self.allocator.free(bufData);
+		const bufData = self.bufData;
 
 		for (self.vertices) |point, i| {
 			const transformedPoint = point.norm().scale(self.elevation[i]);
@@ -316,9 +317,12 @@ pub const Planet = struct {
 	}
 
 	pub fn deinit(self: Planet) void {
+		self.allocator.free(self.bufData);
+
 		self.allocator.free(self.elevation);
 		self.allocator.free(self.newTemperature);
 		self.allocator.free(self.temperature);
+		
 		self.allocator.free(self.verticesNeighbours);
 		self.allocator.free(self.vertices);
 		self.allocator.free(self.indices);
@@ -495,7 +499,7 @@ pub const PlayState = struct {
 			nk.nk_property_float(&renderer.nkContext, "Surface Conductivity", 0.0001, &self.conductivity, 1, 0.1, 0.001);
 			
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Rotation Speed (s)", 0.0001, &self.planetRotationTime, 60000, 1, 0.01);
+			nk.nk_property_float(&renderer.nkContext, "Rotation Speed (s)", 0.05, &self.planetRotationTime, 60000, 1, 0.01);
 		}
 		nk.nk_end(&renderer.nkContext);
 	}

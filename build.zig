@@ -1,5 +1,6 @@
 const std  = @import("std");
 const deps = @import("deps.zig");
+const build_tracy = @import(".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/build_tracy.zig");
 
 /// Step used to convert from tabs to space
 const ConvertStep = struct {
@@ -82,12 +83,14 @@ pub fn build(b: *std.build.Builder) void {
     const exe = b.addExecutableSource("name-not-included", convert.getSource());
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    build_tracy.link(b, exe, ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/");
     deps.addAllTo(exe);
     exe.addIncludePath("deps");
     exe.addCSourceFile("deps/nuklear.c", &.{});
     exe.addCSourceFile("deps/miniaudio.c", &.{
         "-fno-sanitize=undefined" // disable UBSAN (due to false positives)
     });
+    
     exe.install();
 
     const run_cmd = exe.run();
