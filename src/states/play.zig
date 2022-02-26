@@ -304,6 +304,58 @@ pub const Planet = struct {
 		}
 	}
 
+	pub const SimulationOptions = struct {
+		sunPower: f32,
+		conductivity: f32,
+	};
+
+	pub fn simulate(self: *Planet, solarVector: Vec3, options: SimulationOptions) void {
+		const zone = tracy.ZoneN(@src(), "Simulate planet");
+		defer zone.End();
+
+		const newTemp = self.newTemperature;
+		// Fill newTemp with the current temperatures
+		for (self.vertices) |_, i| {
+			newTemp[i] = std.math.max(0, self.temperature[i]); // temperature may never go below 0°K
+		}
+
+		// Do the heat simulation
+		for (self.vertices) |vert, i| {
+			// Temperature in the current cell
+			const temp = self.temperature[i];
+
+			const solarIllumination = std.math.max(0, vert.dot(solarVector) * options.sunPower);
+
+			// TODO: maybe follow a logarithmic distribution?
+			const radiation = std.math.min(1, self.temperature[i] / 3000);
+
+			const factor = 6 / options.conductivity;
+			const shared = temp / factor;
+
+			newTemp[self.getNeighbour(i, .ForwardLeft)] += shared;
+			newTemp[self.getNeighbour(i, .ForwardRight)] += shared;
+			newTemp[self.getNeighbour(i, .BackwardLeft)] += shared;
+			newTemp[self.getNeighbour(i, .BackwardRight)] += shared;
+			newTemp[self.getNeighbour(i, .Left)] += shared;
+			newTemp[self.getNeighbour(i, .Right)] += shared;
+			newTemp[i] += solarIllumination - radiation - (shared * 6);
+		}
+
+		// const dt = 0.1;
+		// for (self.vertices) |vert, i| {
+		// 	const alpha = 1.15; // thermal diffusivity
+		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .ForwardLeft));
+		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .ForwardRight));
+		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .BackwardLeft));
+		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .BackwardRight));
+		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .Left));
+		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .Right));
+		// }
+
+		// Finish by swapping the new temperature
+		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
+	}
+
 	pub fn deinit(self: Planet) void {
 		self.allocator.free(self.bufData);
 
@@ -333,6 +385,9 @@ pub const PlayState = struct {
 	conductivity: f32 = 0.25,
 	/// The time it takes for the planet to do a full rotation, in seconds
 	planetRotationTime: f32 = 1,
+	/// Game time in seconds
+	gameTime: f64 = 0,
+	paused: bool = false,
 
 	const PlanetDisplayMode = enum(c_int) {
 		Normal = 0,
@@ -385,8 +440,7 @@ pub const PlayState = struct {
 		}
 		var planet = &self.planet.?;
 
-		const sunTheta: f32 = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 
-			(self.planetRotationTime * std.time.ms_per_s), 2*std.math.pi));
+		const sunTheta: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
 		const sunPhi: f32 = self.planetInclination;
 		const solarVector = Vec3.new(
 			std.math.cos(sunPhi) * std.math.sin(sunTheta),
@@ -394,53 +448,16 @@ pub const PlayState = struct {
 			std.math.cos(sunTheta)
 		);
 
-		{
-			const zone = tracy.ZoneN(@src(), "Simulate planet");
-			defer zone.End();
+		if (!self.paused) {
+			planet.simulate(solarVector, .{
+				.sunPower = self.sunPower,
+				.conductivity = self.conductivity
+			});
+			planet.upload();
 
-			const newTemp = planet.newTemperature;
-			// Fill newTemp with the current temperatures
-			for (planet.vertices) |_, i| {
-				newTemp[i] = std.math.max(0, planet.temperature[i]); // temperature may never go below 0°K
-			}
-
-			// Do the heat simulation
-			for (planet.vertices) |vert, i| {
-				// Temperature in the current cell
-				const temp = planet.temperature[i];
-
-				const solarIllumination = std.math.max(0, vert.dot(solarVector) * self.sunPower);
-
-				// TODO: maybe follow a logarithmic distribution?
-				const radiation = std.math.min(1, planet.temperature[i] / 3000);
-
-				const factor = 6 / self.conductivity;
-				const shared = temp / factor;
-
-				newTemp[planet.getNeighbour(i, .ForwardLeft)] += shared;
-				newTemp[planet.getNeighbour(i, .ForwardRight)] += shared;
-				newTemp[planet.getNeighbour(i, .BackwardLeft)] += shared;
-				newTemp[planet.getNeighbour(i, .BackwardRight)] += shared;
-				newTemp[planet.getNeighbour(i, .Left)] += shared;
-				newTemp[planet.getNeighbour(i, .Right)] += shared;
-				newTemp[i] += solarIllumination - radiation - (shared * 6);
-			}
-
-			// const dt = 0.1;
-			// for (planet.vertices) |vert, i| {
-			// 	const alpha = 1.15; // thermal diffusivity
-			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .ForwardLeft));
-			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .ForwardRight));
-			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .BackwardLeft));
-			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .BackwardRight));
-			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .Left));
-			// 	conduct(&planet, newTemp, planet.temperature[i], planet.getNeighbour(i, .Right));
-			// }
-
-			// Finish by swapping the new temperature
-			std.mem.swap([]f32, &planet.temperature, &planet.newTemperature);
+			// TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
+			self.gameTime += 0.016;
 		}
-		planet.upload();
 
 		const program = renderer.terrainProgram;
 		program.use();
@@ -481,21 +498,43 @@ pub const PlayState = struct {
 	}
 
 	pub fn renderUI(self: *PlayState, _: *Game, renderer: *Renderer) void {
-		if (nk.nk_begin(&renderer.nkContext, "Planet Control", .{ .x = 100, .y = 100, .w = 600, .h = 150}, 
+		const size = renderer.framebufferSize;
+		const ctx = &renderer.nkContext;
+
+		if (nk.nk_begin(ctx, "Planet Control", .{ .x = 100, .y = 100, .w = 600, .h = 150}, 
 			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_MOVABLE | nk.NK_WINDOW_TITLE | nk.NK_WINDOW_SCALABLE) != 0) {
-			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Planet Inclination (rad)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
+			nk.nk_layout_row_dynamic(ctx, 50, 1);
+			nk.nk_property_float(ctx, "Planet Inclination (rad)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
 
-			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Sun Power (W)", 0, &self.sunPower, 10, 0.01, 0.002);
+			nk.nk_layout_row_dynamic(ctx, 50, 1);
+			nk.nk_property_float(ctx, "Sun Power (W)", 0, &self.sunPower, 10, 0.01, 0.002);
 
-			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Surface Conductivity", 0.0001, &self.conductivity, 1, 0.1, 0.001);
+			nk.nk_layout_row_dynamic(ctx, 50, 1);
+			nk.nk_property_float(ctx, "Surface Conductivity", 0.0001, &self.conductivity, 1, 0.1, 0.001);
 			
-			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_property_float(&renderer.nkContext, "Rotation Speed (s)", 0.05, &self.planetRotationTime, 60000, 1, 0.01);
+			nk.nk_layout_row_dynamic(ctx, 50, 1);
+			nk.nk_property_float(ctx, "Rotation Speed (s)", 0.05, &self.planetRotationTime, 60000, 1, 0.01);
 		}
-		nk.nk_end(&renderer.nkContext);
+		nk.nk_end(ctx);
+
+		// Transparent window style
+		const windowColor = nk.nk_color { .r = 0, .g = 0, .b = 0, .a = 0 };
+		_ = nk.nk_style_push_color(ctx, &ctx.style.window.background, windowColor);
+		defer _ = nk.nk_style_pop_color(ctx);
+		_ = nk.nk_style_push_style_item(ctx, &ctx.style.window.fixed_background, nk.nk_style_item_color(windowColor));
+		defer _ = nk.nk_style_pop_style_item(ctx);
+
+		if (nk.nk_begin(ctx, "Game Speed", .{ .x = size.x() - 150, .y = 50, .w = 90, .h = 60 }, 
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			nk.nk_layout_row_dynamic(ctx, 40, 2);
+			if (nk.nk_button_label(ctx, "||") != 0) {
+				self.paused = true;
+			}
+			if (nk.nk_button_symbol(ctx, nk.NK_SYMBOL_TRIANGLE_RIGHT) != 0) {
+				self.paused = false;
+			}
+		}
+		nk.nk_end(ctx);
 	}
 
 	pub fn deinit(self: *PlayState) void {

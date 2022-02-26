@@ -116,7 +116,7 @@ pub const Renderer = struct {
 		var verts: nk.nk_buffer = undefined;
 		var idx: nk.nk_buffer = undefined;
 		nk.nk_buffer_init(&cmds, &nkAllocator.nk, 8192);
-		nk.nk_buffer_init(&verts, &nkAllocator.nk, 8192*4);
+		nk.nk_buffer_init(&verts, &nkAllocator.nk, 8192*8);
 		nk.nk_buffer_init(&idx, &nkAllocator.nk, 8192);
 
 		return Renderer {
