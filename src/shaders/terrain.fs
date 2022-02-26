@@ -6,6 +6,7 @@ uniform int displayMode;
 
 in vec3 localPosition;
 in float interpData;
+in float waterElevation;
 
 out vec4 fragColor;
 
@@ -20,11 +21,11 @@ void main() {
 
 		float lengthDeviation = length(localPosition) - 1;
 		vec3 objectColor = vec3(0.5f, 0.4f, 0.3f) * (lengthDeviation * 5 + 1);
-		if (lengthDeviation < 0 && interpData < 373.15) {
+		if (waterElevation > 0 && interpData < 373.15) {
 			if (interpData < 273.15) {
 				objectColor = vec3(1.0f, 1.0f, 1.0f); // ice
 			} else {
-				objectColor = vec3(0.1f, 0.3f, 0.8f); // ocean blue
+				objectColor = mix(objectColor, vec3(0.1f, 0.3f, 0.8f), min(waterElevation*10, 1)); // ocean blue
 			}
 		}
 

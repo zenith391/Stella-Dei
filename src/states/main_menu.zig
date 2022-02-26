@@ -31,6 +31,10 @@ pub const MainMenuState = struct {
 			if (nk.nk_button_label(&renderer.nkContext, "Play") != 0) {
 				game.setState(@import("play.zig").PlayState);
 			}
+
+			if (nk.nk_button_label(&renderer.nkContext, "Exit") != 0) {
+				game.window.setShouldClose(true);
+			}
 		}
 		nk.nk_end(&renderer.nkContext);
 	}

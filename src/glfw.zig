@@ -140,5 +140,8 @@ pub const Window = struct {
 		return c.glfwWindowShouldClose(self.window) != 0;
 	}
 
-};
+	pub fn setShouldClose(self: Window, should_close: bool) void {
+		c.glfwSetWindowShouldClose(self.window, @boolToInt(should_close));
+	}
 
+};

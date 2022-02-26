@@ -57,11 +57,13 @@ pub const Planet = struct {
 	/// that will be stored in the VBO.
 	bufData: []f32,
 	
+	waterElevation: []f32,
 	elevation: []f32,
 	/// Temperature measured in Kelvin
 	temperature: []f32,
 	/// Buffer array that is used to store the temperatures to be used after next update
 	newTemperature: []f32,
+	newWaterElevation: []f32,
 
 	// 0xFFFFFFFF in the first entry considered null and not filled
 	/// List of neighbours for a vertex. A vertex has 6 neighbours that arrange in hexagons
@@ -176,8 +178,10 @@ pub const Planet = struct {
 		const vertices       = try allocator.alloc(Vec3, subdivided.?.vertices.len / 3);
 		const vertNeighbours = try allocator.alloc([6]u32, subdivided.?.vertices.len / 3);
 		const elevation      = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
+		const waterElev      = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		const temperature    = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		const newTemp        = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
+		const newWaterElev   = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		{
 			var i: usize = 0;
 			const vert = subdivided.?.vertices;
@@ -191,6 +195,7 @@ pub const Planet = struct {
 				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * 0.05;
 
 				elevation[i / 3] = value;
+				waterElev[i / 3] = 0;
 				temperature[i / 3] = (perlin.p2do(theta * 10 + 1, phi * 10 + 1, 6) + 1) * 300; // 0°C
 				//temperature[i/3] = 300;
 				vertices[i / 3] = point;
@@ -201,10 +206,12 @@ pub const Planet = struct {
 		}
 
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
-		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
-		gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32)));
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
+		gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32)));
+		gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 4 * @sizeOf(f32)));
 		gl.enableVertexAttribArray(0);
 		gl.enableVertexAttribArray(1);
+		gl.enableVertexAttribArray(2);
 
 		return Planet {
 			.vao = vao,
@@ -216,9 +223,11 @@ pub const Planet = struct {
 			.verticesNeighbours = vertNeighbours,
 			.indices = subdivided.?.indices,
 			.elevation = elevation,
+			.waterElevation = waterElev,
+			.newWaterElevation = newWaterElev,
 			.temperature = temperature,
 			.newTemperature = newTemp,
-			.bufData = try allocator.alloc(f32, vertices.len * 4)
+			.bufData = try allocator.alloc(f32, vertices.len * 5)
 		};
 	}
 
@@ -231,16 +240,17 @@ pub const Planet = struct {
 		const bufData = self.bufData;
 
 		for (self.vertices) |point, i| {
-			const transformedPoint = point.norm().scale(self.elevation[i]);
-			bufData[i*4+0] = transformedPoint.x();
-			bufData[i*4+1] = transformedPoint.y();
-			bufData[i*4+2] = transformedPoint.z();
-			bufData[i*4+3] = self.temperature[i];
+			const transformedPoint = point.norm().scale(self.elevation[i] + self.waterElevation[i]);
+			bufData[i*5+0] = transformedPoint.x();
+			bufData[i*5+1] = transformedPoint.y();
+			bufData[i*5+2] = transformedPoint.z();
+			bufData[i*5+3] = self.temperature[i];
+			bufData[i*5+4] = self.waterElevation[i];
 		}
 		
 		gl.bindVertexArray(self.vao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, self.vbo);
-		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STATIC_DRAW);
+		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
 	}
 
 	pub const Direction = enum {
@@ -352,14 +362,49 @@ pub const Planet = struct {
 		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .Right));
 		// }
 
-		// Finish by swapping the new temperature
+		const newElev = self.newWaterElevation;
+		std.mem.copy(f32, newElev, self.waterElevation);
+
+		// Do some liquid simulation
+		for (self.vertices) |_, i| {
+			const height = self.waterElevation[i];
+			const totalHeight = self.elevation[i] + height;
+
+			const factor = 6 / 0.5;
+			const shared = height / factor;
+			var numShared: f32 = 0;
+
+			numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
+			numShared += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight);
+			numShared += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight);
+			numShared += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight);
+			numShared += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight);
+			numShared += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight);
+			newElev[i] -= numShared;
+		}
+		// std.log.info("water elevation at 123: {d}", .{ newElev[123] });
+
+		// Finish by swapping the new temperature and the new elevation
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
+		std.mem.swap([]f32, &self.waterElevation, &self.newWaterElevation);
+	}
+
+	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32) f32 {
+		if (totalHeight > self.elevation[target]) {
+			const transmitted = std.math.min(1, shared * (totalHeight - self.elevation[target]) * 10);
+			self.newWaterElevation[target] += transmitted;
+			return transmitted;
+		} else {
+			return 0;
+		}
 	}
 
 	pub fn deinit(self: Planet) void {
 		self.allocator.free(self.bufData);
 
 		self.allocator.free(self.elevation);
+		self.allocator.free(self.newWaterElevation);
+		self.allocator.free(self.waterElevation);
 		self.allocator.free(self.newTemperature);
 		self.allocator.free(self.temperature);
 		
@@ -388,6 +433,7 @@ pub const PlayState = struct {
 	/// Game time in seconds
 	gameTime: f64 = 0,
 	paused: bool = false,
+	debug_emitWater: bool = false,
 
 	const PlanetDisplayMode = enum(c_int) {
 		Normal = 0,
@@ -449,6 +495,9 @@ pub const PlayState = struct {
 		);
 
 		if (!self.paused) {
+			if (self.debug_emitWater) {
+				planet.waterElevation[123] += 0.05;
+			}
 			planet.simulate(solarVector, .{
 				.sunPower = self.sunPower,
 				.conductivity = self.conductivity
@@ -514,6 +563,9 @@ pub const PlayState = struct {
 			
 			nk.nk_layout_row_dynamic(ctx, 50, 1);
 			nk.nk_property_float(ctx, "Rotation Speed (s)", 0.05, &self.planetRotationTime, 60000, 1, 0.01);
+
+			nk.nk_layout_row_dynamic(ctx, 50, 1);
+			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
 		}
 		nk.nk_end(ctx);
 

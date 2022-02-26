@@ -136,7 +136,6 @@ pub fn main() !void {
 	const allocator = if (tracy.enabled) tracyAlloc.allocator() else gpa.allocator();
 
 	tracy.InitThread();
-	tracy.SetThreadName("Main Thread");
 
 	try glfw.init();
 	defer glfw.deinit();
