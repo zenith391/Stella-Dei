@@ -290,9 +290,9 @@ pub const Planet = struct {
 					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
 				}
 			}
-			// std.log.debug("{d}: {d} candidates", .{ idx, candidates.len });
+
+			// The original points of the icosahedron
 			if (candidates.len == 5) {
-				// TODO: just fix the bug instead but only the first few vertices seem to have this bug
 				candidates.appendAssumeCapacity(idx);
 			}
 
@@ -345,6 +345,7 @@ pub const PlayState = struct {
 			"assets/music2.mp3"
 		}};
 		game.audio.playSoundTrack(soundTrack);
+		nk.nk_style_default(&game.renderer.nkContext);
 		return PlayState {
 			.dragStart = game.window.getCursorPos()
 		};
@@ -379,7 +380,7 @@ pub const PlayState = struct {
 
 		if (self.planet == null) {
 			// TODO: we shouldn't generate planet in render()
-			self.planet = Planet.generate(game.allocator, 5) catch unreachable;
+			self.planet = Planet.generate(game.allocator, 4) catch unreachable;
 			self.planet.?.upload();
 		}
 		var planet = &self.planet.?;

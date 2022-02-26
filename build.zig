@@ -83,7 +83,8 @@ pub fn build(b: *std.build.Builder) void {
     const exe = b.addExecutableSource("name-not-included", convert.getSource());
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    build_tracy.link(b, exe, ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/");
+    exe.single_threaded = true;
+    build_tracy.link(b, exe, if (mode == .Debug) ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/" else null);
     deps.addAllTo(exe);
     exe.addIncludePath("deps");
     exe.addCSourceFile("deps/nuklear.c", &.{});

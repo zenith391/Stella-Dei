@@ -23,13 +23,15 @@ pub const Game = struct {
 	state: GameState,
 	audio: AudioSubsystem,
 	window: *glfw.Window,
+	renderer: *Renderer,
 	allocator: std.mem.Allocator,
 
-	pub fn init(allocator: std.mem.Allocator, window: *glfw.Window) !Game {
+	pub fn init(allocator: std.mem.Allocator, window: *glfw.Window, ptrRenderer: *Renderer) !Game {
 		return Game {
 			.state = .MainMenu,
 			.audio = try AudioSubsystem.init(allocator),
 			.window = window,
+			.renderer = ptrRenderer,
 			.allocator = allocator,
 		};
 	}
@@ -95,16 +97,15 @@ fn mouseScroll(window: glfw.Window, yOffset: f64) void {
 
 fn render(window: glfw.Window) void {
 	game.audio.update();
-	
-	const zone = tracy.ZoneN(@src(), "Render");
-	defer zone.End();
-	
+
 	const size = window.getFramebufferSize();
 	gl.viewport(0, 0, size.width, size.height);
 	gl.clearColor(0, 0, 0, 1);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-
 	renderer.framebufferSize = za.Vec2.new(@intToFloat(f32, size.width), @intToFloat(f32, size.height));
+
+	const zone = tracy.ZoneN(@src(), "Render");
+	defer zone.End();
 	inline for (std.meta.fields(GameState)) |field| {
 		// if the field is active
 		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
@@ -118,6 +119,7 @@ fn render(window: glfw.Window) void {
 		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
 			if (comptime @hasDecl(field.field_type, "renderUI")) {
 				@field(game.state, field.name).renderUI(&game, &renderer);
+				break;
 			}
 		}
 	}
@@ -131,7 +133,7 @@ pub fn main() !void {
 	defer _ = gpa.deinit();
 
 	var tracyAlloc = @import("tracy_allocator.zig").TracyAllocator.init(gpa.allocator());
-	const allocator = tracyAlloc.allocator();
+	const allocator = if (tracy.enabled) tracyAlloc.allocator() else gpa.allocator();
 
 	tracy.InitThread();
 	tracy.SetThreadName("Main Thread");
@@ -149,7 +151,7 @@ pub fn main() !void {
 	renderer = try Renderer.init(allocator, &window);
 	defer renderer.deinit();
 	
-	game = try Game.init(allocator, &window);
+	game = try Game.init(allocator, &window, &renderer);
 	defer game.deinit();
 	window.loop(render);
 }
