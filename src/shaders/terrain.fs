@@ -25,7 +25,7 @@ void main() {
 			if (interpData < 273.15) {
 				objectColor = vec3(1.0f, 1.0f, 1.0f); // ice
 			} else {
-				objectColor = mix(objectColor, vec3(0.1f, 0.3f, 0.8f), min(waterElevation*10, 1)); // ocean blue
+				objectColor = mix(objectColor, vec3(0.1f, 0.3f, 0.8f), min(waterElevation*50, 1)); // ocean blue
 			}
 		}
 

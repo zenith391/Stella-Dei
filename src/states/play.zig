@@ -195,7 +195,7 @@ pub const Planet = struct {
 				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * 0.05;
 
 				elevation[i / 3] = value;
-				waterElev[i / 3] = 0;
+				waterElev[i / 3] = std.math.max(0, value - 1);
 				temperature[i / 3] = (perlin.p2do(theta * 10 + 1, phi * 10 + 1, 6) + 1) * 300; // 0°C
 				//temperature[i/3] = 300;
 				vertices[i / 3] = point;
@@ -370,7 +370,7 @@ pub const Planet = struct {
 			const height = self.waterElevation[i];
 			const totalHeight = self.elevation[i] + height;
 
-			const factor = 6 / 0.5;
+			const factor = 6 / 1;
 			const shared = height / factor;
 			var numShared: f32 = 0;
 
