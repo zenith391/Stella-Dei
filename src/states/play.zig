@@ -335,12 +335,14 @@ pub const Planet = struct {
 		for (self.vertices) |vert, i| {
 			// Temperature in the current cell
 			const temp = self.temperature[i];
+			@prefetch(&self.temperature.ptr[i+1], .{ .locality = 0 });
 
 			const solarIllumination = std.math.max(0, vert.dot(solarVector) * options.sunPower * options.timeScale);
 
 			// TODO: maybe follow a logarithmic distribution?
-			const radiation = std.math.min(1, self.temperature[i] / 3000 * options.timeScale);
+			const radiation = std.math.min(1, temp / 3000 * options.timeScale);
 
+			// TODO: conductivity depends on water level
 			const factor = 6 / options.conductivity / options.timeScale;
 			const shared = temp / factor;
 
@@ -364,34 +366,38 @@ pub const Planet = struct {
 		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .Right));
 		// }
 
-		const newElev = self.newWaterElevation;
-		std.mem.copy(f32, newElev, self.waterElevation);
+		// Finish by swapping the new temperature
+		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
 
-		// Do some liquid simulation
-		for (self.vertices) |_, i| {
-			// only fluid if it's not ice
-			if (self.temperature[i] > 273.15 or true) {
-				const height = self.waterElevation[i];
-				const totalHeight = self.elevation[i] + height;
+		var iteration: usize = 0;
+		while (iteration < 2) : (iteration += 1) {
+			const newElev = self.newWaterElevation;
+			std.mem.copy(f32, newElev, self.waterElevation);
 
-				const factor = 6 / 1 / options.timeScale;
-				const shared = height / factor;
-				var numShared: f32 = 0;
+			// Do some liquid simulation
+			for (self.vertices) |_, i| {
+				// only fluid if it's not ice
+				if (self.temperature[i] > 273.15 or true) {
+					const height = self.waterElevation[i];
+					const totalHeight = self.elevation[i] + height;
 
-				numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
-				numShared += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight);
-				numShared += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight);
-				numShared += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight);
-				numShared += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight);
-				numShared += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight);
-				newElev[i] -= numShared;
+					const factor = 6 / 0.5 / options.timeScale;
+					const shared = height / factor;
+					var numShared: f32 = 0;
+
+					numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
+					numShared += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight);
+					numShared += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight);
+					numShared += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight);
+					numShared += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight);
+					numShared += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight);
+					newElev[i] -= numShared;
+				}
 			}
+
+			std.mem.swap([]f32, &self.waterElevation, &self.newWaterElevation);
 		}
 		// std.log.info("water elevation at 123: {d}", .{ newElev[123] });
-
-		// Finish by swapping the new temperature and the new elevation
-		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
-		std.mem.swap([]f32, &self.waterElevation, &self.newWaterElevation);
 	}
 
 	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32) f32 {
@@ -440,6 +446,7 @@ pub const PlayState = struct {
 	timeScale: f32 = 1,
 	paused: bool = false,
 	debug_emitWater: bool = false,
+	debug_suckWater: bool = false,
 
 	const PlanetDisplayMode = enum(c_int) {
 		Normal = 0,
@@ -503,6 +510,9 @@ pub const PlayState = struct {
 		if (!self.paused) {
 			if (self.debug_emitWater) {
 				planet.waterElevation[123] += 0.05 * self.timeScale;
+			}
+			if (self.debug_suckWater) {
+				planet.waterElevation[123] = std.math.max(0, planet.waterElevation[123] - 0.1 * self.timeScale);
 			}
 			planet.simulate(solarVector, .{
 				.sunPower = self.sunPower,
@@ -574,8 +584,9 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 50, 1);
 			nk.nk_property_float(ctx, "Time Scale", 0.05, &self.timeScale, 1, 0.1, 0.002);
 
-			nk.nk_layout_row_dynamic(ctx, 50, 1);
+			nk.nk_layout_row_dynamic(ctx, 50, 2);
 			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
+			self.debug_suckWater = nk.nk_check_label(ctx, "Debug: Suck Water", @boolToInt(self.debug_suckWater)) != 0;
 		}
 		nk.nk_end(ctx);
 
