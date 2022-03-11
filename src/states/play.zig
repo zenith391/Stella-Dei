@@ -501,8 +501,9 @@ pub const PlayState = struct {
 		}
 		var planet = &self.planet.?;
 
-		var sunTheta: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
-		var sunPhi: f32 = self.planetInclination;
+		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
+		//var sunTheta: f32 = self.planetInclination;
+		var sunTheta: f32 = std.math.pi / 2.0;
 		var solarVector = Vec3.new(
 			std.math.cos(sunPhi) * std.math.sin(sunTheta),
 			std.math.sin(sunPhi) * std.math.sin(sunTheta),
@@ -549,7 +550,7 @@ pub const PlayState = struct {
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
-		const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(90, 0, 0), Vec3.new(20, 20, 20));
+		const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(0, 0, 0), Vec3.new(20, 20, 20));
 		program.setUniformMat4("modelMatrix",
 			modelMatrix);
 
@@ -570,6 +571,21 @@ pub const PlayState = struct {
 			} else if (self.displayMode == .Temperature) {
 				self.displayMode = .Normal;
 			}
+		}
+
+		// TODO: avoid interfering with the UI system
+		if (button == .Left) {
+			const pos = self.cameraPos;
+			var closestPointDist: f32 = std.math.inf_f32;
+			var closestPoint: usize = undefined;
+			for (self.planet.?.vertices) |point, i| {
+				if (point.distance(pos) < closestPointDist) {
+					closestPoint = i;
+					closestPointDist = point.distance(pos);
+				}
+			}
+			std.log.info("closest vs distance: {d} vs {d}", .{ closestPointDist, self.cameraDistance });
+			self.planet.?.temperature[closestPoint] += 500 * self.timeScale;
 		}
 	}
 

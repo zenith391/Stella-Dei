@@ -89,7 +89,7 @@ pub const MusicManager = struct {
 	pub fn update(self: *MusicManager) void {
 		const subsystem = @fieldParentPtr(AudioSubsystem, "musicManager", self);
 		if (self.currentlyPlaying) |sound| {
-			if (c.ma_sound_at_end(sound) != 0) {
+			if (c.ma_sound_is_playing(sound) == 0) {
 				const zone = tracy.ZoneN(@src(), "Destroy current music");
 				defer zone.End();
 
@@ -131,6 +131,8 @@ pub const MusicManager = struct {
 		const engine = subsystem.engine;
 		if (self.currentlyPlaying) |sound| {
 			c.ma_sound_set_fade_in_milliseconds(sound, -1, 0, 5000);
+			//c.ma_sound_set_stop_time_in_pcm_frames(sound, 0);
+			_ = engine;
 			c.ma_sound_set_stop_time_in_pcm_frames(sound, c.ma_engine_get_time(engine) + c.ma_engine_get_sample_rate(engine) * 5);
 		}
 	}
