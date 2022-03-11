@@ -6,7 +6,11 @@ const MouseButton = @import("../glfw.zig").MouseButton;
 
 pub const MainMenuState = struct {
 
-	pub fn init(_: *Game) MainMenuState {
+	pub fn init(game: *Game) MainMenuState {
+		const soundTrack = @import("../audio.zig").SoundTrack { .items = &.{
+			"assets/music-main-menu.mp3",
+		}};
+		game.audio.playSoundTrack(soundTrack);
 		return MainMenuState {};
 	}
 

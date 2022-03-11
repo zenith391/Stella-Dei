@@ -151,6 +151,7 @@ pub fn main() !void {
 	defer renderer.deinit();
 	
 	game = try Game.init(allocator, &window, &renderer);
+	game.setState(MainMenuState);
 	defer game.deinit();
 	window.loop(render);
 }

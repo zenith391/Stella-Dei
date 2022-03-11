@@ -1,6 +1,7 @@
 const std = @import("std");
 const tracy = @import("vendor/tracy.zig");
 const Allocator = std.mem.Allocator;
+const log = std.log.scoped(.audio);
 const c = @cImport({
 	@cInclude("miniaudio.h");
 });
@@ -30,11 +31,13 @@ pub const AudioSubsystem = struct {
 	}
 
 	pub fn playSoundTrack(self: *AudioSubsystem, soundTrack: SoundTrack) void {
+		self.musicManager.stopCurrentMusic();
 		self.musicManager.soundTrack = soundTrack;
 
 		const random = self.musicManager.prng.random();
 		self.musicManager.soundTrack.position = random.uintLessThanBiased(usize, soundTrack.items.len);
 		self.musicManager.nextMusicTime = std.time.milliTimestamp() + random.intRangeAtMostBiased(i64, 5000, 20000);
+		log.debug("Start music in {d} seconds", .{ @divTrunc(self.musicManager.nextMusicTime - std.time.milliTimestamp(), 1000) });
 	}
 
 	pub fn update(self: *AudioSubsystem) void {
@@ -97,6 +100,7 @@ pub const MusicManager = struct {
 				// add a silence moment that can last from 15 to 30 seconds
 				const random = self.prng.random();
 				self.nextMusicTime = std.time.milliTimestamp() + random.intRangeAtMostBiased(i64, 15000, 30000);
+				log.debug("Start next music in {d} seconds", .{ @divTrunc(self.nextMusicTime - std.time.milliTimestamp(), 1000) });
 			}
 		} else if (std.time.milliTimestamp() >= self.nextMusicTime) { // time for the next music to play
 			if (self.soundTrack.getNextItem()) |nextItem| {
@@ -106,11 +110,12 @@ pub const MusicManager = struct {
 
 				const sound = self.allocator.create(c.ma_sound) catch return;
 				if (c.ma_sound_init_from_file(subsystem.engine, nextItem, c.MA_SOUND_FLAG_ASYNC |
-					c.MA_SOUND_FLAG_NO_PITCH | c.MA_SOUND_FLAG_NO_SPATIALIZATION, null, null, sound) != c.MA_SUCCESS) {
+					c.MA_SOUND_FLAG_NO_PITCH | c.MA_SOUND_FLAG_NO_SPATIALIZATION | c.MA_SOUND_FLAG_STREAM, null, null, sound) != c.MA_SUCCESS) {
 					std.log.scoped(.audio).warn("Could not load music '{s}'", .{ nextItem });
 					return;
 				}
 				c.ma_sound_set_volume(sound, 0.4);
+				c.ma_sound_set_fade_in_milliseconds(sound, 0, 1, 5000);
 				if (c.ma_sound_start(sound) != c.MA_SUCCESS) {
 					std.log.scoped(.audio).warn("Could not start music '{s}'", .{ nextItem });
 				}
@@ -119,6 +124,15 @@ pub const MusicManager = struct {
 			}
 		}
 
+	}
+
+	pub fn stopCurrentMusic(self: *MusicManager) void {
+		const subsystem = @fieldParentPtr(AudioSubsystem, "musicManager", self);
+		const engine = subsystem.engine;
+		if (self.currentlyPlaying) |sound| {
+			c.ma_sound_set_fade_in_milliseconds(sound, -1, 0, 5000);
+			c.ma_sound_set_stop_time_in_pcm_frames(sound, c.ma_engine_get_time(engine) + c.ma_engine_get_sample_rate(engine) * 5);
+		}
 	}
 
 	pub fn deinit(self: *MusicManager) void {

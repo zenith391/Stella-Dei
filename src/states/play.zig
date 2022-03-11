@@ -306,7 +306,9 @@ pub const Planet = struct {
 				candidates.appendAssumeCapacity(idx);
 			}
 
-			self.verticesNeighbours[idx][directionInt] = @intCast(u32, candidates.get(directionInt));
+			for (candidates.constSlice()) |neighbour, int| {
+				self.verticesNeighbours[idx][int] = @intCast(u32, neighbour);
+			}
 			// TODO: account for the requested direction
 			return candidates.get(directionInt);
 		} else {
@@ -499,26 +501,39 @@ pub const PlayState = struct {
 		}
 		var planet = &self.planet.?;
 
-		const sunTheta: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
-		const sunPhi: f32 = self.planetInclination;
-		const solarVector = Vec3.new(
+		var sunTheta: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
+		var sunPhi: f32 = self.planetInclination;
+		var solarVector = Vec3.new(
 			std.math.cos(sunPhi) * std.math.sin(sunTheta),
 			std.math.sin(sunPhi) * std.math.sin(sunTheta),
 			std.math.cos(sunTheta)
 		);
 
 		if (!self.paused) {
-			if (self.debug_emitWater) {
-				planet.waterElevation[123] += 0.05 * self.timeScale;
+			// TODO: variable simulation step
+			const simulationSteps = 1;
+			var i: usize = 0;
+			while (i < simulationSteps) : (i += 1) {
+				if (self.debug_emitWater) {
+					planet.waterElevation[123] += 0.05 * self.timeScale;
+				}
+				if (self.debug_suckWater) {
+					planet.waterElevation[123] = std.math.max(0, planet.waterElevation[123] - 0.1 * self.timeScale);
+				}
+
+				// sunTheta = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
+				// sunPhi = self.planetInclination;
+				// solarVector = Vec3.new(
+				// 	std.math.cos(sunPhi) * std.math.sin(sunTheta),
+				// 	std.math.sin(sunPhi) * std.math.sin(sunTheta),
+				// 	std.math.cos(sunTheta)
+				// );
+				planet.simulate(solarVector, .{
+					.sunPower = self.sunPower,
+					.conductivity = self.conductivity,
+					.timeScale = self.timeScale / simulationSteps,
+				});
 			}
-			if (self.debug_suckWater) {
-				planet.waterElevation[123] = std.math.max(0, planet.waterElevation[123] - 0.1 * self.timeScale);
-			}
-			planet.simulate(solarVector, .{
-				.sunPower = self.sunPower,
-				.conductivity = self.conductivity,
-				.timeScale = self.timeScale,
-			});
 			planet.upload();
 
 			// TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
