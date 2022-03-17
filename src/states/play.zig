@@ -544,7 +544,11 @@ pub const PlayState = struct {
 					planet.waterElevation[123] += 0.05 * self.timeScale;
 				}
 				if (self.debug_suckWater) {
-					planet.waterElevation[123] = std.math.max(0, planet.waterElevation[123] - 0.1 * self.timeScale);
+					var j: usize = 100;
+					while (j < 150) : (j += 1) {
+						//planet.waterElevation[j] = std.math.max(0, planet.waterElevation[j] - 0.1 * self.timeScale);
+						planet.waterElevation[j] = 0;
+					}
 				}
 				if (window.isMousePressed(.Left) and false) {
 					self.planet.?.temperature[self.selectedPoint] += 500 * self.timeScale;
