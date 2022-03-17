@@ -333,6 +333,35 @@ pub const Texture = struct {
 
 		return Texture { .texture = texture };
 	}
+
+	pub fn initCubemap() Texture {
+		var texture: gl.GLuint = undefined;
+		gl.genTextures(1, &texture);
+		gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
+		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
+		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
+		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.MIRRORED_REPEAT);
+		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		return Texture { .texture = texture };
+	}
+
+	pub const CubemapFace = enum(gl.GLenum) {
+		PositiveX = gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+		NegativeX,
+		PositiveY,
+		NegativeY,
+		PositiveZ,
+		NegativeZ,
+	};
+
+	// Assumes RGB24
+	pub fn setCubemapFace(self: Texture, face: CubemapFace, width: usize, height: usize, data: []const u8) void {
+		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.texture);
+		gl.texImage2D(@enumToInt(face), 0, gl.RGB, 
+			@intCast(c_int, width), @intCast(c_int, height), 0, gl.RGB, gl.UNSIGNED_BYTE, data.ptr);
+
+	}
 };
 
 pub const TextureCache = struct {

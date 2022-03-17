@@ -8,6 +8,7 @@ const perlin = @import("../perlin.zig");
 
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
+const Texture = @import("../renderer.zig").Texture;
 const MouseButton = @import("../glfw.zig").MouseButton;
 const SoundTrack = @import("../audio.zig").SoundTrack;
 
@@ -246,6 +247,7 @@ pub const Planet = struct {
 			bufData[i*5+2] = transformedPoint.z();
 			bufData[i*5+3] = self.temperature[i];
 			bufData[i*5+4] = self.waterElevation[i];
+			//bufData[i*5+4] = 0;
 		}
 		
 		gl.bindVertexArray(self.vao);
@@ -433,9 +435,12 @@ pub const PlayState = struct {
 	cameraPos: Vec3 = Vec3.new(0, -8, 2),
 	dragStart: Vec2,
 	planet: ?Planet = null,
+	cubemap: Texture,
 
 	cameraDistance: f32 = 1000,
 	targetCameraDistance: f32 = 30,
+	/// The index of the currently selected point
+	selectedPoint: usize = 0,
 	displayMode: PlanetDisplayMode = .Normal,
 	/// Inclination of rotation, in radians
 	planetInclination: f32 = 0.4,
@@ -462,8 +467,28 @@ pub const PlayState = struct {
 		}};
 		game.audio.playSoundTrack(soundTrack);
 		nk.nk_style_default(&game.renderer.nkContext);
+
+		const cubemap = Texture.initCubemap();
+		var data: []u8 = game.allocator.alloc(u8, 512 * 512 * 3) catch unreachable;
+		defer game.allocator.free(data);
+
+		var random = std.rand.DefaultPrng.init(1234);
+
+		const faces = [_]Texture.CubemapFace { .PositiveX, .NegativeX, .PositiveY, .NegativeY, .PositiveZ, .NegativeZ };
+		for (faces) |face| {
+			var y: usize = 0;
+			while (y < 512) : (y += 1) {
+				var x: usize = 0;
+				while (x < 512) : (x += 1) {
+					data[(y*512+x)*3+0] = random.random().int(u8);
+				}
+			}
+			cubemap.setCubemapFace(face, 512, 512, data);
+		}
+		
 		return PlayState {
-			.dragStart = game.window.getCursorPos()
+			.dragStart = game.window.getCursorPos(),
+			.cubemap = cubemap,
 		};
 	}
 
@@ -521,6 +546,9 @@ pub const PlayState = struct {
 				if (self.debug_suckWater) {
 					planet.waterElevation[123] = std.math.max(0, planet.waterElevation[123] - 0.1 * self.timeScale);
 				}
+				if (window.isMousePressed(.Left) and false) {
+					self.planet.?.temperature[self.selectedPoint] += 500 * self.timeScale;
+				}
 
 				// sunTheta = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
 				// sunPhi = self.planetInclination;
@@ -556,7 +584,13 @@ pub const PlayState = struct {
 
 		program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
 		program.setUniformVec3("lightDir", solarVector);
+		program.setUniformVec3("viewPos", self.cameraPos);
 		program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display temperature
+
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.cubemap.texture);
+		program.setUniformInt("noiseCubemap", 0);
+
 		gl.bindVertexArray(planet.vao);
 		gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
 	}
@@ -584,14 +618,29 @@ pub const PlayState = struct {
 					closestPointDist = point.distance(pos);
 				}
 			}
-			std.log.info("closest vs distance: {d} vs {d}", .{ closestPointDist, self.cameraDistance });
-			self.planet.?.temperature[closestPoint] += 500 * self.timeScale;
+			self.selectedPoint = closestPoint;
 		}
 	}
 
 	pub fn mouseScroll(self: *PlayState, _: *Game, yOffset: f64) void {
 		self.targetCameraDistance = std.math.clamp(
 			self.targetCameraDistance - @floatCast(f32, yOffset), 21, 100);
+	}
+
+	pub fn mouseMoved(self: *PlayState, _: *Game, x: f32, y: f32) void {
+		_ = x;
+		_ = y;
+
+		const pos = self.cameraPos;
+		var closestPointDist: f32 = std.math.inf_f32;
+		var closestPoint: usize = undefined;
+		for (self.planet.?.vertices) |point, i| {
+			if (point.distance(pos) < closestPointDist) {
+				closestPoint = i;
+				closestPointDist = point.distance(pos);
+			}
+		}
+		self.selectedPoint = closestPoint;
 	}
 
 	pub fn renderUI(self: *PlayState, _: *Game, renderer: *Renderer) void {
@@ -618,6 +667,23 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 50, 2);
 			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
 			self.debug_suckWater = nk.nk_check_label(ctx, "Debug: Suck Water", @boolToInt(self.debug_suckWater)) != 0;
+		}
+		nk.nk_end(ctx);
+
+		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 200, .w = 300, .h = 150 },
+			0) != 0) {
+			var buf: [200]u8 = undefined;
+			const point = self.selectedPoint;
+			const planet = self.planet.?;
+
+			nk.nk_layout_row_dynamic(ctx, 30, 1);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point #{d}", .{ point }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Elevation: {d:.3}", .{ planet.elevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Elevation: {d:.3}", .{ planet.waterElevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 		}
 		nk.nk_end(ctx);
 

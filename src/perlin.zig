@@ -28,6 +28,8 @@ fn dotGridGradient(p: [256]GridPoint, ix: i32, iy: i32, x: f32, y: f32) f32 {
 	return (dx * point.x + dy * point.y);
 }
 
+/// Performs perlin noise on given X and Y coordinates.
+/// Returns a value between -1 and 1.
 pub fn p2d(in_x: f32, in_y: f32) f32 {
 	var x = @rem(std.math.fabs(in_x), 15);
 	var y = @rem(std.math.fabs(in_y), 15);
@@ -69,6 +71,8 @@ pub fn p2d(in_x: f32, in_y: f32) f32 {
 	return lerp(ix0, ix1, sy);
 }
 
+/// Performs multiple perlin noises (using octaves) on given X and Y coordinates.
+/// Returns a value between -1 and 1.
 pub fn p2do(x: f32, y: f32, octaves: u32) f32 {
 	var i: u32 = 0;
     var p: f32 = 0;

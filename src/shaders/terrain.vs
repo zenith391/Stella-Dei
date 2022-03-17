@@ -13,7 +13,7 @@ out float waterElevation;
 
 void main() {
 	gl_Position = projMatrix * viewMatrix * modelMatrix * vec4(aPos, 1);
-	localPosition = aPos;
+	localPosition = vec3(modelMatrix * vec4(aPos, 1.0));
 	interpData = extraData;
 	waterElevation = aWaterElevation;
 }
