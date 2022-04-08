@@ -241,7 +241,8 @@ pub const Planet = struct {
 		const bufData = self.bufData;
 
 		for (self.vertices) |point, i| {
-			const transformedPoint = point.norm().scale(self.elevation[i] + self.waterElevation[i]);
+			const elevCoeff: f32 = if (self.temperature[i] <= 273.15) 0.9 else 1.0;
+			const transformedPoint = point.norm().scale(self.elevation[i] + (self.waterElevation[i] * elevCoeff));
 			bufData[i*5+0] = transformedPoint.x();
 			bufData[i*5+1] = transformedPoint.y();
 			bufData[i*5+2] = transformedPoint.z();
@@ -349,7 +350,6 @@ pub const Planet = struct {
 			// TODO: conductivity depends on water level
 			const factor = 6 / options.conductivity / options.timeScale;
 			const shared = temp / factor;
-
 			newTemp[self.getNeighbour(i, .ForwardLeft)] += shared;
 			newTemp[self.getNeighbour(i, .ForwardRight)] += shared;
 			newTemp[self.getNeighbour(i, .BackwardLeft)] += shared;
@@ -386,7 +386,8 @@ pub const Planet = struct {
 					const totalHeight = self.elevation[i] + height;
 
 					const factor = 6 / 0.5 / options.timeScale;
-					const shared = height / factor;
+					const elevCoeff: f32 = if (self.temperature[i] <= 273.15) 0.9 else 1.0;
+					var shared = (height * elevCoeff) / factor;
 					var numShared: f32 = 0;
 
 					numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
@@ -405,8 +406,9 @@ pub const Planet = struct {
 	}
 
 	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32) f32 {
-		if (totalHeight > self.elevation[target]) {
-			const transmitted = std.math.min(1, shared * (totalHeight - self.elevation[target]) * 10);
+		const elevCoeff: f32 = if (self.temperature[target] <= 273.15) 0.9 else 1.0;
+		if (totalHeight > self.elevation[target] * elevCoeff) {
+			var transmitted = std.math.min(1, shared * (totalHeight - self.elevation[target] * elevCoeff) * 10);
 			self.newWaterElevation[target] += transmitted;
 			return transmitted;
 		} else {
