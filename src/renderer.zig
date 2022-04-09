@@ -26,9 +26,10 @@ pub const Renderer = struct {
 	window: *Window,
 	textureCache: TextureCache,
 
-	colorProgram: ShaderProgram,
 	imageProgram: ShaderProgram,
 	terrainProgram: ShaderProgram,
+	entityProgram: ShaderProgram,
+	
 	/// Shader program used for Nuklear UI
 	nuklearProgram: ShaderProgram,
 	quadVao: gl.GLuint,
@@ -50,9 +51,9 @@ pub const Renderer = struct {
 		const zone = tracy.ZoneN(@src(), "Init renderer");
 		defer zone.End();
 		
-		const colorProgram = try ShaderProgram.createFromName("color");
 		const imageProgram = try ShaderProgram.createFromName("image");
 		const terrainProgram = try ShaderProgram.createFromName("terrain");
+		const entityProgram = try ShaderProgram.createFromName("entity");
 		const nuklearProgram = try ShaderProgram.createFromName("nuklear");
 
 		var vao: gl.GLuint = undefined;
@@ -122,9 +123,9 @@ pub const Renderer = struct {
 		return Renderer {
 			.window = window,
 			.textureCache = TextureCache.init(allocator),
-			.colorProgram = colorProgram,
 			.imageProgram = imageProgram,
 			.terrainProgram = terrainProgram,
+			.entityProgram = entityProgram,
 			.nuklearProgram = nuklearProgram,
 			.quadVao = vao,
 			.nuklearVao = nkVao,
@@ -149,18 +150,6 @@ pub const Renderer = struct {
 		const scale = Vec3.new(w, h, 1);
 
 		return Mat4.recompose(translate, Vec3.new(0, 0, rot), scale);
-	}
-
-	pub fn fillRect(self: *Renderer, x: f32, y: f32, w: f32, h: f32, rot: f32) void {
-		self.colorProgram.use();
-		self.colorProgram.setUniformVec3("color", self.color);
-		self.colorProgram.setUniformMat4("projMatrix",
-			Mat4.orthographic(0, self.framebufferSize.x(), self.framebufferSize.y(), 0, 0, 10));
-		self.colorProgram.setUniformMat4("modelMatrix",
-			getModelMatrix(x, y, w, h, rot));
-
-		gl.bindVertexArray(self.quadVao);
-		gl.drawArrays(gl.TRIANGLES, 0, 6);
 	}
 
 	pub fn drawTextureObject(self: *Renderer, texture: Texture, x: f32, y: f32, w: f32, h: f32, rot: f32) void {

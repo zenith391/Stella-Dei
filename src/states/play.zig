@@ -11,6 +11,7 @@ const Renderer = @import("../renderer.zig").Renderer;
 const Texture = @import("../renderer.zig").Texture;
 const MouseButton = @import("../glfw.zig").MouseButton;
 const SoundTrack = @import("../audio.zig").SoundTrack;
+const Lifeform = @import("../life.zig").Lifeform;
 
 const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
@@ -65,6 +66,7 @@ pub const Planet = struct {
 	/// Buffer array that is used to store the temperatures to be used after next update
 	newTemperature: []f32,
 	newWaterElevation: []f32,
+	lifeforms: std.ArrayList(Lifeform),
 
 	// 0xFFFFFFFF in the first entry considered null and not filled
 	/// List of neighbours for a vertex. A vertex has 6 neighbours that arrange in hexagons
@@ -228,7 +230,8 @@ pub const Planet = struct {
 			.newWaterElevation = newWaterElev,
 			.temperature = temperature,
 			.newTemperature = newTemp,
-			.bufData = try allocator.alloc(f32, vertices.len * 5)
+			.bufData = try allocator.alloc(f32, vertices.len * 5),
+			.lifeforms = std.ArrayList(Lifeform).init(allocator),
 		};
 	}
 
@@ -417,6 +420,7 @@ pub const Planet = struct {
 	}
 
 	pub fn deinit(self: Planet) void {
+		self.lifeforms.deinit();
 		self.allocator.free(self.bufData);
 
 		self.allocator.free(self.elevation);
@@ -599,6 +603,21 @@ pub const PlayState = struct {
 
 		gl.bindVertexArray(planet.vao);
 		gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
+
+		const entity = renderer.entityProgram;
+		entity.use();
+		entity.setUniformMat4("projMatrix",
+			Mat4.perspective(70, size.x() / size.y(), 0.1, 1000.0));
+		program.setUniformMat4("viewMatrix",
+			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
+
+		for (planet.lifeforms.items) |lifeform| {
+			const modelMat = Mat4.recompose(lifeform.position, Vec3.new(0, 0, 0), Vec3.new(1, 1, 1));
+			program.setUniformMat4("modelMatrix",
+				modelMat);
+			
+			gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
+		}
 	}
 
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {
@@ -673,6 +692,13 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 50, 2);
 			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
 			self.debug_suckWater = nk.nk_check_label(ctx, "Debug: Suck Water", @boolToInt(self.debug_suckWater)) != 0;
+
+			if (nk.nk_button_label(&renderer.nkContext, "Place lifeform") != 0) {
+				const point = self.selectedPoint;
+				const planet = &self.planet.?;
+				const pointPos = planet.vertices[point].scale(20 * planet.elevation[point] + 0.05);
+				planet.lifeforms.append(Lifeform.init(pointPos)) catch unreachable;
+			}
 		}
 		nk.nk_end(ctx);
 
