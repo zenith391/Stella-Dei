@@ -8,7 +8,9 @@ const GridPoint = struct {
 };
 
 fn lerp(a: f32, b: f32, t: f32) f32 {
-	if (t > 1 or t < 0) std.debug.panic("invalid t value: {d}", .{ t });
+	if (t > 1 or t < 0 and std.debug.runtime_safety) {
+		std.debug.panic("invalid t value: {d}", .{ t });
+	}
 	return a * (1 - t) + b * t;
 }
 

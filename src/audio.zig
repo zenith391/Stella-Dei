@@ -30,6 +30,8 @@ pub const AudioSubsystem = struct {
 		}
 	}
 
+	/// Set the sound track to the one given and wait between 5 and 20 seconds to play
+	/// a music chosen at random in the track.
 	pub fn playSoundTrack(self: *AudioSubsystem, soundTrack: SoundTrack) void {
 		self.musicManager.stopCurrentMusic();
 		self.musicManager.soundTrack = soundTrack;
@@ -86,6 +88,7 @@ pub const MusicManager = struct {
 		};
 	}
 
+	/// Change  to the next item in the sound track if the current music is done playing
 	pub fn update(self: *MusicManager) void {
 		const subsystem = @fieldParentPtr(AudioSubsystem, "musicManager", self);
 		if (self.currentlyPlaying) |sound| {
@@ -126,13 +129,12 @@ pub const MusicManager = struct {
 
 	}
 
+	/// Fade out the music for 5 seconds and then stop it.
 	pub fn stopCurrentMusic(self: *MusicManager) void {
 		const subsystem = @fieldParentPtr(AudioSubsystem, "musicManager", self);
 		const engine = subsystem.engine;
 		if (self.currentlyPlaying) |sound| {
 			c.ma_sound_set_fade_in_milliseconds(sound, -1, 0, 5000);
-			//c.ma_sound_set_stop_time_in_pcm_frames(sound, 0);
-			_ = engine;
 			c.ma_sound_set_stop_time_in_pcm_frames(sound, c.ma_engine_get_time(engine) + c.ma_engine_get_sample_rate(engine) * 5);
 		}
 	}

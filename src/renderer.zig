@@ -12,7 +12,8 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Mat4 = za.Mat4;
 
-/// Vertices that compose a quad, it will often be used so here is it
+/// Vertices that compose a quad
+/// It is used for Renderer.drawTexture
 const quadVertices = [_]f32 {
 	-0.5, -0.5,
 	-0.5,  0.5,
@@ -26,19 +27,23 @@ pub const Renderer = struct {
 	window: Window,
 	textureCache: TextureCache,
 
+	// Shader programs used during the game's lifetime
 	imageProgram: ShaderProgram,
 	terrainProgram: ShaderProgram,
 	entityProgram: ShaderProgram,
 	
 	/// Shader program used for Nuklear UI
 	nuklearProgram: ShaderProgram,
+
+	// Various OpenGL indices
 	quadVao: gl.GLuint,
 	nuklearVao: gl.GLuint,
 	nuklearVbo: gl.GLuint,
 	nuklearEbo: gl.GLuint,
+
 	framebufferSize: Vec2,
 
-	// Graphics state
+	// Graphics state for Nuklear
 	color: Vec3 = Vec3.one(),
 	nkContext: nk.nk_context,
 	nkCommands: nk.nk_buffer,
@@ -56,17 +61,18 @@ pub const Renderer = struct {
 		const entityProgram = try ShaderProgram.createFromName("entity");
 		const nuklearProgram = try ShaderProgram.createFromName("nuklear");
 
+		// Generate a VAO and VBO for the quad.
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
 		var vbo: gl.GLuint = undefined;
 		gl.genBuffers(1, &vbo);
-
 		gl.bindVertexArray(vao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
 		gl.bufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(quadVertices)), &quadVertices, gl.STATIC_DRAW);
 		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 2 * @sizeOf(f32), null);
 		gl.enableVertexAttribArray(0);
 
+		// Generate the VAO, VBO and EBO that will be used for drawing Nuklear UI.
 		var nkVao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &nkVao);
 		var nkVbo: gl.GLuint = undefined;
@@ -89,8 +95,12 @@ pub const Renderer = struct {
 		gl.enable(gl.BLEND);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
+		// Initialise NkAllocator which wraps a Zig allocator as a Nuklear allocator.
 		const nkAllocator = try NkAllocator.init(allocator);
 
+		// Generate an atlas texture for the font with huge oversample.
+		// TODO: use FreeType for font smoothing, to avoid wasting
+		// VRAM on upscaled fonts
 		var fontAtlas: nk.nk_font_atlas = undefined;
 		nk.nk_font_atlas_init(&fontAtlas, &nkAllocator.nk);
 		nk.nk_font_atlas_begin(&fontAtlas);
@@ -113,6 +123,7 @@ pub const Renderer = struct {
 			return error.NuklearError;
 		}
 
+		// At last, initialise the buffers that Nuklear requires for drawing.
 		var cmds: nk.nk_buffer = undefined;
 		var verts: nk.nk_buffer = undefined;
 		var idx: nk.nk_buffer = undefined;
@@ -145,6 +156,7 @@ pub const Renderer = struct {
 		self.color = color;
 	}
 
+	/// Get the model matrix for the given translation, scaling, and rotation
 	fn getModelMatrix(x: f32, y: f32, w: f32, h: f32, rot: f32) Mat4 {
 		const translate = Vec3.new(x + w / 2, y + h / 2, 0);
 		const scale = Vec3.new(w, h, 1);
@@ -172,14 +184,13 @@ pub const Renderer = struct {
 		);
 	}
 
+	/// This must be called before drawing with Nuklear.
 	pub fn startUI(self: *Renderer) void {
 		nk.nk_input_begin(&self.nkContext);
 
-		// get cursor position
+		// Update nuklear ui with data about latest cursor position and pressed buttons.
 		const cursorPos = self.window.getCursorPos() catch unreachable;
 
-		// update nuklear ui with data about latest cursor position
-		// and pressed buttons
 		nk.nk_input_motion(&self.nkContext,
 			@floatToInt(c_int, cursorPos.xpos), @floatToInt(c_int, cursorPos.ypos));
 		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_LEFT, @floatToInt(c_int, cursorPos.xpos),
@@ -188,6 +199,8 @@ pub const Renderer = struct {
 		nk.nk_input_end(&self.nkContext);
 	}
 
+	/// Must be called when you are done drawing with Nuklear. This function
+	/// handles actually rendering to the screen with OpenGL.
 	pub fn endUI(self: *Renderer) void {
 		const zone = tracy.ZoneN(@src(), "Draw Nuklear UI");
 		defer zone.End();
@@ -216,15 +229,17 @@ pub const Renderer = struct {
 			},
 		};
 
+		// Nuklear converts all of it's draw commands into a list of vertices
+		// with the vertex layout we just gave.
 		if (nk.nk_convert(&self.nkContext, &self.nkCommands, &self.nkVertices, &self.nkIndices, &convertConfig) != 0) {
 			std.log.warn("nk_convert error", .{});
 		}
 
+		// Temporarily change some OpenGL state for rendering
 		gl.disable(gl.DEPTH_TEST);
 		defer gl.enable(gl.DEPTH_TEST);
 		gl.enable(gl.SCISSOR_TEST);
 		defer gl.disable(gl.SCISSOR_TEST);
-
 		gl.enable(gl.BLEND);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -232,6 +247,7 @@ pub const Renderer = struct {
 		self.nuklearProgram.setUniformMat4("projMatrix",
 			Mat4.orthographic(0, self.framebufferSize.x(), self.framebufferSize.y(), 0, 0, 10));
 
+		// Update the Nuklear VBO and EBO with the new data
 		gl.bindVertexArray(self.nuklearVao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, self.nuklearVbo);
 		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkVertices)),
@@ -242,6 +258,7 @@ pub const Renderer = struct {
 		gl.activeTexture(gl.TEXTURE0);
 		self.nuklearProgram.setUniformInt("uTexture", 0);
 
+		// Actually draw each elements
 		var command = nk.nk__draw_begin(&self.nkContext, &self.nkCommands);
 		var offset: usize = 0;
 		while (command) |cmd| {

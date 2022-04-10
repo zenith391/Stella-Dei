@@ -17,28 +17,46 @@ const Vec3 = za.Vec3;
 const Mat4 = za.Mat4;
 
 pub const PlayState = struct {
-	rot: f32 = 0,
+	/// The position of the camera
+	/// This is already scaled by cameraDistance
 	cameraPos: Vec3 = Vec3.new(0, -8, 2),
+	/// The previous mouse position that was recorded during dragging (to move the camera).
 	dragStart: Vec2,
-	planet: ?Planet = null,
+	planet: Planet,
+	/// Noise cubemap used for rendering terrains with a terrain quality that
+	/// seems higher than it is really.
 	cubemap: Texture,
 
+	/// The distance the camera is from the planet's center
 	cameraDistance: f32 = 1000,
+	/// The target camera distance, every frame, a linear interpolation is done
+	/// between the current camera distance and the target distance, to create a
+	/// smooth (de)zooming effect.
 	targetCameraDistance: f32 = 30,
 	/// The index of the currently selected point
 	selectedPoint: usize = 0,
 	displayMode: PlanetDisplayMode = .Normal,
 	/// Inclination of rotation, in radians
 	planetInclination: f32 = 0.4,
+	/// The sun power in completely arbitrary units (TODO: use real unit)
 	sunPower: f32 = 0.4,
+	/// The planet's surface conductivity in arbitrary units (TODO: use real unit)
 	conductivity: f32 = 0.25,
-	/// The time it takes for the planet to do a full rotation, in seconds
+	/// The time it takes for the planet to do a full rotation on itself, in seconds
 	planetRotationTime: f32 = 1,
-	/// Game time in seconds
+	/// The time elapsed in seconds since the start of the game
 	gameTime: f64 = 0,
+	/// Time scale for the simulation. Currently, it must not go higher than 1 as this
+	/// would cause many bugs in the current state. (TODO: do more steps to get higher
+	/// time scale)
 	timeScale: f32 = 1,
+	/// Whether the game is paused, this has the same effect as setting timeScale to
+	/// 0 except it preserves the time scale value.
 	paused: bool = false,
+
+	/// When enabled, emits water at point 123
 	debug_emitWater: bool = false,
+	/// When enabled, drains all water at points 100 to 150
 	debug_suckWater: bool = false,
 
 	const PlanetDisplayMode = enum(c_int) {
@@ -54,28 +72,37 @@ pub const PlayState = struct {
 		game.audio.playSoundTrack(soundTrack);
 		nk.nk_style_default(&game.renderer.nkContext);
 
+		// Create the noise cubemap for terrain detail
 		const cubemap = Texture.initCubemap();
 		var data: []u8 = game.allocator.alloc(u8, 512 * 512 * 3) catch unreachable;
 		defer game.allocator.free(data);
 
+		// The seed is constant as it should not be changed between plays for consistency
 		var random = std.rand.DefaultPrng.init(1234);
 
+		// Generate white noise (using `random`) to fill all of the cubemap's faces
 		const faces = [_]Texture.CubemapFace { .PositiveX, .NegativeX, .PositiveY, .NegativeY, .PositiveZ, .NegativeZ };
 		for (faces) |face| {
 			var y: usize = 0;
 			while (y < 512) : (y += 1) {
 				var x: usize = 0;
 				while (x < 512) : (x += 1) {
+					// Currently, cubemap faces are in RGB format so only the red channel
+					// is filled. (TODO: switch to GRAY8 format)
 					data[(y*512+x)*3+0] = random.random().int(u8);
 				}
 			}
 			cubemap.setCubemapFace(face, 512, 512, data);
 		}
 
+		// TODO: make a loading scene
+		const planet = Planet.generate(game.allocator, 5) catch unreachable;
+
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
 			.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos)),
 			.cubemap = cubemap,
+			.planet = planet,
 		};
 	}
 
@@ -83,6 +110,7 @@ pub const PlayState = struct {
 		const window = renderer.window;
 		const size = renderer.framebufferSize;
 
+		// Move the camera when dragging the mouse
 		if (window.getMouseButton(.right) == .press) {
 			const glfwCursorPos = game.window.getCursorPos() catch unreachable;
 			const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
@@ -98,21 +126,17 @@ pub const PlayState = struct {
 			self.cameraPos = self.cameraPos.norm()
 				.scale(self.cameraDistance);
 		}
+
+		// Smooth (de)zooming using linear interpolation
 		if (!std.math.approxEqAbs(f32, self.cameraDistance, self.targetCameraDistance, 0.01)) {
 			self.cameraDistance = self.cameraDistance * 0.9 + self.targetCameraDistance * 0.1;
 			self.cameraPos = self.cameraPos.norm()
 				.scale(self.cameraDistance);
 		}
 
-		if (self.planet == null) {
-			// TODO: we shouldn't generate planet in render()
-			self.planet = Planet.generate(game.allocator, 5) catch unreachable;
-			self.planet.?.upload();
-		}
-		var planet = &self.planet.?;
+		const planet = &self.planet;
 
 		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
-		//var sunTheta: f32 = self.planetInclination;
 		var sunTheta: f32 = std.math.pi / 2.0;
 		var solarVector = Vec3.new(
 			std.math.cos(sunPhi) * std.math.sin(sunTheta),
@@ -122,6 +146,7 @@ pub const PlayState = struct {
 
 		if (!self.paused) {
 			// TODO: variable simulation step
+
 			const simulationSteps = 1;
 			var i: usize = 0;
 			while (i < simulationSteps) : (i += 1) {
@@ -135,6 +160,9 @@ pub const PlayState = struct {
 					}
 				}
 
+				// The planet is simulated with a time scale divided by the number
+				// of simulation steps. So that if there are more steps, the same
+				// time speed is kept but the precision is increased.
 				planet.simulate(solarVector, .{
 					.sunPower = self.sunPower,
 					.conductivity = self.conductivity,
@@ -206,7 +234,7 @@ pub const PlayState = struct {
 			const pos = self.cameraPos;
 			var closestPointDist: f32 = std.math.inf_f32;
 			var closestPoint: usize = undefined;
-			for (self.planet.?.vertices) |point, i| {
+			for (self.planet.vertices) |point, i| {
 				if (point.distance(pos) < closestPointDist) {
 					closestPoint = i;
 					closestPointDist = point.distance(pos);
@@ -217,18 +245,23 @@ pub const PlayState = struct {
 	}
 
 	pub fn mouseScroll(self: *PlayState, _: *Game, yOffset: f64) void {
+		// Change camera distance by yOffset, while keeping it between 21 and 100
 		self.targetCameraDistance = std.math.clamp(
 			self.targetCameraDistance - @floatCast(f32, yOffset), 21, 100);
 	}
 
+	// NOTE: `mouseMoved` event handler is not yet implemented
 	pub fn mouseMoved(self: *PlayState, _: *Game, x: f32, y: f32) void {
 		_ = x;
 		_ = y;
 
+		// Select the closest point that the camera is facing.
+		// To do this, it gets the point that has the lowest distance to the
+		// position of the camera.
 		const pos = self.cameraPos;
 		var closestPointDist: f32 = std.math.inf_f32;
 		var closestPoint: usize = undefined;
-		for (self.planet.?.vertices) |point, i| {
+		for (self.planet.vertices) |point, i| {
 			if (point.distance(pos) < closestPointDist) {
 				closestPoint = i;
 				closestPointDist = point.distance(pos);
@@ -264,7 +297,7 @@ pub const PlayState = struct {
 
 			if (nk.nk_button_label(&renderer.nkContext, "Place lifeform") != 0) {
 				const point = self.selectedPoint;
-				const planet = &self.planet.?;
+				const planet = &self.planet;
 				const pointPos = planet.vertices[point].scale(20 * planet.elevation[point] + 0.05);
 				planet.lifeforms.append(Lifeform.init(pointPos)) catch unreachable;
 			}
@@ -275,7 +308,7 @@ pub const PlayState = struct {
 			0) != 0) {
 			var buf: [200]u8 = undefined;
 			const point = self.selectedPoint;
-			const planet = self.planet.?;
+			const planet = self.planet;
 
 			nk.nk_layout_row_dynamic(ctx, 30, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point #{d}", .{ point }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
@@ -309,9 +342,7 @@ pub const PlayState = struct {
 	}
 
 	pub fn deinit(self: *PlayState) void {
-		if (self.planet) |planet| {
-			planet.deinit();
-		}
+		self.planet.deinit();
 	}
 
 };

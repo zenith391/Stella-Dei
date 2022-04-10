@@ -72,9 +72,11 @@ var game: Game = undefined;
 fn mousePressed(window: glfw.Window, button: glfw.mouse_button.MouseButton) void {
 	_ = window;
 	inline for (std.meta.fields(GameState)) |field| {
-		// if the field is active
+		// if it is the current game state
 		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
-			if (@hasDecl(field.field_type, "mousePressed")) {
+			// and it has mousePressed()
+			if (comptime @hasDecl(field.field_type, "mousePressed")) {
+				// call it
 				@field(game.state, field.name).mousePressed(&game, button);
 				return;
 			}
@@ -86,9 +88,11 @@ fn mouseScroll(window: glfw.Window, xOffset: f64, yOffset: f64) void {
 	_ = window;
 	_ = xOffset;
 	inline for (std.meta.fields(GameState)) |field| {
-		// if the field is active
+		// if it is the current game state
 		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
-			if (@hasDecl(field.field_type, "mouseScroll")) {
+			// and it has mouseScroll()
+			if (comptime @hasDecl(field.field_type, "mouseScroll")) {
+				// call it
 				@field(game.state, field.name).mouseScroll(&game, yOffset);
 				return;
 			}
@@ -107,16 +111,16 @@ fn render(window: glfw.Window) void {
 
 	const zone = tracy.ZoneN(@src(), "Render");
 	defer zone.End();
+	// Call the render() function of the current game state
 	inline for (std.meta.fields(GameState)) |field| {
-		// if the field is active
 		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
 			@field(game.state, field.name).render(&game, &renderer);
 		}
 	}
 
 	renderer.startUI();
+	// Call the renderUI() function of the current game state, if it has one.
 	inline for (std.meta.fields(GameState)) |field| {
-		// if the field is active
 		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
 			if (comptime @hasDecl(field.field_type, "renderUI")) {
 				@field(game.state, field.name).renderUI(&game, &renderer);
@@ -145,15 +149,15 @@ pub fn main() !void {
 	var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
 	defer _ = gpa.deinit();
 
+	// If Tracy is enabled, pass-through all allocations to it
 	var tracyAlloc = @import("tracy_allocator.zig").TracyAllocator.init(gpa.allocator());
 	const allocator = if (tracy.enabled) tracyAlloc.allocator() else gpa.allocator();
-
 	tracy.InitThread();
 
 	try glfw.init(.{});
 	defer glfw.terminate();
 
-	var window = try glfw.Window.create(1280, 720, "Name Not Included", null, null, .{
+	var window = try glfw.Window.create(1280, 720, "Stella Dei", null, null, .{
 		.opengl_profile = .opengl_core_profile,
 		.context_version_major = 4,
 		.context_version_minor = 6,
