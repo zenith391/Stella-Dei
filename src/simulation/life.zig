@@ -1,5 +1,5 @@
 const za = @import("zalgebra");
-const Planet = @import("states/play.zig").Planet;
+const Planet = @import("planet.zig").Planet;
 const Vec3 = za.Vec3;
 
 pub const Lifeform = struct {

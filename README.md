@@ -15,7 +15,7 @@ The game requires:
 
 ### Building from source
 
-```sh
+```
 $ git clone https://github.com/Name-Not-Included
 $ cd Name-Not-Included
 $ zigmod fetch
@@ -23,6 +23,6 @@ $ zig build
 ```
 
 And now you've got an executable located inside `zig-out/bin/`. If you want to directly run the game, just do:
-```sh
+```
 $ zig build run
 ```
