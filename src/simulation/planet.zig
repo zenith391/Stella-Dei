@@ -143,6 +143,7 @@ pub const Planet = struct {
 		const zone = tracy.ZoneN(@src(), "Generate planet");
 		defer zone.End();
 
+		const zone2 = tracy.ZoneN(@src(), "Subdivide ico-sphere");
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
 		var vbo: gl.GLuint = undefined;
@@ -169,7 +170,9 @@ pub const Planet = struct {
 				}
 			}
 		}
+		zone2.End();
 
+		const zone3 = tracy.ZoneN(@src(), "Initialise with data");
 		const vertices       = try allocator.alloc(Vec3, subdivided.?.vertices.len / 3);
 		const vertNeighbours = try allocator.alloc([6]u32, subdivided.?.vertices.len / 3);
 		const elevation      = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
@@ -194,11 +197,9 @@ pub const Planet = struct {
 				temperature[i / 3] = (perlin.p2do(theta * 10 + 1, phi * 10 + 1, 6) + 1) * 300; // 0°C
 				//temperature[i/3] = 300;
 				vertices[i / 3] = point;
-				
-				// Clear the neighbour list
-				for (vertNeighbours[i/3]) |*elem| elem.* = std.math.maxInt(u32);
 			}
 		}
+		zone3.End();
 
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
 		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
@@ -208,6 +209,46 @@ pub const Planet = struct {
 		gl.enableVertexAttribArray(1);
 		gl.enableVertexAttribArray(2);
 
+		const zone4 = tracy.ZoneN(@src(), "Compute points neighbours");
+		const indices = subdivided.?.indices;
+		// Pre-compute the neighbours of every point of the ico-sphere
+		for (vertices) |point, idx| {
+			var candidates = std.BoundedArray(usize, 6).init(0) catch unreachable;
+
+			// Loop through all triangles
+			var i: usize = 0;
+			while (i < indices.len) : (i += 3) {
+				const aIdx = indices[i+0];
+				const bIdx = indices[i+1];
+				const cIdx = indices[i+2];
+				const a = vertices[aIdx];
+				const b = vertices[bIdx];
+				const c = vertices[cIdx];
+
+				// If one of the triangle's point is what we have, add the other points of the triangle
+				if (a.eql(point)) {
+					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
+					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
+				} else if (b.eql(point)) {
+					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
+					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
+				} else if (c.eql(point)) {
+					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
+					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
+				}
+			}
+
+			// The original points of the icosahedron
+			if (candidates.len == 5) {
+				candidates.appendAssumeCapacity(idx);
+			}
+
+			for (candidates.constSlice()) |neighbour, int| {
+				vertNeighbours[idx][int] = @intCast(u32, neighbour);
+			}
+		}
+		zone4.End();
+
 		return Planet {
 			.vao = vao,
 			.vbo = vbo,
@@ -216,7 +257,7 @@ pub const Planet = struct {
 			.allocator = allocator,
 			.vertices = vertices,
 			.verticesNeighbours = vertNeighbours,
-			.indices = subdivided.?.indices,
+			.indices = indices,
 			.elevation = elevation,
 			.waterElevation = waterElev,
 			.newWaterElevation = newWaterElev,
@@ -270,48 +311,7 @@ pub const Planet = struct {
 	// Note: If pre-computed, this is an highly parallelizable task
 	pub fn getNeighbour(self: Planet, idx: usize, direction: Direction) usize {
 		const directionInt = @enumToInt(direction);
-
-		// This vertex's neighbours weren't found yet
-		if (self.verticesNeighbours[idx][directionInt] == std.math.maxInt(u32)) {
-			const point = self.vertices[idx];
-			var candidates = std.BoundedArray(usize, 6).init(0) catch unreachable;
-
-			// Loop through all triangles
-			var i: usize = 0;
-			while (i < self.indices.len) : (i += 3) {
-				const aIdx = self.indices[i+0];
-				const bIdx = self.indices[i+1];
-				const cIdx = self.indices[i+2];
-				const a = self.vertices[aIdx];
-				const b = self.vertices[bIdx];
-				const c = self.vertices[cIdx];
-
-				// If one of the triangle's point is what we have, add the other points of the triangle
-				if (a.eql(point)) {
-					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
-					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
-				} else if (b.eql(point)) {
-					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
-					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
-				} else if (c.eql(point)) {
-					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
-					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
-				}
-			}
-
-			// The original points of the icosahedron
-			if (candidates.len == 5) {
-				candidates.appendAssumeCapacity(idx);
-			}
-
-			for (candidates.constSlice()) |neighbour, int| {
-				self.verticesNeighbours[idx][int] = @intCast(u32, neighbour);
-			}
-			// TODO: account for the requested direction
-			return candidates.get(directionInt);
-		} else {
-			return self.verticesNeighbours[idx][directionInt];
-		}
+		return self.verticesNeighbours[idx][directionInt];
 	}
 
 	pub const SimulationOptions = struct {

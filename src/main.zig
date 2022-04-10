@@ -173,6 +173,9 @@ pub fn main() !void {
 	defer renderer.deinit();
 	
 	game = try Game.init(allocator, window, &renderer);
+	
+	// Start with main menu
+	// To see the code, look in src/states/main_menu.zig
 	game.setState(MainMenuState);
 	defer game.deinit();
 

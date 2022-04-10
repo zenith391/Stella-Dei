@@ -2,6 +2,7 @@ const std = @import("std");
 const nk = @import("../nuklear.zig");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
+const PlayState = @import("play.zig").PlayState;
 
 pub const MainMenuState = struct {
 
@@ -32,7 +33,9 @@ pub const MainMenuState = struct {
 			nk.nk_label(&renderer.nkContext, "Name Not Included", nk.NK_TEXT_ALIGN_CENTERED);
 
 			if (nk.nk_button_label(&renderer.nkContext, "Play") != 0) {
-				game.setState(@import("play.zig").PlayState);
+				// Sets the game state to play (that is, start the game)
+				// To see the code, look in src/states/play.zig
+				game.setState(PlayState);
 			}
 
 			if (nk.nk_button_label(&renderer.nkContext, "Exit") != 0) {

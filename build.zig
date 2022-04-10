@@ -81,7 +81,7 @@ pub fn build(b: *std.build.Builder) void {
 
     const convert = ConvertStep.create(b, "src/main.zig");
 
-    const exe = b.addExecutableSource("name-not-included", convert.getSource());
+    const exe = b.addExecutableSource("stella-dei", convert.getSource());
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.single_threaded = true;
