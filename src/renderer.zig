@@ -4,7 +4,7 @@ const za     = @import("zalgebra");
 const zigimg = @import("zigimg");
 const nk     = @import("nuklear.zig");
 const tracy  = @import("vendor/tracy.zig");
-const Window = @import("glfw.zig").Window;
+const Window = @import("glfw").Window;
 const log    = std.log.scoped(.renderer);
 
 const Allocator = std.mem.Allocator;
@@ -23,7 +23,7 @@ const quadVertices = [_]f32 {
 };
 
 pub const Renderer = struct {
-	window: *Window,
+	window: Window,
 	textureCache: TextureCache,
 
 	imageProgram: ShaderProgram,
@@ -47,7 +47,7 @@ pub const Renderer = struct {
 	nkAllocator: *NkAllocator,
 	nkFontAtlas: nk.nk_font_atlas,
 
-	pub fn init(allocator: Allocator, window: *Window) !Renderer {
+	pub fn init(allocator: Allocator, window: Window) !Renderer {
 		const zone = tracy.ZoneN(@src(), "Init renderer");
 		defer zone.End();
 		
@@ -175,11 +175,15 @@ pub const Renderer = struct {
 	pub fn startUI(self: *Renderer) void {
 		nk.nk_input_begin(&self.nkContext);
 
-		const cursorPos = self.window.getCursorPos();
+		// get cursor position
+		const cursorPos = self.window.getCursorPos() catch unreachable;
+
+		// update nuklear ui with data about latest cursor position
+		// and pressed buttons
 		nk.nk_input_motion(&self.nkContext,
-			@floatToInt(c_int, cursorPos.x()), @floatToInt(c_int, cursorPos.y()));
-		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_LEFT, @floatToInt(c_int, cursorPos.x()),
-			@floatToInt(c_int, cursorPos.y()), if (self.window.isMousePressed(.Left)) 1 else 0);
+			@floatToInt(c_int, cursorPos.xpos), @floatToInt(c_int, cursorPos.ypos));
+		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_LEFT, @floatToInt(c_int, cursorPos.xpos),
+			@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.left) == .press) 1 else 0);
 
 		nk.nk_input_end(&self.nkContext);
 	}

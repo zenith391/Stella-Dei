@@ -9,7 +9,7 @@ const perlin = @import("../perlin.zig");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
 const Texture = @import("../renderer.zig").Texture;
-const MouseButton = @import("../glfw.zig").MouseButton;
+const MouseButton = @import("glfw").mouse_button.MouseButton;
 const SoundTrack = @import("../audio.zig").SoundTrack;
 const Lifeform = @import("../life.zig").Lifeform;
 
@@ -491,9 +491,10 @@ pub const PlayState = struct {
 			}
 			cubemap.setCubemapFace(face, 512, 512, data);
 		}
-		
+
+		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
-			.dragStart = game.window.getCursorPos(),
+			.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos)),
 			.cubemap = cubemap,
 		};
 	}
@@ -506,15 +507,17 @@ pub const PlayState = struct {
 		const window = renderer.window;
 		const size = renderer.framebufferSize;
 
-		if (window.isMousePressed(.Right)) {
-			const delta = window.getCursorPos().sub(self.dragStart).scale(1 / 100.0);
+		if (window.getMouseButton(.right) == .press) {
+			const glfwCursorPos = game.window.getCursorPos() catch unreachable;
+			const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
+			const delta = cursorPos.sub(self.dragStart).scale(1 / 100.0);
 			const right = self.cameraPos.cross(Vec3.forward()).norm();
 			const forward = self.cameraPos.cross(Vec3.right()).norm();
 			self.cameraPos = self.cameraPos.add(
 				 right.scale(delta.x())
 				.add(forward.scale(delta.y()))
 				.scale(self.cameraDistance / 5));
-			self.dragStart = window.getCursorPos();
+			self.dragStart = cursorPos;
 
 			self.cameraPos = self.cameraPos.norm()
 				.scale(self.cameraDistance);
@@ -555,9 +558,6 @@ pub const PlayState = struct {
 						//planet.waterElevation[j] = std.math.max(0, planet.waterElevation[j] - 0.1 * self.timeScale);
 						planet.waterElevation[j] = 0;
 					}
-				}
-				if (window.isMousePressed(.Left) and false) {
-					self.planet.?.temperature[self.selectedPoint] += 500 * self.timeScale;
 				}
 
 				// sunTheta = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
@@ -621,10 +621,11 @@ pub const PlayState = struct {
 	}
 
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {
-		if (button == .Right) {
-			self.dragStart = game.window.getCursorPos();
+		if (button == .right) {
+			const cursorPos = game.window.getCursorPos() catch unreachable;
+			self.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos));
 		}
-		if (button == .Middle) {
+		if (button == .middle) {
 			if (self.displayMode == .Normal) {
 				self.displayMode = .Temperature;
 			} else if (self.displayMode == .Temperature) {
@@ -633,7 +634,7 @@ pub const PlayState = struct {
 		}
 
 		// TODO: avoid interfering with the UI system
-		if (button == .Left) {
+		if (button == .left) {
 			const pos = self.cameraPos;
 			var closestPointDist: f32 = std.math.inf_f32;
 			var closestPoint: usize = undefined;

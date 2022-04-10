@@ -15,4 +15,10 @@ dev_dependencies:
       name: zig-tracy
       main: tracy.zig
     - src: system_lib c
-    - src: system_lib glfw
+    - src: git https://github.com/hexops/mach-glfw
+      name: glfw
+      main: src/main.zig
+build_dependencies:
+    - src: git https://github.com/hexops/mach-glfw
+      name: build-glfw
+      main: build.zig

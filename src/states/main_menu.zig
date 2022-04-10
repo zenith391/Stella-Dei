@@ -2,7 +2,6 @@ const std = @import("std");
 const nk = @import("../nuklear.zig");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
-const MouseButton = @import("../glfw.zig").MouseButton;
 
 pub const MainMenuState = struct {
 
