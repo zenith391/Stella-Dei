@@ -1,9 +1,10 @@
-# Name-Not-Included
-A space game. In a space bar. Using a space bar.
+# Stella Dei
 
-~~Name Not Included~~ This game is a sandbox game about creating planet and influencing it with your unlockable divine abilities in order to create and maintain life, civilizations, and maybe help them expand beyond.
+Stella Dei is a sandbox game about creating planet and influencing it with your unlockable divine abilities in order to create and maintain life, civilizations, and maybe help them expand beyond.
 
 > Careful. At some point you’re just playing god.
+
+In summary, it's a space game. In a space bar. Using a space bar (unfortunately we are at regret of telling you that it doesn't actually use a space bar)
 
 ## Compiling
 
@@ -16,8 +17,7 @@ The game requires:
 ### Building from source
 
 ```
-$ git clone https://github.com/Name-Not-Included
-$ cd Name-Not-Included
+$ git clone https://github.com/PixelGuys/Stella-Dei && Stella-Dei
 $ zigmod fetch
 $ zig build
 ```
