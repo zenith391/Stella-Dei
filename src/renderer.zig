@@ -12,23 +12,11 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Mat4 = za.Mat4;
 
-/// Vertices that compose a quad
-/// It is used for Renderer.drawTexture
-const quadVertices = [_]f32 {
-	-0.5, -0.5,
-	-0.5,  0.5,
-	 0.5,  0.5,
-	 0.5,  0.5,
-	 0.5, -0.5,
-	-0.5, -0.5,
-};
-
 pub const Renderer = struct {
 	window: Window,
 	textureCache: TextureCache,
 
 	// Shader programs used during the game's lifetime
-	imageProgram: ShaderProgram,
 	terrainProgram: ShaderProgram,
 	entityProgram: ShaderProgram,
 	
@@ -36,7 +24,6 @@ pub const Renderer = struct {
 	nuklearProgram: ShaderProgram,
 
 	// Various OpenGL indices
-	quadVao: gl.GLuint,
 	nuklearVao: gl.GLuint,
 	nuklearVbo: gl.GLuint,
 	nuklearEbo: gl.GLuint,
@@ -44,7 +31,6 @@ pub const Renderer = struct {
 	framebufferSize: Vec2,
 
 	// Graphics state for Nuklear
-	color: Vec3 = Vec3.one(),
 	nkContext: nk.nk_context,
 	nkCommands: nk.nk_buffer,
 	nkVertices: nk.nk_buffer,
@@ -56,21 +42,9 @@ pub const Renderer = struct {
 		const zone = tracy.ZoneN(@src(), "Init renderer");
 		defer zone.End();
 		
-		const imageProgram = try ShaderProgram.createFromName("image");
 		const terrainProgram = try ShaderProgram.createFromName("terrain");
 		const entityProgram = try ShaderProgram.createFromName("entity");
 		const nuklearProgram = try ShaderProgram.createFromName("nuklear");
-
-		// Generate a VAO and VBO for the quad.
-		var vao: gl.GLuint = undefined;
-		gl.genVertexArrays(1, &vao);
-		var vbo: gl.GLuint = undefined;
-		gl.genBuffers(1, &vbo);
-		gl.bindVertexArray(vao);
-		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-		gl.bufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(quadVertices)), &quadVertices, gl.STATIC_DRAW);
-		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 2 * @sizeOf(f32), null);
-		gl.enableVertexAttribArray(0);
 
 		// Generate the VAO, VBO and EBO that will be used for drawing Nuklear UI.
 		var nkVao: gl.GLuint = undefined;
@@ -134,11 +108,9 @@ pub const Renderer = struct {
 		return Renderer {
 			.window = window,
 			.textureCache = TextureCache.init(allocator),
-			.imageProgram = imageProgram,
 			.terrainProgram = terrainProgram,
 			.entityProgram = entityProgram,
 			.nuklearProgram = nuklearProgram,
-			.quadVao = vao,
 			.nuklearVao = nkVao,
 			.nuklearVbo = nkVbo,
 			.nuklearEbo = nkEbo,
@@ -150,38 +122,6 @@ pub const Renderer = struct {
 			.nkAllocator = nkAllocator,
 			.nkFontAtlas = fontAtlas,
 		};
-	}
-
-	pub fn setColor(self: *Renderer, color: Vec3) void {
-		self.color = color;
-	}
-
-	/// Get the model matrix for the given translation, scaling, and rotation
-	fn getModelMatrix(x: f32, y: f32, w: f32, h: f32, rot: f32) Mat4 {
-		const translate = Vec3.new(x + w / 2, y + h / 2, 0);
-		const scale = Vec3.new(w, h, 1);
-
-		return Mat4.recompose(translate, Vec3.new(0, 0, rot), scale);
-	}
-
-	pub fn drawTextureObject(self: *Renderer, texture: Texture, x: f32, y: f32, w: f32, h: f32, rot: f32) void {
-		self.imageProgram.use();
-		self.imageProgram.setUniformInt("uTexture", 0);
-		self.imageProgram.setUniformMat4("projMatrix",
-			Mat4.orthographic(0, self.framebufferSize.x(), self.framebufferSize.y(), 0, 0, 10));
-		self.imageProgram.setUniformMat4("modelMatrix",
-			getModelMatrix(x, y, w, h, rot));
-
-		gl.bindTexture(gl.TEXTURE_2D, texture.texture);
-		gl.bindVertexArray(self.quadVao);
-		gl.drawArrays(gl.TRIANGLES, 0, 6);
-	}
-
-	pub fn drawTexture(self: *Renderer, name: []const u8, x: f32, y: f32, w: f32, h: f32, rot: f32) void {
-		self.drawTextureObject(
-			self.textureCache.get(name),
-			x, y, w, h, rot
-		);
 	}
 
 	/// This must be called before drawing with Nuklear.

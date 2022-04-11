@@ -14,11 +14,7 @@ pub const MainMenuState = struct {
 		return MainMenuState {};
 	}
 
-	pub fn render(_: *MainMenuState, _: *Game, renderer: *Renderer) void {
-		const size = renderer.framebufferSize;
-
-		renderer.drawTexture("sun", size.x() / 2 - 125, size.y() / 2 - 125, 250, 250, 0);
-	}
+	pub fn render(_: *MainMenuState, _: *Game, _: *Renderer) void {}
 
 	pub fn renderUI(_: *MainMenuState, game: *Game, renderer: *Renderer) void {
 		const size = renderer.framebufferSize;
@@ -30,7 +26,7 @@ pub const MainMenuState = struct {
 		
 		if (nk.nk_begin(&renderer.nkContext, "Main Menu", windowRect, 0) != 0) {
 			nk.nk_layout_row_dynamic(&renderer.nkContext, 50, 1);
-			nk.nk_label(&renderer.nkContext, "Name Not Included", nk.NK_TEXT_ALIGN_CENTERED);
+			nk.nk_label(&renderer.nkContext, "Stella Dei", nk.NK_TEXT_ALIGN_CENTERED);
 
 			if (nk.nk_button_label(&renderer.nkContext, "Play") != 0) {
 				// Sets the game state to play (that is, start the game)
