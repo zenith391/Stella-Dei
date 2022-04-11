@@ -308,7 +308,6 @@ pub const Planet = struct {
 		return false;
 	}
 
-	// Note: If pre-computed, this is an highly parallelizable task
 	pub fn getNeighbour(self: Planet, idx: usize, direction: Direction) usize {
 		const directionInt = @enumToInt(direction);
 		return self.verticesNeighbours[idx][directionInt];

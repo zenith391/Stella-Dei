@@ -116,10 +116,10 @@ pub const PlayState = struct {
 			const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
 			const delta = cursorPos.sub(self.dragStart).scale(1 / 100.0);
 			const right = self.cameraPos.cross(Vec3.forward()).norm();
-			const forward = self.cameraPos.cross(Vec3.right()).norm();
-			self.cameraPos = self.cameraPos.add(
-				 right.scale(delta.x())
-				.add(forward.scale(delta.y()))
+			const backward = self.cameraPos.cross(right).norm();
+			self.cameraPos = self.cameraPos
+				.add(right.scale(delta.x())
+				.add(backward.scale(-delta.y()))
 				.scale(self.cameraDistance / 5));
 			self.dragStart = cursorPos;
 
