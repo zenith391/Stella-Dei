@@ -7,6 +7,8 @@ const tracy = @import("vendor/tracy.zig");
 const Renderer = @import("renderer.zig").Renderer;
 const Texture = @import("renderer.zig").Texture;
 const AudioSubsystem = @import("audio.zig").AudioSubsystem;
+const EventLoop = @import("loop.zig").EventLoop;
+const Job = @import("loop.zig").Job;
 
 var renderer: Renderer = undefined;
 var texture: Texture = undefined;
@@ -24,14 +26,25 @@ pub const Game = struct {
 	audio: AudioSubsystem,
 	window: glfw.Window,
 	renderer: *Renderer,
+	loop: *EventLoop,
 	allocator: std.mem.Allocator,
+	/// Job that will be deinit at the end. In the code this is only used for a
+	/// job's that's created to call Game.setState from a state, but then can't
+	/// be deinit immediately because otherwise you'd have a biting-its-tail problem
+	///   setState -> calls deinit -> deinits setState's (and deinit's) stack
+	///      = /!\ PROBLEM
+	/// So the job in this field will only be called during Game.deinit
+	/// Note: it could be called sooner, as it only needs to be called anytime
+	/// after setState.
+	deinitJob: ?*Job(void) = null,
 
-	pub fn init(allocator: std.mem.Allocator, window: glfw.Window, ptrRenderer: *Renderer) !Game {
+	pub fn init(allocator: std.mem.Allocator, window: glfw.Window, ptrRenderer: *Renderer, ptrLoop: *EventLoop) !Game {
 		return Game {
-			.state = .MainMenu,
+			.state = .{ .MainMenu = .{} },
 			.audio = try AudioSubsystem.init(allocator),
 			.window = window,
 			.renderer = ptrRenderer,
+			.loop = ptrLoop,
 			.allocator = allocator,
 		};
 	}
@@ -62,6 +75,9 @@ pub const Game = struct {
 	}
 
 	pub fn deinit(self: *Game) void {
+		if (self.deinitJob) |job| {
+			job.deinit();
+		}
 		self.deinitState();
 		self.audio.deinit();
 	}
@@ -87,6 +103,7 @@ fn mousePressed(window: glfw.Window, button: glfw.mouse_button.MouseButton) void
 fn mouseScroll(window: glfw.Window, xOffset: f64, yOffset: f64) void {
 	_ = window;
 	_ = xOffset;
+	game.renderer.onScroll(@floatCast(f32, xOffset), @floatCast(f32, yOffset));
 	inline for (std.meta.fields(GameState)) |field| {
 		// if it is the current game state
 		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
@@ -172,11 +189,16 @@ pub fn main() !void {
 	renderer = try Renderer.init(allocator, window);
 	defer renderer.deinit();
 	
-	game = try Game.init(allocator, window, &renderer);
+	var loop = EventLoop.init();
+	loop.beginEvent(); // begin main() event to avoid the loop stopping too soon
+	defer loop.endEvent();
+	try loop.start(allocator);
+
+	game = try Game.init(allocator, window, &renderer, &loop);
 	
 	// Start with main menu
 	// To see the code, look in src/states/main_menu.zig
-	game.setState(MainMenuState);
+	nosuspend game.setState(MainMenuState);
 	defer game.deinit();
 
 	while (!window.shouldClose()) {

@@ -37,6 +37,7 @@ pub const Renderer = struct {
 	nkIndices: nk.nk_buffer,
 	nkAllocator: *NkAllocator,
 	nkFontAtlas: nk.nk_font_atlas,
+	tempScroll: nk.struct_nk_vec2 = nk.struct_nk_vec2 { .x = 0, .y = 0 },
 
 	pub fn init(allocator: Allocator, window: Window) !Renderer {
 		const zone = tracy.ZoneN(@src(), "Init renderer");
@@ -124,6 +125,11 @@ pub const Renderer = struct {
 		};
 	}
 
+	pub fn onScroll(self: *Renderer, xOffset: f32, yOffset: f32) void {
+		self.tempScroll.x += xOffset;
+		self.tempScroll.y += yOffset;
+	}
+
 	/// This must be called before drawing with Nuklear.
 	pub fn startUI(self: *Renderer) void {
 		nk.nk_input_begin(&self.nkContext);
@@ -135,6 +141,12 @@ pub const Renderer = struct {
 			@floatToInt(c_int, cursorPos.xpos), @floatToInt(c_int, cursorPos.ypos));
 		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_LEFT, @floatToInt(c_int, cursorPos.xpos),
 			@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.left) == .press) 1 else 0);
+		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_MIDDLE, @floatToInt(c_int, cursorPos.xpos),
+			@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.middle) == .press) 1 else 0);
+		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_RIGHT, @floatToInt(c_int, cursorPos.xpos),
+			@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.right) == .press) 1 else 0);
+		nk.nk_input_scroll(&self.nkContext, self.tempScroll);
+		self.tempScroll = nk.struct_nk_vec2 { .x = 0, .y = 0 };
 
 		nk.nk_input_end(&self.nkContext);
 	}

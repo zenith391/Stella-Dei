@@ -70,7 +70,6 @@ pub const PlayState = struct {
 			"assets/music2.mp3"
 		}};
 		game.audio.playSoundTrack(soundTrack);
-		nk.nk_style_default(&game.renderer.nkContext);
 
 		// Create the noise cubemap for terrain detail
 		const cubemap = Texture.initCubemap();
@@ -96,7 +95,7 @@ pub const PlayState = struct {
 		}
 
 		// TODO: make a loading scene
-		const planet = Planet.generate(game.allocator, 5) catch unreachable;
+		const planet = Planet.generate(game.loop, 5) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
@@ -273,6 +272,7 @@ pub const PlayState = struct {
 	pub fn renderUI(self: *PlayState, _: *Game, renderer: *Renderer) void {
 		const size = renderer.framebufferSize;
 		const ctx = &renderer.nkContext;
+		nk.nk_style_default(ctx);
 
 		if (nk.nk_begin(ctx, "Planet Control", .{ .x = 100, .y = 100, .w = 600, .h = 150}, 
 			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_MOVABLE | nk.NK_WINDOW_TITLE | nk.NK_WINDOW_SCALABLE) != 0) {

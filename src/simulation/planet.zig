@@ -4,6 +4,7 @@ const za = @import("zalgebra");
 const tracy = @import("../vendor/tracy.zig");
 
 const perlin = @import("../perlin.zig");
+const EventLoop = @import("../loop.zig").EventLoop;
 
 const Lifeform = @import("life.zig").Lifeform;
 
@@ -139,7 +140,58 @@ pub const Planet = struct {
 		};
 	}
 
-	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize) !Planet {
+	fn computeNeighbours(planet: *Planet, start: usize, end: usize, loop: *EventLoop) void {
+		loop.yield();
+
+		const zone = tracy.ZoneN(@src(), "Compute points neighbours");
+		defer zone.End();
+
+		const indices = planet.indices;
+		const vertices = planet.vertices;
+		const vertNeighbours = planet.verticesNeighbours;
+		// Pre-compute the neighbours of every point of the ico-sphere
+		var idx: usize = start;
+		while (idx < end) : (idx += 1) {
+			const point = vertices[idx];
+			var candidates = std.BoundedArray(usize, 6).init(0) catch unreachable;
+
+			// Loop through all triangles
+			var i: usize = 0;
+			while (i < indices.len) : (i += 3) {
+				const aIdx = indices[i+0];
+				const bIdx = indices[i+1];
+				const cIdx = indices[i+2];
+				const a = vertices[aIdx];
+				const b = vertices[bIdx];
+				const c = vertices[cIdx];
+
+				// If one of the triangle's point is what we have, add the other points of the triangle
+				if (a.eql(point)) {
+					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
+					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
+				} else if (b.eql(point)) {
+					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
+					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
+				} else if (c.eql(point)) {
+					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
+					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
+				}
+			}
+
+			// The original points of the icosahedron
+			if (candidates.len == 5) {
+				candidates.appendAssumeCapacity(idx);
+			}
+
+			for (candidates.constSlice()) |neighbour, int| {
+				vertNeighbours[idx][int] = @intCast(u32, neighbour);
+			}
+		}
+	}
+
+	/// Note: the data is allocated using the event loop's allocator
+	pub fn generate(loop: *EventLoop, numSubdivisions: usize) !Planet {
+		const allocator = loop.allocator;
 		const zone = tracy.ZoneN(@src(), "Generate planet");
 		defer zone.End();
 
@@ -209,47 +261,7 @@ pub const Planet = struct {
 		gl.enableVertexAttribArray(1);
 		gl.enableVertexAttribArray(2);
 
-		const zone4 = tracy.ZoneN(@src(), "Compute points neighbours");
-		const indices = subdivided.?.indices;
-		// Pre-compute the neighbours of every point of the ico-sphere
-		for (vertices) |point, idx| {
-			var candidates = std.BoundedArray(usize, 6).init(0) catch unreachable;
-
-			// Loop through all triangles
-			var i: usize = 0;
-			while (i < indices.len) : (i += 3) {
-				const aIdx = indices[i+0];
-				const bIdx = indices[i+1];
-				const cIdx = indices[i+2];
-				const a = vertices[aIdx];
-				const b = vertices[bIdx];
-				const c = vertices[cIdx];
-
-				// If one of the triangle's point is what we have, add the other points of the triangle
-				if (a.eql(point)) {
-					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
-					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
-				} else if (b.eql(point)) {
-					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
-					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
-				} else if (c.eql(point)) {
-					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
-					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
-				}
-			}
-
-			// The original points of the icosahedron
-			if (candidates.len == 5) {
-				candidates.appendAssumeCapacity(idx);
-			}
-
-			for (candidates.constSlice()) |neighbour, int| {
-				vertNeighbours[idx][int] = @intCast(u32, neighbour);
-			}
-		}
-		zone4.End();
-
-		return Planet {
+		var planet = Planet {
 			.vao = vao,
 			.vbo = vbo,
 			.numTriangles = @intCast(gl.GLint, subdivided.?.indices.len),
@@ -257,7 +269,7 @@ pub const Planet = struct {
 			.allocator = allocator,
 			.vertices = vertices,
 			.verticesNeighbours = vertNeighbours,
-			.indices = indices,
+			.indices = subdivided.?.indices,
 			.elevation = elevation,
 			.waterElevation = waterElev,
 			.newWaterElevation = newWaterElev,
@@ -266,6 +278,29 @@ pub const Planet = struct {
 			.bufData = try allocator.alloc(f32, vertices.len * 5),
 			.lifeforms = std.ArrayList(Lifeform).init(allocator),
 		};
+
+		// Pre-compute the neighbours of every point of the ico-sphere using multiple
+		// threads if we can.
+		const parallelCount = std.math.min(loop.getParallelCount(), 128);
+		{
+			var frames: [128]@Frame(computeNeighbours) = undefined;
+			var i: usize = 0;
+			while (i < parallelCount) : (i += 1) {
+				const start = (vertices.len / parallelCount) * i;
+				const end = if (i == parallelCount-1)
+					vertices.len // if it's the last thread, do all remaining points without rounding errors
+				else
+					(vertices.len / parallelCount) * (i+1);
+				frames[i] = async computeNeighbours(&planet, start, end, loop);
+			}
+
+			i = 0;
+			while (i < parallelCount) : (i += 1) {
+				await frames[i];
+			}
+		}
+
+		return planet;
 	}
 
 	/// Upload all changes to the GPU

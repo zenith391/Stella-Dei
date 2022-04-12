@@ -4,6 +4,8 @@ const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
 const PlayState = @import("play.zig").PlayState;
 
+const Job = @import("../loop.zig").Job;
+
 pub const MainMenuState = struct {
 
 	pub fn init(game: *Game) MainMenuState {
@@ -31,7 +33,9 @@ pub const MainMenuState = struct {
 			if (nk.nk_button_label(&renderer.nkContext, "Play") != 0) {
 				// Sets the game state to play (that is, start the game)
 				// To see the code, look in src/states/play.zig
-				game.setState(PlayState);
+				const job = Job(void).create(game.loop) catch unreachable;
+				job.call(switchToPlay, .{ game }) catch unreachable;
+				game.deinitJob = job;
 			}
 
 			if (nk.nk_button_label(&renderer.nkContext, "Exit") != 0) {
@@ -39,6 +43,10 @@ pub const MainMenuState = struct {
 			}
 		}
 		nk.nk_end(&renderer.nkContext);
+	}
+
+	fn switchToPlay(game: *Game) void {
+		game.setState(PlayState);
 	}
 
 };
