@@ -143,7 +143,7 @@ pub const Planet = struct {
 	fn computeNeighbours(planet: *Planet, start: usize, end: usize, loop: *EventLoop) void {
 		loop.yield();
 
-		const zone = tracy.ZoneN(@src(), "Compute points neighbours");
+		const zone = tracy.ZoneN(@src(), "Planet: Compute points neighbours");
 		defer zone.End();
 
 		const indices = planet.indices;
@@ -192,10 +192,10 @@ pub const Planet = struct {
 	/// Note: the data is allocated using the event loop's allocator
 	pub fn generate(loop: *EventLoop, numSubdivisions: usize) !Planet {
 		const allocator = loop.allocator;
-		const zone = tracy.ZoneN(@src(), "Generate planet");
-		defer zone.End();
+		// const zone = tracy.ZoneN(@src(), "Generate planet");
+		// defer zone.End();
 
-		const zone2 = tracy.ZoneN(@src(), "Subdivide ico-sphere");
+		const zone2 = tracy.ZoneN(@src(), "Planet: Subdivide ico-sphere");
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
 		var vbo: gl.GLuint = undefined;
@@ -224,7 +224,7 @@ pub const Planet = struct {
 		}
 		zone2.End();
 
-		const zone3 = tracy.ZoneN(@src(), "Initialise with data");
+		const zone3 = tracy.ZoneN(@src(), "Planet: Initialise with data");
 		const vertices       = try allocator.alloc(Vec3, subdivided.?.vertices.len / 3);
 		const vertNeighbours = try allocator.alloc([6]u32, subdivided.?.vertices.len / 3);
 		const elevation      = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
@@ -232,35 +232,7 @@ pub const Planet = struct {
 		const temperature    = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		const newTemp        = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
 		const newWaterElev   = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
-		{
-			var i: usize = 0;
-			const vert = subdivided.?.vertices;
-			defer allocator.free(vert);
-			while (i < vert.len) : (i += 3) {
-				var point = Vec3.fromSlice(vert[i..]);
-
-				const theta = std.math.acos(point.z());
-				const phi = std.math.atan2(f32, point.y(), point.x());
-				// TODO: 3D perlin (or simplex) noise for correct looping
-				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * 0.05;
-
-				elevation[i / 3] = value;
-				waterElev[i / 3] = std.math.max(0, value - 1);
-				temperature[i / 3] = (perlin.p2do(theta * 10 + 1, phi * 10 + 1, 6) + 1) * 300; // 0°C
-				//temperature[i/3] = 300;
-				vertices[i / 3] = point;
-			}
-		}
-		zone3.End();
-
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
-		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
-		gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32)));
-		gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 4 * @sizeOf(f32)));
-		gl.enableVertexAttribArray(0);
-		gl.enableVertexAttribArray(1);
-		gl.enableVertexAttribArray(2);
-
+		
 		var planet = Planet {
 			.vao = vao,
 			.vbo = vbo,
@@ -278,6 +250,36 @@ pub const Planet = struct {
 			.bufData = try allocator.alloc(f32, vertices.len * 5),
 			.lifeforms = std.ArrayList(Lifeform).init(allocator),
 		};
+
+		{
+			var i: usize = 0;
+			const vert = subdivided.?.vertices;
+			defer allocator.free(vert);
+			while (i < vert.len) : (i += 3) {
+				var point = Vec3.fromSlice(vert[i..]);
+
+				const theta = std.math.acos(point.z());
+				const phi = std.math.atan2(f32, point.y(), point.x());
+				// TODO: 3D perlin (or simplex) noise for correct looping
+				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * 0.05;
+
+				elevation[i / 3] = value;
+				waterElev[i / 3] = std.math.max(0, value - 1);
+				temperature[i / 3] = (perlin.p2do(theta * 10 + 1, phi * 10 + 1, 6) + 1) * 300; // 0°C
+				vertices[i / 3] = point;
+			}
+		}
+		zone3.End();
+
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
+		gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32)));
+		gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 4 * @sizeOf(f32)));
+		gl.enableVertexAttribArray(0);
+		gl.enableVertexAttribArray(1);
+		gl.enableVertexAttribArray(2);
+
+		
 
 		// Pre-compute the neighbours of every point of the ico-sphere using multiple
 		// threads if we can.
