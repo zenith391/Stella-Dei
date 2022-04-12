@@ -140,52 +140,49 @@ pub const Planet = struct {
 		};
 	}
 
-	fn computeNeighbours(planet: *Planet, start: usize, end: usize, loop: *EventLoop) void {
+	fn appendNeighbor(planet: *Planet, idx: u32, neighbor: u32) void {
+		// Find the next free slot in the list:
+		var i: usize = 0;
+		while (i < 6) : (i += 1) {
+			if(planet.verticesNeighbours[idx][i] == idx) {
+				planet.verticesNeighbours[idx][i] = neighbor;
+				return;
+			} else if(planet.verticesNeighbours[idx][i] == neighbor) {
+				return; // The neighbor was already added.
+			}
+		}
+		std.debug.print("Weird stuff is happening.{} {}\n", .{idx, neighbor});
+	}
+
+	fn computeNeighbours(planet: *Planet, loop: *EventLoop) void {
 		loop.yield();
 
-		const zone = tracy.ZoneN(@src(), "Planet: Compute points neighbours");
+		const zone = tracy.ZoneN(@src(), "Compute points neighbours");
 		defer zone.End();
 
 		const indices = planet.indices;
-		const vertices = planet.vertices;
 		const vertNeighbours = planet.verticesNeighbours;
-		// Pre-compute the neighbours of every point of the ico-sphere
-		var idx: usize = start;
-		while (idx < end) : (idx += 1) {
-			const point = vertices[idx];
-			var candidates = std.BoundedArray(usize, 6).init(0) catch unreachable;
-
-			// Loop through all triangles
-			var i: usize = 0;
-			while (i < indices.len) : (i += 3) {
-				const aIdx = indices[i+0];
-				const bIdx = indices[i+1];
-				const cIdx = indices[i+2];
-				const a = vertices[aIdx];
-				const b = vertices[bIdx];
-				const c = vertices[cIdx];
-
-				// If one of the triangle's point is what we have, add the other points of the triangle
-				if (a.eql(point)) {
-					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
-					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
-				} else if (b.eql(point)) {
-					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
-					if (!contains(candidates, cIdx)) candidates.appendAssumeCapacity(cIdx); // c
-				} else if (c.eql(point)) {
-					if (!contains(candidates, aIdx)) candidates.appendAssumeCapacity(aIdx); // a
-					if (!contains(candidates, bIdx)) candidates.appendAssumeCapacity(bIdx); // b
-				}
+		var i: u32 = 0;
+		// Clear the vertex list:
+		while (i < vertNeighbours.len) : (i += 1) {
+			var j: u32 = 0;
+			while (j < 6) : (j += 1) {
+				vertNeighbours[i][j] = i;
 			}
+		}
 
-			// The original points of the icosahedron
-			if (candidates.len == 5) {
-				candidates.appendAssumeCapacity(idx);
-			}
-
-			for (candidates.constSlice()) |neighbour, int| {
-				vertNeighbours[idx][int] = @intCast(u32, neighbour);
-			}
+		// Loop through all triangles
+		i = 0;
+		while (i < indices.len) : (i += 3) {
+			const aIdx = indices[i+0];
+			const bIdx = indices[i+1];
+			const cIdx = indices[i+2];
+			appendNeighbor(planet, aIdx, bIdx);
+			appendNeighbor(planet, aIdx, cIdx);
+			appendNeighbor(planet, bIdx, aIdx);
+			appendNeighbor(planet, bIdx, cIdx);
+			appendNeighbor(planet, cIdx, aIdx);
+			appendNeighbor(planet, cIdx, bIdx);
 		}
 	}
 
@@ -281,26 +278,8 @@ pub const Planet = struct {
 
 		
 
-		// Pre-compute the neighbours of every point of the ico-sphere using multiple
-		// threads if we can.
-		const parallelCount = std.math.min(loop.getParallelCount(), 128);
-		{
-			var frames: [128]@Frame(computeNeighbours) = undefined;
-			var i: usize = 0;
-			while (i < parallelCount) : (i += 1) {
-				const start = (vertices.len / parallelCount) * i;
-				const end = if (i == parallelCount-1)
-					vertices.len // if it's the last thread, do all remaining points without rounding errors
-				else
-					(vertices.len / parallelCount) * (i+1);
-				frames[i] = async computeNeighbours(&planet, start, end, loop);
-			}
-
-			i = 0;
-			while (i < parallelCount) : (i += 1) {
-				await frames[i];
-			}
-		}
+		// Pre-compute the neighbours of every point of the ico-sphere.
+		computeNeighbours(&planet, loop);
 
 		return planet;
 	}
