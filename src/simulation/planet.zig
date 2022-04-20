@@ -376,8 +376,6 @@ pub const Planet = struct {
 				// dx will be the distance to the point
 				// * 1000 is to convert from km to m
 				const dx = dP.length() * 1000;
-				// Assume area is equals to dx²
-				const pointArea = dx * dx / 2;
 
 				// We compute the 1-dimensional gradient of T (temperature)
 				// aka T1 - T2
@@ -387,7 +385,7 @@ pub const Planet = struct {
 
 					// Rate of heat flow density
 					const qx = -thermalConductivity * dT / dx; // W.m-2
-					const watt = qx * pointArea; // W = J.s-1
+					const watt = qx * meanPointArea; // W = J.s-1
 					// So, we get heat transfer in J
 					const heatTransfer = watt * dt;
 
@@ -399,9 +397,9 @@ pub const Planet = struct {
 				}
 			}
 
-			// Solar illumination
+			// Solar irradiance
 			{
-				const solarCoeff = std.math.max(0, vert.dot(solarVector) / vert.length() / solarVector.length() / (2 * std.math.pi));
+				const solarCoeff = std.math.max(0, vert.dot(solarVector) / vert.length());
 				// TODO: Direct Normal Irradiance? when we have atmosphere
 				const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
 				// So, we get heat transfer in J
