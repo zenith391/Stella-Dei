@@ -261,8 +261,7 @@ pub const Planet = struct {
 				const value = radius + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * (radius / 20);
 
 				elevation[i / 3] = value;
-				//waterElev[i / 3] = std.math.max(0, value - radius);
-				waterElev[i / 3] = 0;
+				waterElev[i / 3] = std.math.max(0, value - radius);
 				temperature[i / 3] = (perlin.p2do(theta * 10 + 1, phi * 10 + 1, 6) + 1) * 300; // 0°C
 				vertices[i / 3] = point.norm();
 			}
@@ -298,7 +297,6 @@ pub const Planet = struct {
 			bufData[i*5+2] = transformedPoint.z();
 			bufData[i*5+3] = self.temperature[i];
 			bufData[i*5+4] = self.waterElevation[i];
-			//bufData[i*5+4] = 0;
 		}
 		
 		gl.bindVertexArray(self.vao);
@@ -355,7 +353,7 @@ pub const Planet = struct {
 			// TODO: maybe follow a logarithmic distribution?
 			const radiation = std.math.min(1, temp / 3000 * options.timeScale);
 
-			// TODO: conductivity depends on water level
+			// conductivity depends on water level
 			const waterCoeff = self.waterElevation[i] / self.radius * 2 + 1;
 			const conductivity = std.math.min(options.conductivity * waterCoeff * options.timeScale, 1);
 			const factor = 6 / conductivity;

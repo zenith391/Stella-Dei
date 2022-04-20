@@ -153,7 +153,7 @@ pub const PlayState = struct {
 			var i: usize = 0;
 			while (i < simulationSteps) : (i += 1) {
 				if (self.debug_emitWater) {
-					planet.waterElevation[123] += 0.05 * self.timeScale;
+					planet.waterElevation[123] += (planet.radius / 50) * self.timeScale;
 				}
 				if (self.debug_suckWater) {
 					var j: usize = 100;
