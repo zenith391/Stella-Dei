@@ -236,7 +236,7 @@ pub const PlayState = struct {
 
 		// TODO: avoid interfering with the UI system
 		if (button == .left) {
-			const pos = self.cameraPos;
+			const pos = self.cameraPos.norm().scale(self.planet.radius);
 			var closestPointDist: f32 = std.math.inf_f32;
 			var closestPoint: usize = undefined;
 			for (self.planet.vertices) |point, i| {
@@ -268,7 +268,7 @@ pub const PlayState = struct {
 		// Select the closest point that the camera is facing.
 		// To do this, it gets the point that has the lowest distance to the
 		// position of the camera.
-		const pos = self.cameraPos;
+		const pos = self.cameraPos.norm().scale(self.planet.radius);
 		var closestPointDist: f32 = std.math.inf_f32;
 		var closestPoint: usize = undefined;
 		for (self.planet.vertices) |point, i| {
@@ -324,9 +324,9 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 30, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point #{d}", .{ point }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Elevation: {d:.3}", .{ planet.elevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Dst. from center: {d:.1} km", .{ planet.elevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Elevation: {d:.3}", .{ planet.waterElevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Elevation: {d:.1} km", .{ planet.waterElevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 		}

@@ -52,11 +52,15 @@ pub const Planet = struct {
 	/// Slice changed during each upload() call, it contains the data
 	/// that will be stored in the VBO.
 	bufData: []f32,
-	
+
+	/// The water elevation (TODO: replace with something better?)
+	/// Unit: Kilometer
 	waterElevation: []f32,
-	/// The elevation of each point, expressed in km.
+	/// The elevation of each point.
+	/// Unit: Kilometer
 	elevation: []f32,
-	/// Temperature measured in Kelvin
+	/// Temperature measured
+	/// Unit: Kelvin
 	temperature: []f32,
 	/// Buffer array that is used to store the temperatures to be used after next update
 	newTemperature: []f32,
@@ -342,41 +346,51 @@ pub const Planet = struct {
 			newTemp[i] = std.math.max(0, self.temperature[i]); // temperature may never go below 0°K
 		}
 
-		// Do the heat simulation
+		// Number of seconds that passes in 1 simulation step
+		const dt = 1.0 / 60.0 * options.timeScale * 10000;
+
+		// NEW(TM) heat simulation
 		for (self.vertices) |vert, i| {
 			// Temperature in the current cell
 			const temp = self.temperature[i];
-			@prefetch(&self.temperature.ptr[i+1], .{ .locality = 0 });
+			inline for (std.meta.fields(Planet.Direction)) |directionField| {
+				const neighbourDirection = @intToEnum(Planet.Direction, directionField.value);
+				const neighbourIndex = self.getNeighbour(i, neighbourDirection);
 
-			const solarIllumination = std.math.max(0, vert.dot(solarVector) * options.sunPower * options.timeScale);
+				const neighbourPos = self.vertices[neighbourIndex];
+				const dP = neighbourPos.sub(vert); // delta position
 
-			// TODO: maybe follow a logarithmic distribution?
-			const radiation = std.math.min(1, temp / 3000 * options.timeScale);
+				// dx will be the distance to the point
+				// * 1000 is to convert from km to m
+				const dx = dP.length() * 1000;
 
-			// conductivity depends on water level
-			const waterCoeff = self.waterElevation[i] / self.radius * 2 + 1;
-			const conductivity = std.math.min(options.conductivity * waterCoeff * options.timeScale, 1);
-			const factor = 6 / conductivity;
-			const shared = temp / factor;
-			newTemp[self.getNeighbour(i, .ForwardLeft)] += shared;
-			newTemp[self.getNeighbour(i, .ForwardRight)] += shared;
-			newTemp[self.getNeighbour(i, .BackwardLeft)] += shared;
-			newTemp[self.getNeighbour(i, .BackwardRight)] += shared;
-			newTemp[self.getNeighbour(i, .Left)] += shared;
-			newTemp[self.getNeighbour(i, .Right)] += shared;
-			newTemp[i] += solarIllumination - radiation - (shared * 6);
+				// We compute the 1-dimensional gradient of T (temperature)
+				// aka T1 - T2
+				const dT = self.temperature[neighbourIndex] - temp;
+				if (dT < 0) {
+					// Heat transfer only happens from the hot point to the cold one
+
+					// In W.m-1.K-1, this is 1 assuming 100% of planet is SiO2 :/
+					const thermalConductivity = 1;
+
+					// Rate of heat flow density in W.m-2
+					// We don't care about area so might as well be in W ?
+					// W = J.s-1
+					const qx = -thermalConductivity * dT / dx;
+					// So, we get heat transfer in J
+					const heatTransfer = qx * dt;
+
+					// again, assume 100% SiO2 to the *receiving* end
+					const specificHeatCapacity = 700; // J/K/kg
+					const pointMass = 1; // kg
+					const heatCapacity = specificHeatCapacity * pointMass; // J.K-1
+
+					const temperatureGain = heatTransfer / heatCapacity; // K
+					newTemp[neighbourIndex] += temperatureGain;
+					newTemp[i] -= temperatureGain;
+				}
+			}
 		}
-
-		// const dt = 0.1;
-		// for (self.vertices) |vert, i| {
-		// 	const alpha = 1.15; // thermal diffusivity
-		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .ForwardLeft));
-		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .ForwardRight));
-		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .BackwardLeft));
-		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .BackwardRight));
-		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .Left));
-		// 	conduct(&self, newTemp, self.temperature[i], self.getNeighbour(i, .Right));
-		// }
 
 		// Finish by swapping the new temperature
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
