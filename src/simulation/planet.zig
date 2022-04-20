@@ -44,6 +44,7 @@ pub const Planet = struct {
 
 	numTriangles: gl.GLint,
 	numSubdivisions: usize,
+	radius: f32,
 	allocator: std.mem.Allocator,
 	/// The *unmodified* vertices of the icosphere
 	vertices: []Vec3,
@@ -53,6 +54,7 @@ pub const Planet = struct {
 	bufData: []f32,
 	
 	waterElevation: []f32,
+	/// The elevation of each point, expressed in km.
 	elevation: []f32,
 	/// Temperature measured in Kelvin
 	temperature: []f32,
@@ -151,12 +153,10 @@ pub const Planet = struct {
 				return; // The neighbor was already added.
 			}
 		}
-		std.debug.print("Weird stuff is happening.{} {}\n", .{idx, neighbor});
+		unreachable;
 	}
 
-	fn computeNeighbours(planet: *Planet, loop: *EventLoop) void {
-		loop.yield();
-
+	fn computeNeighbours(planet: *Planet) void {
 		const zone = tracy.ZoneN(@src(), "Compute points neighbours");
 		defer zone.End();
 
@@ -187,12 +187,11 @@ pub const Planet = struct {
 	}
 
 	/// Note: the data is allocated using the event loop's allocator
-	pub fn generate(loop: *EventLoop, numSubdivisions: usize) !Planet {
-		const allocator = loop.allocator;
-		// const zone = tracy.ZoneN(@src(), "Generate planet");
-		// defer zone.End();
+	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize, radius: f32) !Planet {
+		const zone = tracy.ZoneN(@src(), "Generate planet");
+		defer zone.End();
 
-		const zone2 = tracy.ZoneN(@src(), "Planet: Subdivide ico-sphere");
+		const zone2 = tracy.ZoneN(@src(), "Subdivide ico-sphere");
 		var vao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &vao);
 		var vbo: gl.GLuint = undefined;
@@ -221,7 +220,7 @@ pub const Planet = struct {
 		}
 		zone2.End();
 
-		const zone3 = tracy.ZoneN(@src(), "Planet: Initialise with data");
+		const zone3 = tracy.ZoneN(@src(), "Initialise with data");
 		const vertices       = try allocator.alloc(Vec3, subdivided.?.vertices.len / 3);
 		const vertNeighbours = try allocator.alloc([6]u32, subdivided.?.vertices.len / 3);
 		const elevation      = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
@@ -235,6 +234,7 @@ pub const Planet = struct {
 			.vbo = vbo,
 			.numTriangles = @intCast(gl.GLint, subdivided.?.indices.len),
 			.numSubdivisions = numSubdivisions,
+			.radius = radius,
 			.allocator = allocator,
 			.vertices = vertices,
 			.verticesNeighbours = vertNeighbours,
@@ -258,12 +258,13 @@ pub const Planet = struct {
 				const theta = std.math.acos(point.z());
 				const phi = std.math.atan2(f32, point.y(), point.x());
 				// TODO: 3D perlin (or simplex) noise for correct looping
-				const value = 1 + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * 0.05;
+				const value = radius + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * (radius / 20);
 
 				elevation[i / 3] = value;
-				waterElev[i / 3] = std.math.max(0, value - 1);
+				//waterElev[i / 3] = std.math.max(0, value - radius);
+				waterElev[i / 3] = 0;
 				temperature[i / 3] = (perlin.p2do(theta * 10 + 1, phi * 10 + 1, 6) + 1) * 300; // 0°C
-				vertices[i / 3] = point;
+				vertices[i / 3] = point.norm();
 			}
 		}
 		zone3.End();
@@ -276,10 +277,8 @@ pub const Planet = struct {
 		gl.enableVertexAttribArray(1);
 		gl.enableVertexAttribArray(2);
 
-		
-
 		// Pre-compute the neighbours of every point of the ico-sphere.
-		computeNeighbours(&planet, loop);
+		computeNeighbours(&planet);
 
 		return planet;
 	}
@@ -293,8 +292,7 @@ pub const Planet = struct {
 		const bufData = self.bufData;
 
 		for (self.vertices) |point, i| {
-			const elevCoeff: f32 = if (self.temperature[i] <= 273.15) 0.9 else 1.0;
-			const transformedPoint = point.norm().scale(self.elevation[i] + (self.waterElevation[i] * elevCoeff));
+			const transformedPoint = point.scale(self.elevation[i] + self.waterElevation[i]);
 			bufData[i*5+0] = transformedPoint.x();
 			bufData[i*5+1] = transformedPoint.y();
 			bufData[i*5+2] = transformedPoint.z();
@@ -358,7 +356,9 @@ pub const Planet = struct {
 			const radiation = std.math.min(1, temp / 3000 * options.timeScale);
 
 			// TODO: conductivity depends on water level
-			const factor = 6 / options.conductivity / options.timeScale;
+			const waterCoeff = self.waterElevation[i] / self.radius * 2 + 1;
+			const conductivity = std.math.min(options.conductivity * waterCoeff * options.timeScale, 1);
+			const factor = 6 / conductivity;
 			const shared = temp / factor;
 			newTemp[self.getNeighbour(i, .ForwardLeft)] += shared;
 			newTemp[self.getNeighbour(i, .ForwardRight)] += shared;
@@ -396,17 +396,20 @@ pub const Planet = struct {
 					const totalHeight = self.elevation[i] + height;
 
 					const factor = 6 / 0.5 / options.timeScale;
-					const elevCoeff: f32 = if (self.temperature[i] <= 273.15) 0.9 else 1.0;
-					var shared = (height * elevCoeff) / factor;
+					var shared = height / factor / 10;
 					var numShared: f32 = 0;
+					if (self.waterElevation[i] < 0) {
+						std.log.warn("WTFFFF", .{});
+						std.process.exit(0);
+					}
 
-					numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
+					if (true) {numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight);
-					newElev[i] -= numShared;
+					newElev[i] -= numShared;}
 				}
 			}
 
@@ -416,9 +419,13 @@ pub const Planet = struct {
 	}
 
 	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32) f32 {
-		const elevCoeff: f32 = if (self.temperature[target] <= 273.15) 0.9 else 1.0;
-		if (totalHeight > self.elevation[target] * elevCoeff) {
-			var transmitted = std.math.min(1, shared * (totalHeight - self.elevation[target] * elevCoeff) * 10);
+		const targetTotalHeight = self.elevation[target] + self.waterElevation[target];
+		if (totalHeight > targetTotalHeight) {
+			var transmitted = std.math.min(shared, shared * (totalHeight - targetTotalHeight) / 50);
+			if (transmitted < 0) {
+				std.log.info("shared: {d}, total height: {d}, target total height: {d} difference: {d}", .{ shared, totalHeight, targetTotalHeight, totalHeight - targetTotalHeight });
+				std.process.exit(0);
+			}
 			self.newWaterElevation[target] += transmitted;
 			return transmitted;
 		} else {

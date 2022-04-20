@@ -28,11 +28,11 @@ pub const PlayState = struct {
 	cubemap: Texture,
 
 	/// The distance the camera is from the planet's center
-	cameraDistance: f32 = 1000,
+	cameraDistance: f32,
 	/// The target camera distance, every frame, a linear interpolation is done
 	/// between the current camera distance and the target distance, to create a
 	/// smooth (de)zooming effect.
-	targetCameraDistance: f32 = 30,
+	targetCameraDistance: f32,
 	/// The index of the currently selected point
 	selectedPoint: usize = 0,
 	displayMode: PlanetDisplayMode = .Normal,
@@ -95,13 +95,16 @@ pub const PlayState = struct {
 		}
 
 		// TODO: make a loading scene
-		const planet = Planet.generate(game.loop, 5) catch unreachable;
+		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
+		const planet = Planet.generate(game.allocator, 5, planetRadius) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
 			.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos)),
 			.cubemap = cubemap,
 			.planet = planet,
+			.targetCameraDistance = planetRadius * 2.5,
+			.cameraDistance = planetRadius * 5,
 		};
 	}
 
@@ -175,21 +178,24 @@ pub const PlayState = struct {
 		}
 
 		const program = renderer.terrainProgram;
+		const zFar = planet.radius * 5;
+		const zNear = zFar / 10000;
 		program.use();
 		program.setUniformMat4("projMatrix",
-			Mat4.perspective(70, size.x() / size.y(), 0.1, 1000.0));
+			Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
 		
 		const target = Vec3.new(0, 0, 0);
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
-		const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(0, 0, 0), Vec3.new(20, 20, 20));
+		const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(0, 0, 0), Vec3.new(1, 1, 1));
 		program.setUniformMat4("modelMatrix",
 			modelMatrix);
 
 		program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
 		program.setUniformVec3("lightDir", solarVector);
 		program.setUniformVec3("viewPos", self.cameraPos);
+		program.setUniformFloat("planetRadius", planet.radius);
 		program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display temperature
 
 		gl.activeTexture(gl.TEXTURE0);
@@ -244,9 +250,14 @@ pub const PlayState = struct {
 	}
 
 	pub fn mouseScroll(self: *PlayState, _: *Game, yOffset: f64) void {
-		// Change camera distance by yOffset, while keeping it between 21 and 100
+		const zFar = self.planet.radius * 5;
+		const zNear = zFar / 10000;
+
+		const minDistance = self.planet.radius + zNear;
+		const maxDistance = self.planet.radius * 5;
 		self.targetCameraDistance = std.math.clamp(
-			self.targetCameraDistance - @floatCast(f32, yOffset), 21, 100);
+			self.targetCameraDistance - (@floatCast(f32, yOffset) * self.cameraDistance / 50),
+			minDistance, maxDistance);
 	}
 
 	// NOTE: `mouseMoved` event handler is not yet implemented

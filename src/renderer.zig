@@ -453,6 +453,11 @@ const ShaderProgram = struct {
 		gl.uniform1i(location, int);
 	}
 
+	pub fn setUniformFloat(self: ShaderProgram, uniform: [:0]const u8, float: f32) void {
+		const location = gl.getUniformLocation(self.program, uniform);
+		gl.uniform1f(location, float);
+	}
+
 	pub fn attach(self: ShaderProgram, shader: Shader) void {
 		gl.attachShader(self.program, shader.shader);
 	}

@@ -153,7 +153,10 @@ pub const EventLoop = struct {
 		while (self.events > 0) {
 			if (self.taskQueue.get()) |node| {
 				resume node.data.frame;
-			}
+			} else {
+                // sleep for 5 ms to avoid overloading the CPU
+                std.time.sleep(5 * std.time.ns_per_ms);
+            }
 		}
 	}
 
