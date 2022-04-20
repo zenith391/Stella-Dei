@@ -38,8 +38,8 @@ pub const PlayState = struct {
 	displayMode: PlanetDisplayMode = .Normal,
 	/// Inclination of rotation, in radians
 	planetInclination: f32 = 0.4,
-	/// The sun power in completely arbitrary units (TODO: use real unit)
-	sunPower: f32 = 0.4,
+	/// The solar constant in W.m-2
+	solarConstant: f32 = 1361,
 	/// The planet's surface conductivity in arbitrary units (TODO: use real unit)
 	conductivity: f32 = 0.25,
 	/// The time it takes for the planet to do a full rotation on itself, in seconds
@@ -166,7 +166,7 @@ pub const PlayState = struct {
 				// of simulation steps. So that if there are more steps, the same
 				// time speed is kept but the precision is increased.
 				planet.simulate(solarVector, .{
-					.sunPower = self.sunPower,
+					.solarConstant = self.solarConstant,
 					.conductivity = self.conductivity,
 					.timeScale = self.timeScale / simulationSteps,
 				});
@@ -287,20 +287,22 @@ pub const PlayState = struct {
 
 		if (nk.nk_begin(ctx, "Planet Control", .{ .x = 100, .y = 100, .w = 600, .h = 150}, 
 			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_MOVABLE | nk.NK_WINDOW_TITLE | nk.NK_WINDOW_SCALABLE) != 0) {
-			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Planet Inclination (rad)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
+			// currently unusable
+			//nk.nk_layout_row_dynamic(ctx, 50, 1);
+			//nk.nk_property_float(ctx, "Planet Inclination (rad)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
 
 			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Sun Power (W)", 0, &self.sunPower, 10, 0.01, 0.002);
+			nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 1, 0.2);
 
-			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Surface Conductivity", 0.0001, &self.conductivity, 1, 0.1, 0.001);
+			// currently unusable
+			//nk.nk_layout_row_dynamic(ctx, 50, 1);
+			//nk.nk_property_float(ctx, "Surface Conductivity", 0.0001, &self.conductivity, 1, 0.1, 0.001);
 			
 			nk.nk_layout_row_dynamic(ctx, 50, 1);
 			nk.nk_property_float(ctx, "Rotation Speed (s)", 0.05, &self.planetRotationTime, 60000, 1, 0.01);
 
 			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Time Scale", 0.05, &self.timeScale, 1, 0.1, 0.002);
+			nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.05, &self.timeScale, 1, 0.1, 0.002);
 
 			nk.nk_layout_row_dynamic(ctx, 50, 2);
 			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;

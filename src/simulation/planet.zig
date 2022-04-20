@@ -330,7 +330,7 @@ pub const Planet = struct {
 	}
 
 	pub const SimulationOptions = struct {
-		sunPower: f32,
+		solarConstant: f32,
 		conductivity: f32,
 		/// Currently, time scale greater than 1 may result in lots of bugs
 		timeScale: f32 = 1,
@@ -347,12 +347,25 @@ pub const Planet = struct {
 		}
 
 		// Number of seconds that passes in 1 simulation step
-		const dt = 1.0 / 60.0 * options.timeScale * 10000;
+		const dt = 1.0 / 60.0 * options.timeScale * 100;
+
+		// The surface of the planet (approx.) divided by the numbers of points
+		const meanPointArea = (4 * std.math.pi * (self.radius * 1000) * (self.radius * 1000)) / @intToFloat(f32, self.vertices.len);
 
 		// NEW(TM) heat simulation
 		for (self.vertices) |vert, i| {
 			// Temperature in the current cell
 			const temp = self.temperature[i];
+
+			// In W.m-1.K-1, this is 1 assuming 100% of planet is SiO2 :/
+			const thermalConductivity = 1;
+
+			// again, assume 100% SiO2 to the *receiving* end (us)
+			const specificHeatCapacity = 700; // J/K/kg
+			// Earth is about 5513 kg/m³ (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html) and assume each point is 1mm thick??
+			const pointMass = meanPointArea * 0.001 * 5513; // kg
+			const heatCapacity = specificHeatCapacity * pointMass; // J.K-1
+
 			inline for (std.meta.fields(Planet.Direction)) |directionField| {
 				const neighbourDirection = @intToEnum(Planet.Direction, directionField.value);
 				const neighbourIndex = self.getNeighbour(i, neighbourDirection);
@@ -363,6 +376,8 @@ pub const Planet = struct {
 				// dx will be the distance to the point
 				// * 1000 is to convert from km to m
 				const dx = dP.length() * 1000;
+				// Assume area is equals to dx²
+				const pointArea = dx * dx / 2;
 
 				// We compute the 1-dimensional gradient of T (temperature)
 				// aka T1 - T2
@@ -370,25 +385,41 @@ pub const Planet = struct {
 				if (dT < 0) {
 					// Heat transfer only happens from the hot point to the cold one
 
-					// In W.m-1.K-1, this is 1 assuming 100% of planet is SiO2 :/
-					const thermalConductivity = 1;
-
-					// Rate of heat flow density in W.m-2
-					// We don't care about area so might as well be in W ?
-					// W = J.s-1
-					const qx = -thermalConductivity * dT / dx;
+					// Rate of heat flow density
+					const qx = -thermalConductivity * dT / dx; // W.m-2
+					const watt = qx * pointArea; // W = J.s-1
 					// So, we get heat transfer in J
-					const heatTransfer = qx * dt;
+					const heatTransfer = watt * dt;
 
-					// again, assume 100% SiO2 to the *receiving* end
-					const specificHeatCapacity = 700; // J/K/kg
-					const pointMass = 1; // kg
-					const heatCapacity = specificHeatCapacity * pointMass; // J.K-1
-
+					// it is assumed neighbours are made of the exact same materials
+					// as this point
 					const temperatureGain = heatTransfer / heatCapacity; // K
 					newTemp[neighbourIndex] += temperatureGain;
 					newTemp[i] -= temperatureGain;
 				}
+			}
+
+			// Solar illumination
+			{
+				const solarCoeff = std.math.max(0, vert.dot(solarVector) / vert.length() / solarVector.length() / (2 * std.math.pi));
+				// TODO: Direct Normal Irradiance? when we have atmosphere
+				const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
+				// So, we get heat transfer in J
+				const heatTransfer = solarIrradiance * dt;
+				const temperatureGain = heatTransfer / heatCapacity; // K
+				newTemp[i] += temperatureGain;
+			}
+
+			// Thermal radiation with Stefan-Boltzmann law
+			{
+				const stefanBoltzmannConstant = 0.00000005670374; // W.m-2.K-4
+				// water emissivity: 0.96
+				// limestone emissivity: 0.92
+				const emissivity = 0.93; // took a value between the two
+				const radiantEmittance = stefanBoltzmannConstant * temp * temp * temp * temp * emissivity; // W.m-2
+				const heatTransfer = radiantEmittance * meanPointArea * dt; // J
+				const temperatureLoss = heatTransfer / heatCapacity; // K
+				newTemp[i] -= temperatureLoss;
 			}
 		}
 
