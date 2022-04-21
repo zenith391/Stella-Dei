@@ -336,6 +336,21 @@ pub const Planet = struct {
 		timeScale: f32 = 1,
 	};
 
+	/// Given the index of a point on the planet, compute the specific heat capacity
+	fn computeHeatCapacity(self: *Planet, pointIndex: usize, pointArea: f32) f32 {
+		// specific heat capacities of given materials
+		const groundCp: f32 = 700;
+		// TODO: more precise water specific heat capacity, depending on temperature
+		const waterCp: f32 = if (self.temperature[pointIndex] > 273.15) 4184 else 2093;
+
+		const waterLevel = self.waterElevation[pointIndex];
+		const specificHeatCapacity = std.math.exp(-waterLevel/20) * (groundCp - waterCp) + waterCp; // J/K/kg
+		// Earth is about 5513 kg/m³ (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html) and assume each point is 1mm thick??
+		const pointMass = pointArea * 0.001 * 5513; // kg
+		const heatCapacity = specificHeatCapacity * pointMass; // J.K-1
+		return heatCapacity;
+	}
+
 	pub fn simulate(self: *Planet, solarVector: Vec3, options: SimulationOptions) void {
 		const zone = tracy.ZoneN(@src(), "Simulate planet");
 		defer zone.End();
@@ -358,13 +373,11 @@ pub const Planet = struct {
 			const temp = self.temperature[i];
 
 			// In W.m-1.K-1, this is 1 assuming 100% of planet is SiO2 :/
-			const thermalConductivity = 1;
-
-			// again, assume 100% SiO2 to the *receiving* end (us)
-			const specificHeatCapacity = 700; // J/K/kg
-			// Earth is about 5513 kg/m³ (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html) and assume each point is 1mm thick??
-			const pointMass = meanPointArea * 0.001 * 5513; // kg
-			const heatCapacity = specificHeatCapacity * pointMass; // J.K-1
+			const groundThermalConductivity: f32 = 1;
+			const waterThermalConductivity: f32 = 0.6089;
+			const waterLevel = self.waterElevation[i];
+			const thermalConductivity = std.math.exp(-waterLevel/2) * (groundThermalConductivity - waterThermalConductivity) + waterThermalConductivity; // W.m-1.K-1
+			const heatCapacity = self.computeHeatCapacity(i, meanPointArea);
 
 			inline for (std.meta.fields(Planet.Direction)) |directionField| {
 				const neighbourDirection = @intToEnum(Planet.Direction, directionField.value);

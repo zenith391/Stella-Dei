@@ -310,7 +310,7 @@ pub const PlayState = struct {
 			if (nk.nk_button_label(&renderer.nkContext, "Place lifeform") != 0) {
 				const point = self.selectedPoint;
 				const planet = &self.planet;
-				const pointPos = planet.vertices[point].scale(20 * planet.elevation[point] + 0.05);
+				const pointPos = planet.vertices[point].scale(planet.elevation[point] + 0.05);
 				planet.lifeforms.append(Lifeform.init(pointPos)) catch unreachable;
 			}
 		}
