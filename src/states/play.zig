@@ -43,12 +43,12 @@ pub const PlayState = struct {
 	/// The planet's surface conductivity in arbitrary units (TODO: use real unit)
 	conductivity: f32 = 0.25,
 	/// The time it takes for the planet to do a full rotation on itself, in seconds
-	planetRotationTime: f32 = 120,
+	planetRotationTime: f32 = 86400,
 	/// The time elapsed in seconds since the start of the game
 	gameTime: f64 = 0,
 	/// Time scale for the simulation.
 	/// This is the number of in-game seconds that passes for each real second
-	timeScale: f32 = 1000,
+	timeScale: f32 = 20000,
 	/// Whether the game is paused, this has the same effect as setting timeScale to
 	/// 0 except it preserves the time scale value.
 	paused: bool = false,
@@ -154,7 +154,7 @@ pub const PlayState = struct {
 			var i: usize = 0;
 			while (i < simulationSteps) : (i += 1) {
 				if (self.debug_emitWater) {
-					planet.waterElevation[123] += 0.05 * self.timeScale;
+					planet.waterElevation[123] += 0.05 * self.timeScale / (self.timeScale / 10);
 				}
 				if (self.debug_suckWater) {
 					var j: usize = 100;
@@ -172,7 +172,7 @@ pub const PlayState = struct {
 					.timeScale = self.timeScale / simulationSteps,
 				});
 			}
-			planet.upload();
+			planet.upload(game.loop);
 
 			// TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
 			self.gameTime += 0.016 * self.timeScale;
@@ -300,10 +300,10 @@ pub const PlayState = struct {
 			//nk.nk_property_float(ctx, "Surface Conductivity", 0.0001, &self.conductivity, 1, 0.1, 0.001);
 			
 			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Rotation Speed (s)", 0.05, &self.planetRotationTime, 60000, 100, 1);
+			nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 160000, 1000, 10);
 
 			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 2000, 100, 0.5);
+			nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 40000, 1000, 5);
 
 			nk.nk_layout_row_dynamic(ctx, 50, 2);
 			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;

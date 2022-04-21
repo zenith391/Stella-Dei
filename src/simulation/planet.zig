@@ -5,6 +5,7 @@ const tracy = @import("../vendor/tracy.zig");
 
 const perlin = @import("../perlin.zig");
 const EventLoop = @import("../loop.zig").EventLoop;
+const Job = @import("../loop.zig").Job;
 
 const Lifeform = @import("life.zig").Lifeform;
 
@@ -52,6 +53,13 @@ pub const Planet = struct {
 	/// Slice changed during each upload() call, it contains the data
 	/// that will be stored in the VBO.
 	bufData: []f32,
+	/// Normals are computed every 10 frames to avoid overloading CPU for
+	/// not much
+	normals: []Vec3,
+	normalComputeJob: ?*Job(void) = null,
+	/// The number of time upload() has been called, this is used to keep track
+	/// of when to update the normals
+	uploadNo: u32 = 0,
 
 	/// The water elevation (TODO: replace with something better?)
 	/// Unit: Kilometer
@@ -248,8 +256,9 @@ pub const Planet = struct {
 			.newWaterElevation = newWaterElev,
 			.temperature = temperature,
 			.newTemperature = newTemp,
-			.bufData = try allocator.alloc(f32, vertices.len * 5),
 			.lifeforms = std.ArrayList(Lifeform).init(allocator),
+			.bufData = try allocator.alloc(f32, vertices.len * 8),
+			.normals = try allocator.alloc(Vec3, vertices.len),
 		};
 
 		{
@@ -265,7 +274,7 @@ pub const Planet = struct {
 				const value = radius + perlin.p3do(point.x() * 3 + xOffset, point.y() * 3 + yOffset, point.z() * 3 + zOffset, 4) * std.math.min(radius / 2, 10);
 
 				elevation[i / 3] = value;
-				waterElev[i / 3] = std.math.max(0, value - radius);
+				waterElev[i / 3] = std.math.max(0, radius - value + 1);
 				temperature[i / 3] = 273.15;
 				vertices[i / 3] = point.norm();
 			}
@@ -273,12 +282,14 @@ pub const Planet = struct {
 		zone3.End();
 
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
-		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
-		gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32)));
-		gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), @intToPtr(?*anyopaque, 4 * @sizeOf(f32)));
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+		gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
+		gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32))); // temperature (used for a bunch of things)
+		gl.vertexAttribPointer(3, 1, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 7 * @sizeOf(f32))); // water level (used in Normal display mode)
 		gl.enableVertexAttribArray(0);
 		gl.enableVertexAttribArray(1);
 		gl.enableVertexAttribArray(2);
+		gl.enableVertexAttribArray(3);
 
 		// Pre-compute the neighbours of every point of the ico-sphere.
 		computeNeighbours(&planet);
@@ -286,21 +297,82 @@ pub const Planet = struct {
 		return planet;
 	}
 
+	fn computeNormal(self: Planet, a: usize, aVec: Vec3) Vec3 {
+		@setFloatMode(.Optimized);
+		var sum = Vec3.zero();
+		const adjacentVertices = [_]usize {
+			self.getNeighbour(a, .ForwardLeft),
+			self.getNeighbour(a, .BackwardLeft),
+			self.getNeighbour(a, .Left),
+			self.getNeighbour(a, .ForwardRight),
+			self.getNeighbour(a, .BackwardRight),
+			self.getNeighbour(a, .Right),
+		};
+		{
+			var i: usize = 1;
+			while (i < adjacentVertices.len) : (i += 1) {
+				const b = adjacentVertices[i-1];
+				const bVec = self.vertices[b].scale((self.elevation[b] + self.waterElevation[b]) / self.radius * 2);
+				const c = adjacentVertices[ i ];
+				const cVec = self.vertices[c].scale((self.elevation[c] + self.waterElevation[c]) / self.radius * 2);
+				var normal = bVec.sub(aVec).cross(cVec.sub(aVec)); // (b-a) x (c-a)
+				// if the normal is pointing inside
+				const aVecTranslate = aVec.add(normal);
+				if (aVecTranslate.dot(aVecTranslate) < aVec.dot(aVec)) {
+					normal = normal.scale(-1); // invert it
+				}
+				sum = sum.add(normal);
+			}
+		}
+		return sum.norm();
+	}
+
+	pub fn computeAllNormals(self: *Planet, loop: *EventLoop) void {
+		loop.yield();
+		const zone = tracy.ZoneN(@src(), "Compute normals");
+		defer zone.End();
+
+		// there could potentially be a data race between this function and upload
+		// but it's not a problem as even if only a part of a normal's components are
+		// updated, the glitch is barely noticeable
+		for (self.vertices) |point, i| {
+			self.normals[i] = self.computeNormal(i, point.scale((self.elevation[i] + self.waterElevation[i]) / self.radius * 2));
+		}
+	}
+
 	/// Upload all changes to the GPU
-	pub fn upload(self: Planet) void {
+	pub fn upload(self: *Planet, loop: *EventLoop) void {
+		@setFloatMode(.Optimized);
 		const zone = tracy.ZoneN(@src(), "Planet GPU Upload");
 		defer zone.End();
 		
-		// TODO: as it's reused for every upload, just pre-allocate bufData
 		const bufData = self.bufData;
+		defer self.uploadNo += 1;
+		if (self.normalComputeJob) |job| {
+			if (job.isCompleted()) {
+				job.deinit();
+				self.normalComputeJob = null;
+			}
+		}
+		if (self.uploadNo % 10 == 0 and self.normalComputeJob == null) {
+			const job = Job(void).create(loop) catch unreachable;
+			self.normalComputeJob = job;
+			job.call(computeAllNormals, .{ self, loop }) catch unreachable;
+		}
 
+		// NOTE: this has really bad cache locality
 		for (self.vertices) |point, i| {
 			const transformedPoint = point.scale(self.elevation[i] + self.waterElevation[i]);
-			bufData[i*5+0] = transformedPoint.x();
-			bufData[i*5+1] = transformedPoint.y();
-			bufData[i*5+2] = transformedPoint.z();
-			bufData[i*5+3] = self.temperature[i];
-			bufData[i*5+4] = self.waterElevation[i];
+			const normal = self.normals[i];
+
+			bufData[i*8+0] = transformedPoint.x();
+			bufData[i*8+1] = transformedPoint.y();
+			bufData[i*8+2] = transformedPoint.z();
+			bufData[i*8+3] = normal.x();
+			bufData[i*8+4] = normal.y();
+			bufData[i*8+5] = normal.z();
+			bufData[i*8+6] = self.temperature[i];
+			bufData[i*8+7] = self.waterElevation[i];
 		}
 		
 		gl.bindVertexArray(self.vao);
@@ -324,7 +396,7 @@ pub const Planet = struct {
 		return false;
 	}
 
-	pub fn getNeighbour(self: Planet, idx: usize, direction: Direction) usize {
+	pub inline fn getNeighbour(self: Planet, idx: usize, direction: Direction) usize {
 		const directionInt = @enumToInt(direction);
 		return self.verticesNeighbours[idx][directionInt];
 	}
@@ -345,8 +417,8 @@ pub const Planet = struct {
 
 		const waterLevel = self.waterElevation[pointIndex];
 		const specificHeatCapacity = std.math.exp(-waterLevel/20) * (groundCp - waterCp) + waterCp; // J/K/kg
-		// Earth is about 5513 kg/m³ (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html) and assume each point is 1mm thick??
-		const pointMass = pointArea * 0.001 * 5513; // kg
+		// Earth is about 5513 kg/m³ (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html) and assume each point is 0.72m thick??
+		const pointMass = pointArea * 0.72 * 5513; // kg
 		const heatCapacity = specificHeatCapacity * pointMass; // J.K-1
 		return heatCapacity;
 	}
@@ -439,7 +511,7 @@ pub const Planet = struct {
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
 
 		var iteration: usize = 0;
-		var numIterations: usize = 2 + @floatToInt(usize, options.timeScale / 500);
+		var numIterations: usize = 2 + @floatToInt(usize, options.timeScale / 5000);
 		while (iteration < numIterations) : (iteration += 1) {
 			const newElev = self.newWaterElevation;
 			std.mem.copy(f32, newElev, self.waterElevation);

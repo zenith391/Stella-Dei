@@ -83,6 +83,10 @@ pub fn Job(comptime ResultType: type) type {
             }
         }
 
+        pub fn isCompleted(self: *const Self) bool {
+            return self.completed.load(.Acquire);
+        }
+
         pub fn then(self: *Self, next: *Self) void {
             if (self.toNotify != null) {
                 @panic("Trying to set a job to notify twice"); // TODO: support multiple notified jobs

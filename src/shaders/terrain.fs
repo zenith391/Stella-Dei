@@ -7,6 +7,7 @@ uniform int displayMode;
 uniform float planetRadius;
 uniform samplerCube noiseCubemap;
 
+in vec3 normal;
 in vec3 localPosition;
 in float interpData;
 in float waterElevation;
@@ -21,9 +22,6 @@ float noiseValue() {
 void main() {
 	if (displayMode == 0) {
 		vec3 ambient = 0.15 * lightColor;
-
-		// TODO: account for terrain variations to greatly improve looks
-		vec3 normal = normalize(localPosition);
 		
 		vec3 diffuse = max(dot(normal, lightDir), 0.0) * lightColor;
 
