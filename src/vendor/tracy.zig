@@ -247,7 +247,7 @@ const tracy_stub = struct {
 const tracy_full = struct {
     const c = @cImport({
         @cDefine("TRACY_ENABLE", "");
-        @cDefine("TRACY_CALLSTACK", "5");
+        @cDefine("TRACY_CALLSTACK", "10");
         @cInclude("TracyC.h");
     });
 

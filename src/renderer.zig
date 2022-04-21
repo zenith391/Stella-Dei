@@ -480,7 +480,7 @@ const NkAllocator = struct {
 	/// allocation associated to its pointer.
 	allocationSizes: std.AutoHashMap(*anyopaque, usize),
 
-	fn nkAlloc(userdata: nk.nk_handle, old: ?*anyopaque, nsize: usize) callconv(.C) ?*anyopaque {
+	fn nkAlloc(userdata: nk.nk_handle, old: ?*anyopaque, nsize: nk.nk_size) callconv(.C) ?*anyopaque {
 		const self = @ptrCast(*NkAllocator, @alignCast(@alignOf(NkAllocator), userdata.ptr));
 		const allocator = self.allocationSizes.allocator;
 		if (old) |old_buf| {

@@ -25,7 +25,7 @@ void main() {
 		
 		vec3 diffuse = max(dot(normal, lightDir), 0.0) * lightColor;
 
-		float lengthDeviation = length(localPosition) - planetRadius + noiseValue() * 2;
+		float lengthDeviation = noiseValue() * 2;
 		float specularStrength = 0.2;
 		float specularPower = 32;
 		vec3 objectColor = vec3(0.5f, 0.4f, 0.3f) * (lengthDeviation / 40 + 1);
@@ -34,7 +34,6 @@ void main() {
 		if (waterElevation >= waterTreshold && interpData < 373.15) {
 			if (interpData < 273.15) {
 				objectColor = vec3(1.0f, 1.0f, 1.0f);
-				//objectColor = mix(objectColor, vec3(1.0f, 1.0f, 1.0f), min(waterElevation*1000, 1)); // ice
 			} else {
 				objectColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(waterElevation*0.15, 1)); // ocean blue
 				specularPower = mix(16, 256, min(waterElevation*1, 1));

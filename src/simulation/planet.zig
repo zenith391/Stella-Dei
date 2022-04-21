@@ -271,7 +271,7 @@ pub const Planet = struct {
 			std.log.info("seed 0x{x} -> noise offset: {d}, {d}, {d}", .{ seed, xOffset, yOffset, zOffset });
 			while (i < vert.len) : (i += 3) {
 				var point = Vec3.fromSlice(vert[i..]);
-				const value = radius + perlin.p3do(point.x() * 3 + xOffset, point.y() * 3 + yOffset, point.z() * 3 + zOffset, 4) * std.math.min(radius / 2, 10);
+				const value = radius + perlin.p3do(point.x() * 3 + xOffset, point.y() * 3 + yOffset, point.z() * 3 + zOffset, 4) * std.math.min(radius / 2, 15);
 
 				elevation[i / 3] = value;
 				waterElev[i / 3] = std.math.max(0, radius - value + 1);
@@ -297,6 +297,8 @@ pub const Planet = struct {
 		return planet;
 	}
 
+	const HEIGHT_EXAGGERATION_FACTOR = 25;
+
 	fn computeNormal(self: Planet, a: usize, aVec: Vec3) Vec3 {
 		@setFloatMode(.Optimized);
 		var sum = Vec3.zero();
@@ -312,12 +314,12 @@ pub const Planet = struct {
 			var i: usize = 1;
 			while (i < adjacentVertices.len) : (i += 1) {
 				const b = adjacentVertices[i-1];
-				const bVec = self.vertices[b].scale((self.elevation[b] + self.waterElevation[b]) / self.radius * 2);
+				const bVec = self.vertices[b].scale((self.elevation[b] + self.waterElevation[b] - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius);
 				const c = adjacentVertices[ i ];
-				const cVec = self.vertices[c].scale((self.elevation[c] + self.waterElevation[c]) / self.radius * 2);
+				const cVec = self.vertices[c].scale((self.elevation[c] + self.waterElevation[c] - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius);
 				var normal = bVec.sub(aVec).cross(cVec.sub(aVec)); // (b-a) x (c-a)
 				// if the normal is pointing inside
-				const aVecTranslate = aVec.add(normal);
+				const aVecTranslate = aVec.add(normal.norm());
 				if (aVecTranslate.dot(aVecTranslate) < aVec.dot(aVec)) {
 					normal = normal.scale(-1); // invert it
 				}
@@ -336,7 +338,7 @@ pub const Planet = struct {
 		// but it's not a problem as even if only a part of a normal's components are
 		// updated, the glitch is barely noticeable
 		for (self.vertices) |point, i| {
-			self.normals[i] = self.computeNormal(i, point.scale((self.elevation[i] + self.waterElevation[i]) / self.radius * 2));
+			self.normals[i] = self.computeNormal(i, point.scale((self.elevation[i] + self.waterElevation[i] - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius));
 		}
 	}
 
@@ -362,7 +364,9 @@ pub const Planet = struct {
 
 		// NOTE: this has really bad cache locality
 		for (self.vertices) |point, i| {
-			const transformedPoint = point.scale(self.elevation[i] + self.waterElevation[i]);
+			const totalElevation = self.elevation[i] + self.waterElevation[i];
+			const exaggeratedElev = (totalElevation - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius;
+			const transformedPoint = point.scale(exaggeratedElev);
 			const normal = self.normals[i];
 
 			bufData[i*8+0] = transformedPoint.x();
@@ -556,8 +560,17 @@ pub const Planet = struct {
 	}
 
 	pub fn deinit(self: Planet) void {
+		// wait for pending jobs
+		if (self.normalComputeJob) |job| {
+			while (!job.isCompleted()) {
+				std.atomic.spinLoopHint();
+			}
+		}
+
+		// de-allocate
 		self.lifeforms.deinit();
 		self.allocator.free(self.bufData);
+		self.allocator.free(self.normals);
 
 		self.allocator.free(self.elevation);
 		self.allocator.free(self.newWaterElevation);
