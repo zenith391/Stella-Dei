@@ -76,9 +76,10 @@ pub const PlayState = struct {
 		defer game.allocator.free(data);
 
 		// The seed is constant as it should not be changed between plays for consistency
-		var random = std.rand.DefaultPrng.init(1234);
+		var prng = std.rand.DefaultPrng.init(1234);
+		var randomPrng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
 
-		// Generate white noise (using `random`) to fill all of the cubemap's faces
+		// Generate white noise (using the PRNG) to fill all of the cubemap's faces
 		const faces = [_]Texture.CubemapFace { .PositiveX, .NegativeX, .PositiveY, .NegativeY, .PositiveZ, .NegativeZ };
 		for (faces) |face| {
 			var y: usize = 0;
@@ -87,7 +88,7 @@ pub const PlayState = struct {
 				while (x < 512) : (x += 1) {
 					// Currently, cubemap faces are in RGB format so only the red channel
 					// is filled. (TODO: switch to GRAY8 format)
-					data[(y*512+x)*3+0] = random.random().int(u8);
+					data[(y*512+x)*3+0] = prng.random().int(u8);
 				}
 			}
 			cubemap.setCubemapFace(face, 512, 512, data);
@@ -95,7 +96,8 @@ pub const PlayState = struct {
 
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
-		const planet = Planet.generate(game.allocator, 5, planetRadius) catch unreachable;
+		const seed = randomPrng.random().int(u32);
+		const planet = Planet.generate(game.allocator, 5, planetRadius, seed) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
@@ -152,7 +154,7 @@ pub const PlayState = struct {
 			var i: usize = 0;
 			while (i < simulationSteps) : (i += 1) {
 				if (self.debug_emitWater) {
-					planet.waterElevation[123] += 0.01 * self.timeScale;
+					planet.waterElevation[123] += 0.05 * self.timeScale;
 				}
 				if (self.debug_suckWater) {
 					var j: usize = 100;

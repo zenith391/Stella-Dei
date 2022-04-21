@@ -191,7 +191,7 @@ pub const Planet = struct {
 	}
 
 	/// Note: the data is allocated using the event loop's allocator
-	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize, radius: f32) !Planet {
+	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize, radius: f32, seed: u32) !Planet {
 		const zone = tracy.ZoneN(@src(), "Generate planet");
 		defer zone.End();
 
@@ -256,17 +256,17 @@ pub const Planet = struct {
 			var i: usize = 0;
 			const vert = subdivided.?.vertices;
 			defer allocator.free(vert);
+			const xOffset = @intToFloat(f32, (seed ^ 0xc0ffee11) >> 16) * 14;
+			const yOffset = @intToFloat(f32, (seed ^ 0xdeadbeef) & 0xFFFF) * 14;
+			const zOffset = @intToFloat(f32, ((@floatToInt(u32, xOffset + yOffset) ^ 0xcafebabe) >> 12) & 0xFFFF);
+			std.log.info("seed 0x{x} -> noise offset: {d}, {d}, {d}", .{ seed, xOffset, yOffset, zOffset });
 			while (i < vert.len) : (i += 3) {
 				var point = Vec3.fromSlice(vert[i..]);
-
-				const theta = std.math.acos(point.z());
-				const phi = std.math.atan2(f32, point.y(), point.x());
-				// TODO: 3D perlin (or simplex) noise for correct looping
-				const value = radius + perlin.p2do(theta * 3 + 74, phi * 3 + 42, 4) * (radius / 20);
+				const value = radius + perlin.p3do(point.x() * 3 + xOffset, point.y() * 3 + yOffset, point.z() * 3 + zOffset, 4) * std.math.min(radius / 2, 10);
 
 				elevation[i / 3] = value;
 				waterElev[i / 3] = std.math.max(0, value - radius);
-				temperature[i / 3] = (perlin.p2do(theta * 10 + 1, phi * 10 + 1, 6) + 1) * 300; // 0°C
+				temperature[i / 3] = 273.15;
 				vertices[i / 3] = point.norm();
 			}
 		}
@@ -402,9 +402,10 @@ pub const Planet = struct {
 					// So, we get heat transfer in J
 					const heatTransfer = watt * dt;
 
+					const neighbourHeatCapacity = self.computeHeatCapacity(neighbourIndex, meanPointArea);
 					// it is assumed neighbours are made of the exact same materials
 					// as this point
-					const temperatureGain = heatTransfer / heatCapacity; // K
+					const temperatureGain = heatTransfer / neighbourHeatCapacity; // K
 					newTemp[neighbourIndex] += temperatureGain;
 					newTemp[i] -= temperatureGain;
 				}
