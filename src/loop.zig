@@ -159,7 +159,7 @@ pub const EventLoop = struct {
 				resume node.data.frame;
 			} else {
                 // sleep for 5 ms to avoid overloading the CPU
-                std.time.sleep(5 * std.time.ns_per_ms);
+                std.time.sleep(1 * std.time.ns_per_ms);
             }
 		}
 	}

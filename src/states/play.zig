@@ -97,7 +97,7 @@ pub const PlayState = struct {
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u32);
-		const planet = Planet.generate(game.allocator, 6, planetRadius, seed) catch unreachable;
+		const planet = Planet.generate(game.allocator, 5, planetRadius, seed) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {

@@ -509,6 +509,36 @@ pub const Planet = struct {
 			}
 		}
 	}
+	
+	fn simulateWater(self: *Planet, loop: *EventLoop, options: SimulationOptions, numIterations: usize, start: usize, end: usize) void {
+		loop.yield();
+		const zone = tracy.ZoneN(@src(), "Water Simulation");
+		defer zone.End();
+		const newElev = self.newWaterElevation;
+		
+		// Do some liquid simulation
+		var i: usize = start;
+		while (i < end) : (i += 1) {
+			// only fluid if it's not ice
+			if (self.temperature[i] > 273.15 or true) {
+				const height = self.waterElevation[i];
+				const totalHeight = self.elevation[i] + height;
+
+				const factor = 6 / options.timeScale;
+				var shared = height / factor / 10000 / @intToFloat(f32, numIterations);
+				var numShared: f32 = 0;
+				std.debug.assert(self.waterElevation[i] >= 0);
+
+				numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
+				numShared += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight);
+				numShared += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight);
+				numShared += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight);
+				numShared += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight);
+				numShared += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight);
+				newElev[i] -= numShared;
+			}
+		}
+	}
 
 	pub fn simulate(self: *Planet, loop: *EventLoop, solarVector: Vec3, options: SimulationOptions) void {
 		//const zone = tracy.ZoneN(@src(), "Simulate planet");
@@ -520,9 +550,9 @@ pub const Planet = struct {
 			newTemp[i] = std.math.max(0, self.temperature[i]); // temperature may never go below 0°K
 		}
 
-		var jobs: [32]@Frame(simulateTemperature) = undefined;
-		const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
 		{
+			var jobs: [32]@Frame(simulateTemperature) = undefined;
+			const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
 			const pointCount = self.vertices.len;
 			var i: usize = 0;
 			while (i < parallelness) : (i += 1) {
@@ -540,39 +570,31 @@ pub const Planet = struct {
 		// Finish by swapping the new temperature
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
 
-		const zone = tracy.ZoneN(@src(), "Water Simulation");
-		defer zone.End();
 		var iteration: usize = 0;
 		var numIterations: usize = 2 + @floatToInt(usize, options.timeScale / 5000);
 		while (iteration < numIterations) : (iteration += 1) {
 			const newElev = self.newWaterElevation;
 			std.mem.copy(f32, newElev, self.waterElevation);
 
-			// Do some liquid simulation
-			for (self.vertices) |_, i| {
-				// only fluid if it's not ice
-				if (self.temperature[i] > 273.15 or true) {
-					const height = self.waterElevation[i];
-					const totalHeight = self.elevation[i] + height;
+			{
+				var jobs: [32]@Frame(simulateWater) = undefined;
+				const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+				const pointCount = self.vertices.len;
+				var i: usize = 0;
+				while (i < parallelness) : (i += 1) {
+					const start = pointCount / parallelness * i;
+					const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1) - 1;
+					jobs[i] = async self.simulateWater(loop, options, numIterations, start, end);
+				}
 
-					const factor = 6 / options.timeScale;
-					var shared = height / factor / 10000 / @intToFloat(f32, numIterations);
-					var numShared: f32 = 0;
-					std.debug.assert(self.waterElevation[i] >= 0);
-
-					numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
-					numShared += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight);
-					numShared += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight);
-					numShared += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight);
-					numShared += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight);
-					numShared += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight);
-					newElev[i] -= numShared;
+				i = 0;
+				while (i < parallelness) : (i += 1) {
+					await jobs[i];
 				}
 			}
 
 			std.mem.swap([]f32, &self.waterElevation, &self.newWaterElevation);
 		}
-		// std.log.info("water elevation at 123: {d}", .{ newElev[123] });
 	}
 
 	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32) f32 {
