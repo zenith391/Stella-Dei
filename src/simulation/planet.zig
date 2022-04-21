@@ -275,7 +275,7 @@ pub const Planet = struct {
 
 				elevation[i / 3] = value;
 				waterElev[i / 3] = std.math.max(0, radius - value + 1);
-				temperature[i / 3] = 273.15;
+				temperature[i / 3] = 303.15;
 				vertices[i / 3] = point.norm();
 			}
 		}
@@ -427,15 +427,11 @@ pub const Planet = struct {
 		return heatCapacity;
 	}
 
-	pub fn simulate(self: *Planet, solarVector: Vec3, options: SimulationOptions) void {
-		const zone = tracy.ZoneN(@src(), "Simulate planet");
+	fn simulateTemperature(self: *Planet, loop: *EventLoop, solarVector: Vec3, options: SimulationOptions, start: usize, end: usize) void {
+		loop.yield();
+		const zone = tracy.ZoneN(@src(), "Temperature Simulation");
 		defer zone.End();
-
 		const newTemp = self.newTemperature;
-		// Fill newTemp with the current temperatures
-		for (self.vertices) |_, i| {
-			newTemp[i] = std.math.max(0, self.temperature[i]); // temperature may never go below 0°K
-		}
 
 		// Number of seconds that passes in 1 simulation step
 		const dt = 1.0 / 60.0 * options.timeScale;
@@ -443,8 +439,10 @@ pub const Planet = struct {
 		// The surface of the planet (approx.) divided by the numbers of points
 		const meanPointArea = (4 * std.math.pi * (self.radius * 1000) * (self.radius * 1000)) / @intToFloat(f32, self.vertices.len);
 
+		var i: usize = start;
 		// NEW(TM) heat simulation
-		for (self.vertices) |vert, i| {
+		while (i < end) : (i += 1) {
+			const vert = self.vertices[i];
 			// Temperature in the current cell
 			const temp = self.temperature[i];
 
@@ -510,10 +508,40 @@ pub const Planet = struct {
 				newTemp[i] -= temperatureLoss;
 			}
 		}
+	}
+
+	pub fn simulate(self: *Planet, loop: *EventLoop, solarVector: Vec3, options: SimulationOptions) void {
+		//const zone = tracy.ZoneN(@src(), "Simulate planet");
+		//defer zone.End();
+
+		const newTemp = self.newTemperature;
+		// Fill newTemp with the current temperatures
+		for (self.vertices) |_, i| {
+			newTemp[i] = std.math.max(0, self.temperature[i]); // temperature may never go below 0°K
+		}
+
+		var jobs: [32]@Frame(simulateTemperature) = undefined;
+		const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+		{
+			const pointCount = self.vertices.len;
+			var i: usize = 0;
+			while (i < parallelness) : (i += 1) {
+				const start = pointCount / parallelness * i;
+				const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1) - 1;
+				jobs[i] = async self.simulateTemperature(loop, solarVector, options, start, end);
+			}
+
+			i = 0;
+			while (i < parallelness) : (i += 1) {
+				await jobs[i];
+			}
+		}
 
 		// Finish by swapping the new temperature
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
 
+		const zone = tracy.ZoneN(@src(), "Water Simulation");
+		defer zone.End();
 		var iteration: usize = 0;
 		var numIterations: usize = 2 + @floatToInt(usize, options.timeScale / 5000);
 		while (iteration < numIterations) : (iteration += 1) {
@@ -565,6 +593,7 @@ pub const Planet = struct {
 			while (!job.isCompleted()) {
 				std.atomic.spinLoopHint();
 			}
+			job.deinit();
 		}
 
 		// de-allocate

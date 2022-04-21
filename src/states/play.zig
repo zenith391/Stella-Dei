@@ -97,7 +97,7 @@ pub const PlayState = struct {
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u32);
-		const planet = Planet.generate(game.allocator, 5, planetRadius, seed) catch unreachable;
+		const planet = Planet.generate(game.allocator, 6, planetRadius, seed) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
@@ -148,34 +148,7 @@ pub const PlayState = struct {
 		);
 
 		if (!self.paused) {
-			// TODO: variable simulation step
-
-			const simulationSteps = 1;
-			var i: usize = 0;
-			while (i < simulationSteps) : (i += 1) {
-				if (self.debug_emitWater) {
-					planet.waterElevation[123] += 0.05 * self.timeScale / (self.timeScale / 10);
-				}
-				if (self.debug_suckWater) {
-					var j: usize = 100;
-					while (j < 150) : (j += 1) {
-						planet.waterElevation[j] = 0;
-					}
-				}
-
-				// The planet is simulated with a time scale divided by the number
-				// of simulation steps. So that if there are more steps, the same
-				// time speed is kept but the precision is increased.
-				planet.simulate(solarVector, .{
-					.solarConstant = self.solarConstant,
-					.conductivity = self.conductivity,
-					.timeScale = self.timeScale / simulationSteps,
-				});
-			}
 			planet.upload(game.loop);
-
-			// TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
-			self.gameTime += 0.016 * self.timeScale;
 		}
 
 		const program = renderer.terrainProgram;
@@ -219,6 +192,50 @@ pub const PlayState = struct {
 				modelMat);
 			
 			gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
+		}
+	}
+
+	// As updated slices (temperature and water elevation) are updated by a
+	// swap. This is atomic.
+	pub fn update(self: *PlayState, game: *Game) void {
+		const planet = &self.planet;
+
+		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
+		var sunTheta: f32 = std.math.pi / 2.0;
+		var solarVector = Vec3.new(
+			std.math.cos(sunPhi) * std.math.sin(sunTheta),
+			std.math.sin(sunPhi) * std.math.sin(sunTheta),
+			std.math.cos(sunTheta)
+		);
+
+		if (!self.paused) {
+			// TODO: variable simulation step
+
+			const simulationSteps = 1;
+			var i: usize = 0;
+			while (i < simulationSteps) : (i += 1) {
+				if (self.debug_emitWater) {
+					planet.waterElevation[123] += 0.05 * self.timeScale / (self.timeScale / 10);
+				}
+				if (self.debug_suckWater) {
+					var j: usize = 100;
+					while (j < 150) : (j += 1) {
+						planet.waterElevation[j] = 0;
+					}
+				}
+
+				// The planet is simulated with a time scale divided by the number
+				// of simulation steps. So that if there are more steps, the same
+				// time speed is kept but the precision is increased.
+				planet.simulate(game.loop, solarVector, .{
+					.solarConstant = self.solarConstant,
+					.conductivity = self.conductivity,
+					.timeScale = self.timeScale / simulationSteps,
+				});
+			}
+
+			// TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
+			self.gameTime += 0.016 * self.timeScale;
 		}
 	}
 
@@ -327,7 +344,8 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 30, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point #{d}", .{ point }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Dst. from center: {d:.1} km", .{ planet.elevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			// sea level is meant to be = radius - 1
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius + 1 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Elevation: {d:.1} km", .{ planet.waterElevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);

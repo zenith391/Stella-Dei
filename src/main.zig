@@ -148,6 +148,25 @@ fn render(window: glfw.Window) void {
 	renderer.endUI();
 }
 
+fn updateLoop(loop: *EventLoop, window: glfw.Window) void {
+	loop.yield();
+	while (!window.shouldClose()) {
+		// Call the update() function of the current game state, if it has one.
+		inline for (std.meta.fields(GameState)) |field| {
+			if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
+				if (comptime @hasDecl(field.field_type, "update")) {
+					var timer = std.time.Timer.start() catch unreachable; // this just assumes a clock is available
+					@field(game.state, field.name).update(&game);
+					const elapsed = timer.read();
+					std.time.sleep(16 * std.time.ns_per_ms -| elapsed);
+					break;
+				}
+			}
+		}
+		loop.yield();
+	}
+}
+
 const perlin = @import("perlin.zig").p2d;
 
 /// This is used by zig-opengl library to load OpenGL functions from GLFW
@@ -190,16 +209,26 @@ pub fn main() !void {
 	defer renderer.deinit();
 	
 	var loop = EventLoop.init();
+
 	loop.beginEvent(); // begin main() event to avoid the loop stopping too soon
 	defer loop.endEvent();
 	try loop.start(allocator);
-
 	game = try Game.init(allocator, window, &renderer, &loop);
 	
 	// Start with main menu
 	// To see the code, look in src/states/main_menu.zig
 	nosuspend game.setState(MainMenuState);
 	defer game.deinit();
+
+	var updateLoopJob = try Job(void).create(&loop);
+	defer {
+		// 'await' without making the function async
+		while (!updateLoopJob.isCompleted()) {
+			std.atomic.spinLoopHint();
+		}
+		updateLoopJob.deinit();
+	}
+	try updateLoopJob.call(updateLoop, .{ &loop, window });
 
 	while (!window.shouldClose()) {
 		try glfw.makeContextCurrent(window);
