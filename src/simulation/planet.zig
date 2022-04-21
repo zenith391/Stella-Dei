@@ -332,7 +332,7 @@ pub const Planet = struct {
 	pub const SimulationOptions = struct {
 		solarConstant: f32,
 		conductivity: f32,
-		/// Currently, time scale greater than 1 may result in lots of bugs
+		/// Currently, time scale greater than 1000 may result in lots of bugs
 		timeScale: f32 = 1,
 	};
 
@@ -347,7 +347,7 @@ pub const Planet = struct {
 		}
 
 		// Number of seconds that passes in 1 simulation step
-		const dt = 1.0 / 60.0 * options.timeScale * 100;
+		const dt = 1.0 / 60.0 * options.timeScale;
 
 		// The surface of the planet (approx.) divided by the numbers of points
 		const meanPointArea = (4 * std.math.pi * (self.radius * 1000) * (self.radius * 1000)) / @intToFloat(f32, self.vertices.len);
@@ -425,7 +425,8 @@ pub const Planet = struct {
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
 
 		var iteration: usize = 0;
-		while (iteration < 2) : (iteration += 1) {
+		var numIterations: usize = 2 + @floatToInt(usize, options.timeScale / 500);
+		while (iteration < numIterations) : (iteration += 1) {
 			const newElev = self.newWaterElevation;
 			std.mem.copy(f32, newElev, self.waterElevation);
 
@@ -436,21 +437,18 @@ pub const Planet = struct {
 					const height = self.waterElevation[i];
 					const totalHeight = self.elevation[i] + height;
 
-					const factor = 6 / 0.5 / options.timeScale;
-					var shared = height / factor / 10;
+					const factor = 6 / options.timeScale;
+					var shared = height / factor / 10000 / @intToFloat(f32, numIterations);
 					var numShared: f32 = 0;
-					if (self.waterElevation[i] < 0) {
-						std.log.warn("WTFFFF", .{});
-						std.process.exit(0);
-					}
+					std.debug.assert(self.waterElevation[i] >= 0);
 
-					if (true) {numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
+					numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight);
 					numShared += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight);
-					newElev[i] -= numShared;}
+					newElev[i] -= numShared;
 				}
 			}
 
@@ -463,10 +461,7 @@ pub const Planet = struct {
 		const targetTotalHeight = self.elevation[target] + self.waterElevation[target];
 		if (totalHeight > targetTotalHeight) {
 			var transmitted = std.math.min(shared, shared * (totalHeight - targetTotalHeight) / 50);
-			if (transmitted < 0) {
-				std.log.info("shared: {d}, total height: {d}, target total height: {d} difference: {d}", .{ shared, totalHeight, targetTotalHeight, totalHeight - targetTotalHeight });
-				std.process.exit(0);
-			}
+			std.debug.assert(transmitted >= 0);
 			self.newWaterElevation[target] += transmitted;
 			return transmitted;
 		} else {
