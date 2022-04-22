@@ -53,10 +53,12 @@ pub const PlayState = struct {
 	/// 0 except it preserves the time scale value.
 	paused: bool = false,
 
-	/// When enabled, emits water at point 123
+	/// When enabled, emits water at selected point on click
 	debug_emitWater: bool = false,
-	/// When enabled, drains all water at points 100 to 150
+	/// When enabled, drains all water near selected point on click
 	debug_suckWater: bool = false,
+	/// When enabled, place lifeform on click
+	debug_placeLifeform: bool = false,
 
 	const PlanetDisplayMode = enum(c_int) {
 		Normal = 0,
@@ -182,15 +184,19 @@ pub const PlayState = struct {
 		entity.use();
 		entity.setUniformMat4("projMatrix",
 			Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
-		program.setUniformMat4("viewMatrix",
+		entity.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
 		for (planet.lifeforms.items) |lifeform| {
-			const modelMat = Mat4.recompose(lifeform.position, Vec3.new(0, 0, 0), Vec3.new(1, 1, 1));
-			program.setUniformMat4("modelMatrix",
+			const modelMat = Mat4.recompose(lifeform.position, Vec3.new(0, 0, 0), Vec3.new(10, 10, 10));
+			entity.setUniformMat4("modelMatrix",
 				modelMat);
+			entity.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
+			entity.setUniformVec3("lightDir", solarVector);
 			
-			gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
+			const mesh = lifeform.getMesh();
+			gl.bindVertexArray(mesh.vao);
+			gl.drawArrays(gl.TRIANGLES, 0, mesh.numTriangles);
 		}
 	}
 
@@ -241,6 +247,20 @@ pub const PlayState = struct {
 	}
 
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {
+		if (self.debug_placeLifeform and button == .left) {
+			const planet = &self.planet;
+			const point = self.selectedPoint;
+			const pointPos = planet.vertices[point].scale(planet.elevation[point] + 0.05);
+			if (Lifeform.init(game.allocator, pointPos, .Rabbit)) |lifeform| {
+				planet.lifeforms.append(lifeform) catch unreachable;
+			} else |err| {
+				std.log.err("Could not load Rabbit: {s}", .{ @errorName(err) });
+				if (@errorReturnTrace()) |trace| {
+					std.debug.dumpStackTrace(trace.*);
+				}
+			}
+		}
+
 		if (button == .right) {
 			const cursorPos = game.window.getCursorPos() catch unreachable;
 			self.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos));
@@ -283,7 +303,7 @@ pub const PlayState = struct {
 		const viewMatrix = Mat4.lookAt(self.cameraPos, Vec3.new(0, 0, 0), Vec3.new(0, 0, 1));
 		cursorVector = viewMatrix.inv().mulByVec4(cursorVector);
 		const worldSpaceCursor = Vec3.new(cursorVector.x(), cursorVector.y(), cursorVector.z());
-		std.log.info("{d}", .{ worldSpaceCursor });
+		//std.log.info("{d}", .{ worldSpaceCursor });
 
 		// Select the closest point that the camera is facing.
 		// To do this, it gets the point that has the lowest distance to the
@@ -305,7 +325,7 @@ pub const PlayState = struct {
 		const ctx = &renderer.nkContext;
 		nk.nk_style_default(ctx);
 
-		if (nk.nk_begin(ctx, "Planet Control", .{ .x = 100, .y = 100, .w = 600, .h = 150}, 
+		if (nk.nk_begin(ctx, "Planet Control", .{ .x = 100, .y = 100, .w = 450, .h = 320}, 
 			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_MOVABLE | nk.NK_WINDOW_TITLE | nk.NK_WINDOW_SCALABLE) != 0) {
 			// currently unusable
 			//nk.nk_layout_row_dynamic(ctx, 50, 1);
@@ -327,13 +347,8 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 50, 2);
 			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
 			self.debug_suckWater = nk.nk_check_label(ctx, "Debug: Suck Water", @boolToInt(self.debug_suckWater)) != 0;
-
-			if (nk.nk_button_label(&renderer.nkContext, "Place lifeform") != 0) {
-				const point = self.selectedPoint;
-				const planet = &self.planet;
-				const pointPos = planet.vertices[point].scale(planet.elevation[point] + 0.05);
-				planet.lifeforms.append(Lifeform.init(pointPos)) catch unreachable;
-			}
+			nk.nk_layout_row_dynamic(ctx, 50, 1);
+			self.debug_placeLifeform = nk.nk_check_label(ctx, "Debug: Place Life", @boolToInt(self.debug_placeLifeform)) != 0;
 		}
 		nk.nk_end(ctx);
 
