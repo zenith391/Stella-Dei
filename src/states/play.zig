@@ -147,9 +147,7 @@ pub const PlayState = struct {
 			std.math.cos(sunTheta)
 		);
 
-		if (!self.paused) {
-			planet.upload(game.loop);
-		}
+		planet.upload(game.loop);
 
 		const program = renderer.terrainProgram;
 		const zFar = planet.radius * 5;
@@ -171,6 +169,7 @@ pub const PlayState = struct {
 		program.setUniformVec3("viewPos", self.cameraPos);
 		program.setUniformFloat("planetRadius", planet.radius);
 		program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display temperature
+		program.setUniformInt("selectedVertex", @intCast(c_int, self.selectedPoint));
 
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.cubemap.texture);
@@ -182,7 +181,7 @@ pub const PlayState = struct {
 		const entity = renderer.entityProgram;
 		entity.use();
 		entity.setUniformMat4("projMatrix",
-			Mat4.perspective(70, size.x() / size.y(), 0.1, 1000.0));
+			Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
@@ -208,22 +207,24 @@ pub const PlayState = struct {
 			std.math.cos(sunTheta)
 		);
 
+		if (self.debug_emitWater and game.window.getMouseButton(.left) == .press) {
+			if (planet.waterElevation[self.selectedPoint] < 50) {
+				planet.waterElevation[self.selectedPoint] += 0.05 * self.timeScale / (self.timeScale / 10);
+			}
+		}
+		if (self.debug_suckWater and game.window.getMouseButton(.left) == .press) {
+			planet.waterElevation[self.selectedPoint] = 0;
+			for (planet.getNeighbours(self.selectedPoint)) |idx| {
+				planet.waterElevation[idx] = 0;
+			}
+		}
+
 		if (!self.paused) {
 			// TODO: variable simulation step
 
 			const simulationSteps = 1;
 			var i: usize = 0;
 			while (i < simulationSteps) : (i += 1) {
-				if (self.debug_emitWater) {
-					planet.waterElevation[123] += 0.05 * self.timeScale / (self.timeScale / 10);
-				}
-				if (self.debug_suckWater) {
-					var j: usize = 100;
-					while (j < 150) : (j += 1) {
-						planet.waterElevation[j] = 0;
-					}
-				}
-
 				// The planet is simulated with a time scale divided by the number
 				// of simulation steps. So that if there are more steps, the same
 				// time speed is kept but the precision is increased.
@@ -251,20 +252,6 @@ pub const PlayState = struct {
 				self.displayMode = .Normal;
 			}
 		}
-
-		// TODO: avoid interfering with the UI system
-		if (button == .left) {
-			const pos = self.cameraPos.norm().scale(self.planet.radius);
-			var closestPointDist: f32 = std.math.inf_f32;
-			var closestPoint: usize = undefined;
-			for (self.planet.vertices) |point, i| {
-				if (point.distance(pos) < closestPointDist) {
-					closestPoint = i;
-					closestPointDist = point.distance(pos);
-				}
-			}
-			self.selectedPoint = closestPoint;
-		}
 	}
 
 	pub fn mouseScroll(self: *PlayState, _: *Game, yOffset: f64) void {
@@ -278,15 +265,30 @@ pub const PlayState = struct {
 			minDistance, maxDistance);
 	}
 
-	// NOTE: `mouseMoved` event handler is not yet implemented
-	pub fn mouseMoved(self: *PlayState, _: *Game, x: f32, y: f32) void {
-		_ = x;
-		_ = y;
+	pub fn mouseMoved(self: *PlayState, game: *Game, x: f32, y: f32) void {
+		const windowSize = game.window.getFramebufferSize() catch unreachable;
+		// Transform screen coordinates to Normalized Device Space coordinates
+		const ndsX = 2 * x / @intToFloat(f32, windowSize.width) - 1;
+		const ndsY = 1 - 2 * y / @intToFloat(f32, windowSize.height);
+		var cursorVector = za.Vec4.new(ndsX, ndsY, -1, 1);
+
+		// 'unproject' the coordinates by using the inversed projection matrix
+		const zFar = self.planet.radius * 5;
+		const zNear = zFar / 10000;
+		const projMatrix = Mat4.perspective(70, @intToFloat(f32, windowSize.width) / @intToFloat(f32, windowSize.height), zNear, zFar);
+		cursorVector = projMatrix.inv().mulByVec4(cursorVector);
+
+		// put to world space by multiplying by inverse of view matrix
+		cursorVector.data[2] = -1; cursorVector.data[3] = 0; // we only want directions so set z and w
+		const viewMatrix = Mat4.lookAt(self.cameraPos, Vec3.new(0, 0, 0), Vec3.new(0, 0, 1));
+		cursorVector = viewMatrix.inv().mulByVec4(cursorVector);
+		const worldSpaceCursor = Vec3.new(cursorVector.x(), cursorVector.y(), cursorVector.z());
+		std.log.info("{d}", .{ worldSpaceCursor });
 
 		// Select the closest point that the camera is facing.
 		// To do this, it gets the point that has the lowest distance to the
 		// position of the camera.
-		const pos = self.cameraPos.norm().scale(self.planet.radius);
+		const pos = self.cameraPos.add(worldSpaceCursor.scale(self.cameraPos.length()/2)).norm().scale(self.planet.radius + 10);
 		var closestPointDist: f32 = std.math.inf_f32;
 		var closestPoint: usize = undefined;
 		for (self.planet.vertices) |point, i| {

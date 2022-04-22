@@ -117,6 +117,21 @@ fn mouseScroll(window: glfw.Window, xOffset: f64, yOffset: f64) void {
 	}
 }
 
+fn cursorPosCallback(window: glfw.Window, xpos: f64, ypos: f64) void {
+	_ = window;
+	inline for (std.meta.fields(GameState)) |field| {
+		// if it is the current game state
+		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
+			// and it has mouseMoved()
+			if (comptime @hasDecl(field.field_type, "mouseMoved")) {
+				// call it
+				@field(game.state, field.name).mouseMoved(&game, @floatCast(f32, xpos), @floatCast(f32, ypos));
+				return;
+			}
+		}
+	}
+}
+
 fn render(window: glfw.Window) void {
 	game.audio.update();
 
@@ -199,6 +214,7 @@ pub fn main() !void {
 		.context_version_minor = 6,
 	});
 	defer window.destroy();
+	window.setCursorPosCallback(cursorPosCallback);
 	window.setMouseButtonCallback(mouseButtonCallback);
 	window.setScrollCallback(mouseScroll);
 

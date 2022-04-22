@@ -11,6 +11,7 @@ in vec3 normal;
 in vec3 localPosition;
 in float interpData;
 in float waterElevation;
+in float outSelected;
 
 out vec4 fragColor;
 
@@ -47,6 +48,9 @@ void main() {
 		vec3 specular = specularStrength * spec * lightColor;
 
 		vec3 result = (ambient + diffuse + specular) * objectColor;
+		if (outSelected > 0) {
+			result = mix(result, vec3(0.1f, 0.1f, 0.9f), outSelected / 2);
+		}
 		fragColor = vec4(result, 1.0f);
 	} else if (displayMode == 1) {
 		vec3 cold = vec3(0.0f, 0.0f, 1.0f);

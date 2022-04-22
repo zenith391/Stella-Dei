@@ -302,14 +302,7 @@ pub const Planet = struct {
 	fn computeNormal(self: Planet, a: usize, aVec: Vec3) Vec3 {
 		@setFloatMode(.Optimized);
 		var sum = Vec3.zero();
-		const adjacentVertices = [_]usize {
-			self.getNeighbour(a, .ForwardLeft),
-			self.getNeighbour(a, .BackwardLeft),
-			self.getNeighbour(a, .Left),
-			self.getNeighbour(a, .ForwardRight),
-			self.getNeighbour(a, .BackwardRight),
-			self.getNeighbour(a, .Right),
-		};
+		const adjacentVertices = self.getNeighbours(a);
 		{
 			var i: usize = 1;
 			while (i < adjacentVertices.len) : (i += 1) {
@@ -321,7 +314,7 @@ pub const Planet = struct {
 				// if the normal is pointing inside
 				const aVecTranslate = aVec.add(normal.norm());
 				if (aVecTranslate.dot(aVecTranslate) < aVec.dot(aVec)) {
-					normal = normal.scale(-1); // invert it
+					normal = normal.negate(); // invert the normal
 				}
 				sum = sum.add(normal);
 			}
@@ -403,6 +396,17 @@ pub const Planet = struct {
 	pub inline fn getNeighbour(self: Planet, idx: usize, direction: Direction) usize {
 		const directionInt = @enumToInt(direction);
 		return self.verticesNeighbours[idx][directionInt];
+	}
+
+	pub inline fn getNeighbours(self: Planet, idx: usize) [6]usize {
+		return [6]usize {
+			self.getNeighbour(idx, .ForwardLeft),
+			self.getNeighbour(idx, .BackwardLeft),
+			self.getNeighbour(idx, .Left),
+			self.getNeighbour(idx, .ForwardRight),
+			self.getNeighbour(idx, .BackwardRight),
+			self.getNeighbour(idx, .Right),
+		};
 	}
 
 	pub const SimulationOptions = struct {
