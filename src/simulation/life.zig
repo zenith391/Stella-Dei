@@ -9,6 +9,7 @@ var rabbitMesh: ?ObjLoader.Mesh = null;
 
 pub const Lifeform = struct {
 	position: Vec3,
+	velocity: Vec3 = Vec3.zero(),
 	kind: Kind,
 
 	pub const Kind = enum {
@@ -34,8 +35,35 @@ pub const Lifeform = struct {
 		};
 	}
 
-	pub fn aiStep(self: Lifeform) void {
-		_ = self;
-		// TODO
+	pub fn aiStep(self: *Lifeform, planet: *Planet) bool {
+		self.position.data[1] += 5;
+		self.position = self.position.add(self.velocity);
+		const pointIdx = planet.getNearestPointTo(self.position);
+		const point = planet.transformedPoints[pointIdx];
+		if (self.position.length() < point.length()) {
+			self.position = self.position.norm().scale(point.length());
+			self.velocity = Vec3.zero();
+		} else {
+			//const baseLength = self.position.length();
+			//self.position = self.position.norm().scale(baseLength-1);
+			// TODO: accurate gravity
+			self.velocity = self.velocity.add(
+				self.position.norm().negate() // towards the planet
+			);
+		}
+		
+		// Rabbits die at 60°C
+		if (planet.temperature[pointIdx] > 273.15 + 60.0) {
+			const index = blk: {
+				for (planet.lifeforms.items) |*lifeform, idx| {
+					if (lifeform == self) break :blk idx;
+				}
+				unreachable;
+			};
+
+			_ = planet.lifeforms.swapRemove(index);
+			return true;
+		}
+		return false;
 	}
 };

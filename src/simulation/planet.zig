@@ -56,6 +56,9 @@ pub const Planet = struct {
 	/// Normals are computed every 10 frames to avoid overloading CPU for
 	/// not much
 	normals: []Vec3,
+	/// self.vertices transformed by upload(), for easy use by functions like
+	/// getNearestPointTo()
+	transformedPoints: []Vec3,
 	normalComputeJob: ?*Job(void) = null,
 	/// The number of time upload() has been called, this is used to keep track
 	/// of when to update the normals
@@ -259,6 +262,7 @@ pub const Planet = struct {
 			.lifeforms = std.ArrayList(Lifeform).init(allocator),
 			.bufData = try allocator.alloc(f32, vertices.len * 8),
 			.normals = try allocator.alloc(Vec3, vertices.len),
+			.transformedPoints = try allocator.alloc(Vec3, vertices.len),
 		};
 
 		{
@@ -361,6 +365,7 @@ pub const Planet = struct {
 			const exaggeratedElev = (totalElevation - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius;
 			const transformedPoint = point.scale(exaggeratedElev);
 			const normal = self.normals[i];
+			self.transformedPoints[i] = transformedPoint;
 
 			bufData[i*8+0] = transformedPoint.x();
 			bufData[i*8+1] = transformedPoint.y();
@@ -407,6 +412,19 @@ pub const Planet = struct {
 			self.getNeighbour(idx, .BackwardRight),
 			self.getNeighbour(idx, .Right),
 		};
+	}
+
+	pub fn getNearestPointTo(self: Planet, position: Vec3) usize {
+		var closestPointDist: f32 = std.math.inf_f32;
+		var closestPoint: usize = undefined;
+		for (self.transformedPoints) |point, i| {
+			const distance = point.distance(position);
+			if (distance < closestPointDist) {
+				closestPoint = i;
+				closestPointDist = distance;
+			}
+		}
+		return closestPoint;
 	}
 
 	pub const SimulationOptions = struct {
@@ -599,6 +617,12 @@ pub const Planet = struct {
 
 			std.mem.swap([]f32, &self.waterElevation, &self.newWaterElevation);
 		}
+
+		for (self.lifeforms.items) |*lifeform| {
+			if (lifeform.aiStep(self)) {
+				break; // break when one lifeform dies to avoid bugs
+			}
+		}
 	}
 
 	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32) f32 {
@@ -626,6 +650,7 @@ pub const Planet = struct {
 		self.lifeforms.deinit();
 		self.allocator.free(self.bufData);
 		self.allocator.free(self.normals);
+		self.allocator.free(self.transformedPoints);
 
 		self.allocator.free(self.elevation);
 		self.allocator.free(self.newWaterElevation);

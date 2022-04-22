@@ -188,7 +188,7 @@ pub const PlayState = struct {
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
 		for (planet.lifeforms.items) |lifeform| {
-			const modelMat = Mat4.recompose(lifeform.position, Vec3.new(0, 0, 0), Vec3.new(10, 10, 10));
+			const modelMat = Mat4.recompose(lifeform.position, Vec3.new(0, 0, 0), Vec3.new(1, 1, 1));
 			entity.setUniformMat4("modelMatrix",
 				modelMat);
 			entity.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
@@ -250,7 +250,7 @@ pub const PlayState = struct {
 		if (self.debug_placeLifeform and button == .left) {
 			const planet = &self.planet;
 			const point = self.selectedPoint;
-			const pointPos = planet.vertices[point].scale(planet.elevation[point] + 0.05);
+			const pointPos = planet.transformedPoints[point];
 			if (Lifeform.init(game.allocator, pointPos, .Rabbit)) |lifeform| {
 				planet.lifeforms.append(lifeform) catch unreachable;
 			} else |err| {
@@ -311,7 +311,7 @@ pub const PlayState = struct {
 		const pos = self.cameraPos.add(worldSpaceCursor.scale(self.cameraPos.length()/2)).norm().scale(self.planet.radius + 10);
 		var closestPointDist: f32 = std.math.inf_f32;
 		var closestPoint: usize = undefined;
-		for (self.planet.vertices) |point, i| {
+		for (self.planet.transformedPoints) |point, i| {
 			if (point.distance(pos) < closestPointDist) {
 				closestPoint = i;
 				closestPointDist = point.distance(pos);
