@@ -77,6 +77,8 @@ pub const Planet = struct {
 	newTemperature: []f32,
 	newWaterElevation: []f32,
 	lifeforms: std.ArrayList(Lifeform),
+	/// Lock used to avoid concurrent reads and writes to lifeforms arraylist
+	lifeformsLock: std.Thread.Mutex = .{},
 
 	// 0xFFFFFFFF in the first entry considered null and not filled
 	/// List of neighbours for a vertex. A vertex has 6 neighbours that arrange in hexagons
@@ -579,7 +581,7 @@ pub const Planet = struct {
 			var i: usize = 0;
 			while (i < parallelness) : (i += 1) {
 				const start = pointCount / parallelness * i;
-				const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1) - 1;
+				const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1);
 				jobs[i] = async self.simulateTemperature(loop, solarVector, options, start, end);
 			}
 
@@ -605,7 +607,7 @@ pub const Planet = struct {
 				var i: usize = 0;
 				while (i < parallelness) : (i += 1) {
 					const start = pointCount / parallelness * i;
-					const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1) - 1;
+					const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1);
 					jobs[i] = async self.simulateWater(loop, options, numIterations, start, end);
 				}
 
@@ -618,9 +620,11 @@ pub const Planet = struct {
 			std.mem.swap([]f32, &self.waterElevation, &self.newWaterElevation);
 		}
 
-		for (self.lifeforms.items) |*lifeform| {
-			if (lifeform.aiStep(self)) {
-				break; // break when one lifeform dies to avoid bugs
+		{
+			self.lifeformsLock.lock();
+			defer self.lifeformsLock.unlock();
+			for (self.lifeforms.items) |*lifeform| {
+				lifeform.aiStep(self);
 			}
 		}
 	}

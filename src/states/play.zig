@@ -252,6 +252,8 @@ pub const PlayState = struct {
 			const point = self.selectedPoint;
 			const pointPos = planet.transformedPoints[point];
 			if (Lifeform.init(game.allocator, pointPos, .Rabbit)) |lifeform| {
+				planet.lifeformsLock.lock();
+				defer planet.lifeformsLock.unlock();
 				planet.lifeforms.append(lifeform) catch unreachable;
 			} else |err| {
 				std.log.err("Could not load Rabbit: {s}", .{ @errorName(err) });
@@ -308,7 +310,7 @@ pub const PlayState = struct {
 		// Select the closest point that the camera is facing.
 		// To do this, it gets the point that has the lowest distance to the
 		// position of the camera.
-		const pos = self.cameraPos.add(worldSpaceCursor.scale(self.cameraPos.length()/2)).norm().scale(self.planet.radius + 10);
+		const pos = self.cameraPos.add(worldSpaceCursor.scale(self.cameraPos.length()/2)).norm().scale(self.planet.radius + 20);
 		var closestPointDist: f32 = std.math.inf_f32;
 		var closestPoint: usize = undefined;
 		for (self.planet.transformedPoints) |point, i| {

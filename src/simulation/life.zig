@@ -35,7 +35,7 @@ pub const Lifeform = struct {
 		};
 	}
 
-	pub fn aiStep(self: *Lifeform, planet: *Planet) bool {
+	pub fn aiStep(self: *Lifeform, planet: *Planet) void {
 		self.position.data[1] += 5;
 		self.position = self.position.add(self.velocity);
 		const pointIdx = planet.getNearestPointTo(self.position);
@@ -62,8 +62,6 @@ pub const Lifeform = struct {
 			};
 
 			_ = planet.lifeforms.swapRemove(index);
-			return true;
 		}
-		return false;
 	}
 };
