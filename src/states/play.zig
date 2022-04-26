@@ -238,6 +238,7 @@ pub const PlayState = struct {
 					.solarConstant = self.solarConstant,
 					.conductivity = self.conductivity,
 					.timeScale = self.timeScale / simulationSteps,
+					.gameTime = self.gameTime,
 				});
 			}
 
@@ -251,7 +252,7 @@ pub const PlayState = struct {
 			const planet = &self.planet;
 			const point = self.selectedPoint;
 			const pointPos = planet.transformedPoints[point];
-			if (Lifeform.init(game.allocator, pointPos, .Rabbit)) |lifeform| {
+			if (Lifeform.init(game.allocator, pointPos, .Rabbit, self.gameTime)) |lifeform| {
 				planet.lifeformsLock.lock();
 				defer planet.lifeformsLock.unlock();
 				planet.lifeforms.append(lifeform) catch unreachable;

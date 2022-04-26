@@ -432,6 +432,7 @@ pub const Planet = struct {
 	pub const SimulationOptions = struct {
 		solarConstant: f32,
 		conductivity: f32,
+		gameTime: f64,
 		/// Currently, time scale greater than 1000 may result in lots of bugs
 		timeScale: f32 = 1,
 	};
@@ -621,10 +622,18 @@ pub const Planet = struct {
 		}
 
 		{
+			const zone = tracy.ZoneN(@src(), "Life Simulation");
+			defer zone.End();
+			
 			self.lifeformsLock.lock();
 			defer self.lifeformsLock.unlock();
-			for (self.lifeforms.items) |*lifeform| {
-				lifeform.aiStep(self);
+			for (self.lifeforms.items) |*lifeform, i| {
+				if (i >= self.lifeforms.items.len) {
+					// A lifeform has been removed and we got over
+					// the new size of the ArrayList
+					break;
+				}
+				lifeform.aiStep(self, options);
 			}
 		}
 	}
