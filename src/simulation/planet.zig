@@ -273,14 +273,14 @@ pub const Planet = struct {
 			defer allocator.free(vert);
 			const xOffset = @intToFloat(f32, (seed ^ 0xc0ffee11) >> 16) * 14;
 			const yOffset = @intToFloat(f32, (seed ^ 0xdeadbeef) & 0xFFFF) * 14;
-			const zOffset = @intToFloat(f32, ((@floatToInt(u32, xOffset + yOffset) ^ 0xcafebabe) >> 12) & 0xFFFF);
+			const zOffset = @intToFloat(f32, (@floatToInt(u32, xOffset + yOffset) ^ 0xcafebabe) & 0xFFFF);
 			std.log.info("seed 0x{x} -> noise offset: {d}, {d}, {d}", .{ seed, xOffset, yOffset, zOffset });
 			while (i < vert.len) : (i += 3) {
 				var point = Vec3.fromSlice(vert[i..]);
 				const value = radius + perlin.p3do(point.x() * 3 + xOffset, point.y() * 3 + yOffset, point.z() * 3 + zOffset, 4) * std.math.min(radius / 2, 15);
 
 				elevation[i / 3] = value;
-				waterElev[i / 3] = std.math.max(0, radius - value + 1);
+				waterElev[i / 3] = std.math.max(0, radius - value);
 				temperature[i / 3] = 303.15;
 				vertices[i / 3] = point.norm();
 			}
@@ -417,6 +417,7 @@ pub const Planet = struct {
 	}
 
 	pub fn getNearestPointTo(self: Planet, position: Vec3) usize {
+		// TODO: add a BSP for much better performance?
 		var closestPointDist: f32 = std.math.inf_f32;
 		var closestPoint: usize = undefined;
 		for (self.transformedPoints) |point, i| {
@@ -433,9 +434,11 @@ pub const Planet = struct {
 		solarConstant: f32,
 		conductivity: f32,
 		gameTime: f64,
-		/// Currently, time scale greater than 1000 may result in lots of bugs
+		/// Currently, time scale greater than 40000 may result in lots of bugs
 		timeScale: f32 = 1,
 	};
+
+	// TODO: replace std.math.exp by a cheaper approximation
 
 	/// Given the index of a point on the planet, compute the specific heat capacity
 	fn computeHeatCapacity(self: *Planet, pointIndex: usize, pointArea: f32) f32 {
@@ -463,6 +466,7 @@ pub const Planet = struct {
 
 		// The surface of the planet (approx.) divided by the numbers of points
 		const meanPointArea = (4 * std.math.pi * (self.radius * 1000) * (self.radius * 1000)) / @intToFloat(f32, self.vertices.len);
+		//std.log.debug("Mean point area: {d} km²", .{ meanPointArea / 1_000_000 });
 
 		var i: usize = start;
 		// NEW(TM) heat simulation
@@ -551,6 +555,10 @@ pub const Planet = struct {
 
 				const factor = 6 / options.timeScale;
 				var shared = height / factor / 10000 / @intToFloat(f32, numIterations);
+				if (shared > height/2) {
+					// TODO: increase step size
+					shared = height/2;
+				}
 				var numShared: f32 = 0;
 				std.debug.assert(self.waterElevation[i] >= 0);
 
@@ -596,7 +604,7 @@ pub const Planet = struct {
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
 
 		var iteration: usize = 0;
-		var numIterations: usize = 2 + @floatToInt(usize, options.timeScale / 5000);
+		var numIterations: usize = 1 + @floatToInt(usize, options.timeScale / 5000);
 		while (iteration < numIterations) : (iteration += 1) {
 			const newElev = self.newWaterElevation;
 			std.mem.copy(f32, newElev, self.waterElevation);

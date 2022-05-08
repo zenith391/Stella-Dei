@@ -350,8 +350,12 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 50, 2);
 			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
 			self.debug_suckWater = nk.nk_check_label(ctx, "Debug: Suck Water", @boolToInt(self.debug_suckWater)) != 0;
-			nk.nk_layout_row_dynamic(ctx, 50, 1);
+
+			nk.nk_layout_row_dynamic(ctx, 50, 2);
 			self.debug_placeLifeform = nk.nk_check_label(ctx, "Debug: Place Life", @boolToInt(self.debug_placeLifeform)) != 0;
+			var buf: [200]u8 = undefined;
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
+				nk.NK_TEXT_ALIGN_CENTERED);
 		}
 		nk.nk_end(ctx);
 

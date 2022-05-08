@@ -32,11 +32,19 @@ pub const Lifeform = struct {
 
 	pub const State = union(enum) {
 		wander: void,
-		go_to_point: usize,
+		go_to_point: Vec3,
 		gestation: struct {
 			/// Game time at which the lifeform started being 'pregnant'
 			since: f64
 		},
+
+		fn goToPoint(planet: *const Planet, idx: usize) State {
+			// TODO, add some rng to the final position
+			const pos = planet.transformedPoints[idx];
+			return State {
+				.go_to_point = pos
+			};
+		}
 	};
 
 	pub fn init(allocator: Allocator, position: Vec3, kind: Kind, gameTime: f64) !Lifeform {
@@ -78,7 +86,7 @@ pub const Lifeform = struct {
 		var shouldDie: bool = isInDeepWater or isFrying or age > 10 * 86400;
 
 		if (self.sexualCriteria > 0.3) {
-			// lowers of 0.001 by in game second
+			// lowers by a few every in-game second
 			self.sexualCriteria -= 0.000001 * options.timeScale;
 			self.sexualCriteria = std.math.max(0.3, self.sexualCriteria);
 		}
@@ -96,7 +104,7 @@ pub const Lifeform = struct {
 							coldestTemperature = planet.temperature[neighbourIdx];
 						}
 					}
-					self.state = .{ .go_to_point = coldestPointIdx };
+					self.state = State.goToPoint(planet, coldestPointIdx);
 				} else if (planet.temperature[pointIdx] < 273.15 + 5.0) { // Below 5°C
 					// Try to go to an hotter point
 					var hottestPointIdx: usize = pointIdx;
@@ -108,7 +116,7 @@ pub const Lifeform = struct {
 							hottestTemperature = planet.temperature[neighbourIdx];
 						}
 					}
-					self.state = .{ .go_to_point = hottestPointIdx };
+					self.state = State.goToPoint(planet, hottestPointIdx);
 				} else {
 					var seekingPartner = false;
 					for (planet.lifeforms.items) |*other| {
@@ -134,10 +142,9 @@ pub const Lifeform = struct {
 										other.sexualCriteria += 0.05;
 									}
 								}
-							} else if (distance < 400 and other.sexualCriteria < 0.35) {
+							} else if (distance < 400 and other.sexualCriteria < 0.45) {
 								// lookup the partner
-								const targetIdx = planet.getNearestPointTo(other.position);
-								self.state = .{ .go_to_point = targetIdx };
+								self.state = .{ .go_to_point = other.position };
 								seekingPartner = true;
 							}
 						}
@@ -149,20 +156,19 @@ pub const Lifeform = struct {
 						const neighbours = planet.getNeighbours(pointIdx);
 						var attempts: usize = 1;
 						var number = random.intRangeLessThanBiased(u8, 0, 6);
-						while (planet.waterElevation[neighbours[number]] > 0.1) {
+						while (planet.waterElevation[neighbours[number]] >= 0.1) {
 							if (attempts == 6) break;
 							number = random.intRangeLessThanBiased(u8, 0, 6);
 							attempts += 1;
 						}
-						self.state = .{ .go_to_point = neighbours[number] };
+						self.state = State.goToPoint(planet, neighbours[number]);
 					}
 				}
 			},
-			.go_to_point => |targetIdx| {
-				const target = planet.transformedPoints[targetIdx];
+			.go_to_point => |target| {
 				const direction = target.sub(point);
 				self.velocity = direction.norm().scale(4); // 4km/frame
-				if (direction.length() < 10) {
+				if (direction.dot(direction) < 100) { // lengthSquared < 10²
 					self.state = .wander;
 				}
 			},
