@@ -80,6 +80,8 @@ pub const Lifeform = struct {
 		const point = planet.transformedPoints[pointIdx];
 		const random = self.prng.random();
 
+		// TODO: access point.waterElevation[pointIdx] and planet.waterElevation[pointIdx] only one time!
+
 		const isInDeepWater = planet.waterElevation[pointIdx] > 1 and planet.temperature[pointIdx] > 273.15;
 		const isFrying = planet.temperature[pointIdx] > 273.15 + 60.0;
 		const age = options.gameTime - self.timeBorn;
@@ -167,7 +169,7 @@ pub const Lifeform = struct {
 			},
 			.go_to_point => |target| {
 				const direction = target.sub(point);
-				self.velocity = direction.norm().scale(4); // 4km/frame
+				self.velocity = direction.norm().scale(3); // 4km/frame
 				if (direction.dot(direction) < 100) { // lengthSquared < 10²
 					self.state = .wander;
 				}

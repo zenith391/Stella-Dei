@@ -369,7 +369,7 @@ pub const PlayState = struct {
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point #{d}", .{ point }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			// sea level is meant to be = radius - 1
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius + 1 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Elevation: {d:.1} km", .{ planet.waterElevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);

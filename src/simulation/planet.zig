@@ -438,7 +438,14 @@ pub const Planet = struct {
 		timeScale: f32 = 1,
 	};
 
-	// TODO: replace std.math.exp by a cheaper approximation
+	/// Much cheaper function than std.math.exp
+	/// It deviates a lot when x > 25
+	fn approxExp(x: f32) f32 {
+		std.debug.assert(x <= 0);
+		return 1 / (-x + 1);
+	}
+	// const exp = std.math.exp;
+	const exp = approxExp;
 
 	/// Given the index of a point on the planet, compute the specific heat capacity
 	fn computeHeatCapacity(self: *Planet, pointIndex: usize, pointArea: f32) f32 {
@@ -448,7 +455,7 @@ pub const Planet = struct {
 		const waterCp: f32 = if (self.temperature[pointIndex] > 273.15) 4184 else 2093;
 
 		const waterLevel = self.waterElevation[pointIndex];
-		const specificHeatCapacity = std.math.exp(-waterLevel/20) * (groundCp - waterCp) + waterCp; // J/K/kg
+		const specificHeatCapacity = exp(-waterLevel/20) * (groundCp - waterCp) + waterCp; // J/K/kg
 		// Earth is about 5513 kg/m³ (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html) and assume each point is 0.72m thick??
 		const pointMass = pointArea * 0.72 * 5513; // kg
 		const heatCapacity = specificHeatCapacity * pointMass; // J.K-1
@@ -479,13 +486,12 @@ pub const Planet = struct {
 			const groundThermalConductivity: f32 = 1;
 			const waterThermalConductivity: f32 = 0.6089;
 			const waterLevel = self.waterElevation[i];
-			const thermalConductivity = std.math.exp(-waterLevel/2) * (groundThermalConductivity - waterThermalConductivity) + waterThermalConductivity; // W.m-1.K-1
+			const thermalConductivity = exp(-waterLevel/2) * (groundThermalConductivity - waterThermalConductivity) + waterThermalConductivity; // W.m-1.K-1
 			const heatCapacity = self.computeHeatCapacity(i, meanPointArea);
 
-			inline for (std.meta.fields(Planet.Direction)) |directionField| {
-				const neighbourDirection = @intToEnum(Planet.Direction, directionField.value);
-				const neighbourIndex = self.getNeighbour(i, neighbourDirection);
+			var totalTemperatureGain: f32  = 0;
 
+			for (self.getNeighbours(i)) |neighbourIndex| {
 				const neighbourPos = self.vertices[neighbourIndex];
 				const dP = neighbourPos.sub(vert); // delta position
 
@@ -510,7 +516,7 @@ pub const Planet = struct {
 					// as this point
 					const temperatureGain = heatTransfer / neighbourHeatCapacity; // K
 					newTemp[neighbourIndex] += temperatureGain;
-					newTemp[i] -= temperatureGain;
+					totalTemperatureGain -= temperatureGain;
 				}
 			}
 
@@ -522,7 +528,7 @@ pub const Planet = struct {
 				// So, we get heat transfer in J
 				const heatTransfer = solarIrradiance * dt;
 				const temperatureGain = heatTransfer / heatCapacity; // K
-				newTemp[i] += temperatureGain;
+				totalTemperatureGain += temperatureGain;
 			}
 
 			// Thermal radiation with Stefan-Boltzmann law
@@ -534,8 +540,9 @@ pub const Planet = struct {
 				const radiantEmittance = stefanBoltzmannConstant * temp * temp * temp * temp * emissivity; // W.m-2
 				const heatTransfer = radiantEmittance * meanPointArea * dt; // J
 				const temperatureLoss = heatTransfer / heatCapacity; // K
-				newTemp[i] -= temperatureLoss;
+				totalTemperatureGain -= temperatureLoss;
 			}
+			newTemp[i] += totalTemperatureGain;
 		}
 	}
 	
