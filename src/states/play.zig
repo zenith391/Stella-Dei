@@ -132,6 +132,13 @@ pub const PlayState = struct {
 				.scale(self.cameraDistance);
 		}
 
+		{
+			const cameraPoint = self.planet.transformedPoints[self.planet.getNearestPointTo(self.cameraPos)];
+			if (self.targetCameraDistance < cameraPoint.length() + 200) {
+				self.targetCameraDistance = cameraPoint.length() + 200;
+			}
+		}
+
 		// Smooth (de)zooming using linear interpolation
 		if (!std.math.approxEqAbs(f32, self.cameraDistance, self.targetCameraDistance, 0.01)) {
 			self.cameraDistance = self.cameraDistance * 0.9 + self.targetCameraDistance * 0.1;
@@ -157,8 +164,14 @@ pub const PlayState = struct {
 		program.use();
 		program.setUniformMat4("projMatrix",
 			Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
-		
-		const target = Vec3.new(0, 0, 0);
+
+		const right = self.cameraPos.cross(Vec3.forward()).norm();
+		const forward = self.cameraPos.cross(right).norm().negate();
+		const planetTarget = Vec3.new(0, 0, 0).sub(self.cameraPos).norm();
+		const distToPlanet = self.cameraDistance - self.planet.radius;
+		const target = self.cameraPos.add(Vec3.lerp(planetTarget, forward,
+			std.math.pow(f32, 2, -distToPlanet / self.planet.radius * 5) * 0.6
+		));
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
