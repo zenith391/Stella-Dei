@@ -55,6 +55,8 @@ pub const PlayState = struct {
 
 	/// When enabled, emits water at selected point on click
 	debug_emitWater: bool = false,
+	/// When enabled, set vegetation level to 1 at selected point on click
+	debug_emitVegetation: bool = false,
 	/// When enabled, drains all water near selected point on click
 	debug_suckWater: bool = false,
 	/// When enabled, place lifeform on click
@@ -231,6 +233,10 @@ pub const PlayState = struct {
 				planet.waterElevation[self.selectedPoint] += 0.05 * self.timeScale / (self.timeScale / 10);
 			}
 		}
+		if (self.debug_emitVegetation and game.window.getMouseButton(.left) == .press) {
+			planet.vegetation[self.selectedPoint] = 1;
+		}
+
 		if (self.debug_suckWater and game.window.getMouseButton(.left) == .press) {
 			planet.waterElevation[self.selectedPoint] = 0;
 			for (planet.getNeighbours(self.selectedPoint)) |idx| {
@@ -360,9 +366,10 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 50, 1);
 			nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 40000, 1000, 5);
 
-			nk.nk_layout_row_dynamic(ctx, 50, 2);
+			nk.nk_layout_row_dynamic(ctx, 50, 3);
 			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
 			self.debug_suckWater = nk.nk_check_label(ctx, "Debug: Suck Water", @boolToInt(self.debug_suckWater)) != 0;
+			self.debug_emitVegetation = nk.nk_check_label(ctx, "Debug: Emit Vegetation", @boolToInt(self.debug_emitVegetation)) != 0;
 
 			nk.nk_layout_row_dynamic(ctx, 50, 2);
 			self.debug_placeLifeform = nk.nk_check_label(ctx, "Debug: Place Life", @boolToInt(self.debug_placeLifeform)) != 0;

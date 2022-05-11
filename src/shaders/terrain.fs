@@ -11,6 +11,7 @@ in vec3 normal;
 in vec3 localPosition;
 in float interpData;
 in float waterElevation;
+in float vegetation;
 in float outSelected;
 
 out vec4 fragColor;
@@ -26,13 +27,13 @@ void main() {
 		
 		vec3 diffuse = max(dot(normal, lightDir), 0.0) * lightColor;
 
-		float lengthDeviation = noiseValue() * 2;
 		float specularStrength = 0.2;
 		float specularPower = 32;
-		vec3 objectColor = vec3(0.5f, 0.4f, 0.3f) * (lengthDeviation / 40 + 1);
+		vec3 terrainColor = mix(vec3(0.5f, 0.4f, 0.3f), vec3(0.0f, 1.0f, 0.0f), vegetation);
+		vec3 objectColor = terrainColor * (noiseValue() / 20 + 1);
 
 		float waterTreshold = 0.1 + (noiseValue() * 2 - 1) * 0.025;
-		if (waterElevation >= waterTreshold && interpData < 373.15) {
+		if (waterElevation >= waterTreshold) {
 			if (interpData < 273.15) {
 				objectColor = vec3(1.0f, 1.0f, 1.0f);
 			} else {

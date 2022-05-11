@@ -73,6 +73,7 @@ pub const Planet = struct {
 	/// Temperature measured
 	/// Unit: Kelvin
 	temperature: []f32,
+	vegetation: []f32,
 	/// Buffer array that is used to store the temperatures to be used after next update
 	newTemperature: []f32,
 	newWaterElevation: []f32,
@@ -238,13 +239,15 @@ pub const Planet = struct {
 		zone2.End();
 
 		const zone3 = tracy.ZoneN(@src(), "Initialise with data");
-		const vertices       = try allocator.alloc(Vec3, subdivided.?.vertices.len / 3);
-		const vertNeighbours = try allocator.alloc([6]u32, subdivided.?.vertices.len / 3);
-		const elevation      = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
-		const waterElev      = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
-		const temperature    = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
-		const newTemp        = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
-		const newWaterElev   = try allocator.alloc(f32, subdivided.?.vertices.len / 3);
+		const numPoints = subdivided.?.vertices.len / 3; // number of points
+		const vertices       = try allocator.alloc(Vec3,   numPoints);
+		const vertNeighbours = try allocator.alloc([6]u32, numPoints);
+		const elevation      = try allocator.alloc(f32,    numPoints);
+		const waterElev      = try allocator.alloc(f32,    numPoints);
+		const temperature    = try allocator.alloc(f32,    numPoints);
+		const vegetation     = try allocator.alloc(f32,    numPoints);
+		const newTemp        = try allocator.alloc(f32,    numPoints);
+		const newWaterElev   = try allocator.alloc(f32,    numPoints);
 		
 		var planet = Planet {
 			.vao = vao,
@@ -260,9 +263,10 @@ pub const Planet = struct {
 			.waterElevation = waterElev,
 			.newWaterElevation = newWaterElev,
 			.temperature = temperature,
+			.vegetation = vegetation,
 			.newTemperature = newTemp,
 			.lifeforms = std.ArrayList(Lifeform).init(allocator),
-			.bufData = try allocator.alloc(f32, vertices.len * 8),
+			.bufData = try allocator.alloc(f32, vertices.len * 9),
 			.normals = try allocator.alloc(Vec3, vertices.len),
 			.transformedPoints = try allocator.alloc(Vec3, vertices.len),
 		};
@@ -283,19 +287,22 @@ pub const Planet = struct {
 				waterElev[i / 3] = std.math.max(0, radius - value);
 				temperature[i / 3] = 303.15;
 				vertices[i / 3] = point.norm();
+				vegetation[i / 3] = perlin.p3do(point.x() + zOffset, point.y() + yOffset, point.z() + xOffset, 4) / 2 + 0.5;
 			}
 		}
 		zone3.End();
 
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
-		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
-		gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
-		gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32))); // temperature (used for a bunch of things)
-		gl.vertexAttribPointer(3, 1, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 7 * @sizeOf(f32))); // water level (used in Normal display mode)
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+		gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
+		gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32))); // temperature (used for a bunch of things)
+		gl.vertexAttribPointer(3, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 7 * @sizeOf(f32))); // water level (used in Normal display mode)
+		gl.vertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 8 * @sizeOf(f32))); // vegetation level (temporary until replaced by actual living vegetation)
 		gl.enableVertexAttribArray(0);
 		gl.enableVertexAttribArray(1);
 		gl.enableVertexAttribArray(2);
 		gl.enableVertexAttribArray(3);
+		gl.enableVertexAttribArray(4);
 
 		// Pre-compute the neighbours of every point of the ico-sphere.
 		computeNeighbours(&planet);
@@ -362,6 +369,7 @@ pub const Planet = struct {
 		}
 
 		// NOTE: this has really bad cache locality
+		const STRIDE = 9;
 		for (self.vertices) |point, i| {
 			const totalElevation = self.elevation[i] + self.waterElevation[i];
 			const exaggeratedElev = (totalElevation - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius;
@@ -369,14 +377,15 @@ pub const Planet = struct {
 			const normal = self.normals[i];
 			self.transformedPoints[i] = transformedPoint;
 
-			bufData[i*8+0] = transformedPoint.x();
-			bufData[i*8+1] = transformedPoint.y();
-			bufData[i*8+2] = transformedPoint.z();
-			bufData[i*8+3] = normal.x();
-			bufData[i*8+4] = normal.y();
-			bufData[i*8+5] = normal.z();
-			bufData[i*8+6] = self.temperature[i];
-			bufData[i*8+7] = self.waterElevation[i];
+			bufData[i*STRIDE+0] = transformedPoint.x();
+			bufData[i*STRIDE+1] = transformedPoint.y();
+			bufData[i*STRIDE+2] = transformedPoint.z();
+			bufData[i*STRIDE+3] = normal.x();
+			bufData[i*STRIDE+4] = normal.y();
+			bufData[i*STRIDE+5] = normal.z();
+			bufData[i*STRIDE+6] = self.temperature[i];
+			bufData[i*STRIDE+7] = self.waterElevation[i];
+			bufData[i*STRIDE+8] = self.vegetation[i];
 		}
 		
 		gl.bindVertexArray(self.vao);
@@ -557,7 +566,15 @@ pub const Planet = struct {
 		while (i < end) : (i += 1) {
 			// only fluid if it's not ice
 			if (self.temperature[i] > 273.15 or true) {
-				const height = self.waterElevation[i];
+				var height = self.newWaterElevation[i];
+				// boiling
+				// TODO: more accurate
+				if (self.temperature[i] > 373.15) {
+					height = std.math.max(
+						0, height - 0.33
+					);
+				}
+
 				const totalHeight = self.elevation[i] + height;
 
 				const factor = 6 / options.timeScale;
@@ -575,7 +592,7 @@ pub const Planet = struct {
 				numShared += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight);
 				numShared += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight);
 				numShared += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight);
-				newElev[i] -= numShared;
+				newElev[i] = height - numShared;
 			}
 		}
 	}
@@ -651,6 +668,31 @@ pub const Planet = struct {
 				lifeform.aiStep(self, options);
 			}
 		}
+
+		{
+			// TODO: better
+			const zone = tracy.ZoneN(@src(), "Vegetation Simulation");
+			defer zone.End();
+			
+			var i: usize = 0;
+			while (i < self.vertices.len) : (i += 1) {
+				const vegetation = self.vegetation[i];
+				if (self.waterElevation[i] >= 0.1) {
+					self.vegetation[i] = std.math.max(0, vegetation - 0.00001 * options.timeScale);
+				}
+				if (self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0) {
+					self.vegetation[i] = std.math.max(0, vegetation - 0.0000001 * options.timeScale);
+				}
+
+				for (self.getNeighbours(i)) |neighbour| {
+					if (self.waterElevation[neighbour] < 0.1) {
+						self.vegetation[neighbour] = std.math.clamp(
+							self.vegetation[neighbour] + vegetation * 0.00000001 * options.timeScale, 0, 1
+						);
+					}
+				}
+			}
+		}
 	}
 
 	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32) f32 {
@@ -685,6 +727,7 @@ pub const Planet = struct {
 		self.allocator.free(self.waterElevation);
 		self.allocator.free(self.newTemperature);
 		self.allocator.free(self.temperature);
+		self.allocator.free(self.vegetation);
 		
 		self.allocator.free(self.verticesNeighbours);
 		self.allocator.free(self.vertices);
