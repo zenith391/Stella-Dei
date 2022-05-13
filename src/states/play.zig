@@ -101,7 +101,7 @@ pub const PlayState = struct {
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u32);
-		const planet = Planet.generate(game.allocator, 5, planetRadius, seed) catch unreachable;
+		const planet = Planet.generate(game.allocator, 7, planetRadius, seed) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
@@ -183,6 +183,7 @@ pub const PlayState = struct {
 
 		program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
 		program.setUniformVec3("lightDir", solarVector);
+		program.setUniformFloat("lightIntensity", self.solarConstant / 1500);
 		program.setUniformVec3("viewPos", self.cameraPos);
 		program.setUniformFloat("planetRadius", planet.radius);
 		program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display temperature
@@ -354,7 +355,7 @@ pub const PlayState = struct {
 			//nk.nk_property_float(ctx, "Planet Inclination (rad)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
 
 			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 1, 0.2);
+			nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 100, 2);
 
 			// currently unusable
 			//nk.nk_layout_row_dynamic(ctx, 50, 1);

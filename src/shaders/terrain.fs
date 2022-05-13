@@ -2,6 +2,7 @@
 
 uniform vec3 lightColor;
 uniform vec3 lightDir;
+uniform float lightIntensity;
 uniform vec3 viewPos;
 uniform int displayMode;
 uniform float planetRadius;
@@ -23,13 +24,13 @@ float noiseValue() {
 
 void main() {
 	if (displayMode == 0) {
-		vec3 ambient = 0.15 * lightColor;
+		vec3 ambient = (0.05 + lightIntensity / 10) * lightColor;
 		
-		vec3 diffuse = max(dot(normal, lightDir), 0.0) * lightColor;
+		vec3 diffuse = max(dot(normal, lightDir) * lightIntensity, 0.0) * lightColor;
 
-		float specularStrength = 0.2;
+		float specularStrength = 0.2 * lightIntensity;
 		float specularPower = 32;
-		vec3 terrainColor = mix(vec3(0.5f, 0.4f, 0.3f), vec3(0.0f, 1.0f, 0.0f), vegetation);
+		vec3 terrainColor = mix(vec3(0.5f, 0.4f, 0.3f), vec3(0.0f, 0.7f, 0.0f), vegetation);
 		vec3 objectColor = terrainColor * (noiseValue() / 20 + 1);
 
 		float waterTreshold = 0.1 + (noiseValue() * 2 - 1) * 0.025;

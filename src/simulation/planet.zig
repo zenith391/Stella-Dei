@@ -73,6 +73,10 @@ pub const Planet = struct {
 	/// Temperature measured
 	/// Unit: Kelvin
 	temperature: []f32,
+	/// Cache of the heat capacity for each point, this just used for
+	/// speeding up computations at the expense of some RAM
+	/// Unit: J.K-1
+	heatCapacityCache: []f32,
 	vegetation: []f32,
 	/// Buffer array that is used to store the temperatures to be used after next update
 	newTemperature: []f32,
@@ -265,6 +269,7 @@ pub const Planet = struct {
 			.temperature = temperature,
 			.vegetation = vegetation,
 			.newTemperature = newTemp,
+			.heatCapacityCache = try allocator.alloc(f32, numPoints),
 			.lifeforms = std.ArrayList(Lifeform).init(allocator),
 			.bufData = try allocator.alloc(f32, vertices.len * 9),
 			.normals = try allocator.alloc(Vec3, vertices.len),
@@ -288,6 +293,10 @@ pub const Planet = struct {
 				temperature[i / 3] = 303.15;
 				vertices[i / 3] = point.norm();
 				vegetation[i / 3] = perlin.p3do(point.x() + zOffset, point.y() + yOffset, point.z() + xOffset, 4) / 2 + 0.5;
+
+				const totalElevation = elevation[i / 3] + waterElev[i / 3];
+				const transformedPoint = point.scale(totalElevation);
+				planet.transformedPoints[i / 3] = transformedPoint;
 			}
 		}
 		zone3.End();
@@ -306,6 +315,10 @@ pub const Planet = struct {
 
 		// Pre-compute the neighbours of every point of the ico-sphere.
 		computeNeighbours(&planet);
+
+		const meanPointArea = (4 * std.math.pi * radius * radius) / @intToFloat(f32, numPoints);
+		std.debug.print("There are {d} points in the ico-sphere.\n", .{ numPoints });
+		std.debug.print("The mean area per point of the ico-sphere is {d} km²\n", .{ meanPointArea });
 
 		return planet;
 	}
@@ -457,7 +470,7 @@ pub const Planet = struct {
 	const exp = approxExp;
 
 	/// Given the index of a point on the planet, compute the specific heat capacity
-	fn computeHeatCapacity(self: *Planet, pointIndex: usize, pointArea: f32) f32 {
+	inline fn computeHeatCapacity(self: *Planet, pointIndex: usize, pointArea: f32) f32 {
 		// specific heat capacities of given materials
 		const groundCp: f32 = 700;
 		// TODO: more precise water specific heat capacity, depending on temperature
@@ -466,23 +479,39 @@ pub const Planet = struct {
 		const waterLevel = self.waterElevation[pointIndex];
 		const specificHeatCapacity = exp(-waterLevel/20) * (groundCp - waterCp) + waterCp; // J/K/kg
 		// Earth is about 5513 kg/m³ (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html) and assume each point is 0.72m thick??
-		const pointMass = pointArea * 0.72 * 5513; // kg
+		const pointMass = pointArea * 0.74 * 5513; // kg
 		const heatCapacity = specificHeatCapacity * pointMass; // J.K-1
 		return heatCapacity;
 	}
 
 	fn simulateTemperature(self: *Planet, loop: *EventLoop, solarVector: Vec3, options: SimulationOptions, start: usize, end: usize) void {
+		@setFloatMode(.Optimized);
 		loop.yield();
 		const zone = tracy.ZoneN(@src(), "Temperature Simulation");
 		defer zone.End();
 		const newTemp = self.newTemperature;
+		const heatCapacityCache = self.heatCapacityCache;
 
 		// Number of seconds that passes in 1 simulation step
 		const dt = 1.0 / 60.0 * options.timeScale;
 
 		// The surface of the planet (approx.) divided by the numbers of points
-		const meanPointArea = (4 * std.math.pi * (self.radius * 1000) * (self.radius * 1000)) / @intToFloat(f32, self.vertices.len);
-		//std.log.debug("Mean point area: {d} km²", .{ meanPointArea / 1_000_000 });
+		const meanPointArea = (4 * std.math.pi * (self.radius * 1000) * (self.radius * 1000)) / @intToFloat(f32, self.vertices.len); // m²
+		// The mean distance between points (note: a little lower than the actual mean
+		// due to the fact the point's area aren't squares)
+		const meanDistance = std.math.sqrt(meanPointArea); // m
+
+		// The mean surface of a point multiplied by dt
+		// This is used as an optimization, to compute this value only once
+		const meanPointAreaTime = meanPointArea * dt; // m².s
+
+		{
+			var i: usize = start;
+			// Pre-compute the heat capacity of each point
+			while (i < end) : (i += 1) {
+				heatCapacityCache[i] = self.computeHeatCapacity(i, meanPointArea);
+			}
+		}
 
 		var i: usize = start;
 		// NEW(TM) heat simulation
@@ -496,17 +525,14 @@ pub const Planet = struct {
 			const waterThermalConductivity: f32 = 0.6089;
 			const waterLevel = self.waterElevation[i];
 			const thermalConductivity = exp(-waterLevel/2) * (groundThermalConductivity - waterThermalConductivity) + waterThermalConductivity; // W.m-1.K-1
-			const heatCapacity = self.computeHeatCapacity(i, meanPointArea);
+			const heatCapacity = heatCapacityCache[i];
 
 			var totalTemperatureGain: f32  = 0;
 
 			for (self.getNeighbours(i)) |neighbourIndex| {
-				const neighbourPos = self.vertices[neighbourIndex];
-				const dP = neighbourPos.sub(vert); // delta position
-
-				// dx will be the distance to the point
-				// * 1000 is to convert from km to m
-				const dx = dP.length() * 1000;
+				// it's the same point
+				// TODO: have a better way of handling points with 5 neighbours
+				if (neighbourIndex == i) continue;
 
 				// We compute the 1-dimensional gradient of T (temperature)
 				// aka T1 - T2
@@ -515,12 +541,13 @@ pub const Planet = struct {
 					// Heat transfer only happens from the hot point to the cold one
 
 					// Rate of heat flow density
-					const qx = -thermalConductivity * dT / dx; // W.m-2
-					const watt = qx * meanPointArea; // W = J.s-1
+					const qx = -thermalConductivity * dT / meanDistance; // W.m-2
+					//const watt = qx * meanPointArea; // W = J.s-1
 					// So, we get heat transfer in J
-					const heatTransfer = watt * dt;
+					//const heatTransfer = watt * dt;
+					const heatTransfer = qx * meanPointAreaTime;
 
-					const neighbourHeatCapacity = self.computeHeatCapacity(neighbourIndex, meanPointArea);
+					const neighbourHeatCapacity = heatCapacityCache[neighbourIndex];
 					// it is assumed neighbours are made of the exact same materials
 					// as this point
 					const temperatureGain = heatTransfer / neighbourHeatCapacity; // K
@@ -533,9 +560,10 @@ pub const Planet = struct {
 			{
 				const solarCoeff = std.math.max(0, vert.dot(solarVector) / vert.length());
 				// TODO: Direct Normal Irradiance? when we have atmosphere
-				const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
+				//const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
 				// So, we get heat transfer in J
-				const heatTransfer = solarIrradiance * dt;
+				//const heatTransfer = solarIrradiance * dt;
+				const heatTransfer = options.solarConstant * solarCoeff * meanPointAreaTime;
 				const temperatureGain = heatTransfer / heatCapacity; // K
 				totalTemperatureGain += temperatureGain;
 			}
@@ -547,7 +575,7 @@ pub const Planet = struct {
 				// limestone emissivity: 0.92
 				const emissivity = 0.93; // took a value between the two
 				const radiantEmittance = stefanBoltzmannConstant * temp * temp * temp * temp * emissivity; // W.m-2
-				const heatTransfer = radiantEmittance * meanPointArea * dt; // J
+				const heatTransfer = radiantEmittance * meanPointAreaTime; // J
 				const temperatureLoss = heatTransfer / heatCapacity; // K
 				totalTemperatureGain -= temperatureLoss;
 			}
@@ -728,6 +756,7 @@ pub const Planet = struct {
 		self.allocator.free(self.newTemperature);
 		self.allocator.free(self.temperature);
 		self.allocator.free(self.vegetation);
+		self.allocator.free(self.heatCapacityCache);
 		
 		self.allocator.free(self.verticesNeighbours);
 		self.allocator.free(self.vertices);

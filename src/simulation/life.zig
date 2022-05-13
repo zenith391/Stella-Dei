@@ -60,7 +60,7 @@ pub const Lifeform = struct {
 		return Lifeform {
 			.position = position,
 			.kind = kind,
-			.prng = std.rand.DefaultPrng.init(246),
+			.prng = std.rand.DefaultPrng.init(@bitCast(usize, std.time.milliTimestamp())),
 			.timeBorn = gameTime
 		};
 	}
@@ -131,6 +131,7 @@ pub const Lifeform = struct {
 								const sexualAttractivity = 0.4 + random.float(f32) * 0.1;
 								if (sexualAttractivity >= other.sexualCriteria) {
 									const number = random.intRangeLessThanBiased(u8, 0, 100);
+									std.log.info("try {}", .{ number });
 									if (number == 0) { // 1/100 chance
 										// have a baby if it's not already pregnant
 										if (other.state != .gestation) {
@@ -169,8 +170,9 @@ pub const Lifeform = struct {
 			},
 			.go_to_point => |target| {
 				const direction = target.sub(point);
-				self.velocity = direction.norm().scale(3); // 4km/frame
-				if (direction.dot(direction) < 100) { // lengthSquared < 10²
+				self.velocity = direction.norm().scale(3); // 3km/frame
+				std.log.info("(dist={d}) go by {}", .{ direction.dot(direction), direction });
+				if (direction.dot(direction) < 1000) {
 					self.state = .wander;
 				}
 			},
@@ -197,8 +199,6 @@ pub const Lifeform = struct {
 				}
 			}
 		}
-		self.position = self.position.add(self.velocity);
-
 		if (self.position.length() < point.length()) {
 			self.position = self.position.norm().scale(point.length());
 			self.velocity = Vec3.zero();
@@ -208,6 +208,7 @@ pub const Lifeform = struct {
 				self.position.norm().negate() // towards the planet
 			);
 		}
+		self.position = self.position.add(self.velocity);
 
 		if (shouldDie) {
 			const index = blk: {
