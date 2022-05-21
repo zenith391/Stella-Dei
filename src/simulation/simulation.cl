@@ -47,21 +47,18 @@ __kernel void simulateTemperature(
 			// We compute the 1-dimensional gradient of T (temperature)
 			// aka T1 - T2
 			const float dT = temperature[neighbourIndex] - temp;
-			if (dT < 0) {
-				// Heat transfer only happens from the hot point to the cold one
+			// Rate of heat flow density
+			const float qx = -thermalConductivity * dT / meanDistance // W.m-2
+				* (1.0f - signbit(dT)); // set to 0 if dT < 0 (heat transfer only happens from hot to cold point)
+			// So, we get heat transfer in J
+			const float heatTransfer = qx * meanPointAreaTime;
 
-				// Rate of heat flow density
-				const float qx = -thermalConductivity * dT / meanDistance; // W.m-2
-				// So, we get heat transfer in J
-				const float heatTransfer = qx * meanPointAreaTime;
-
-				const float neighbourHeatCapacity = heatCapacities[neighbourIndex];
-				// it is assumed neighbours are made of the exact same materials
-				// as this point
-				const float itemTemperatureGain = heatTransfer / neighbourHeatCapacity; // K
-				newTemp[neighbourIndex] += itemTemperatureGain;
-				temperatureGain -= itemTemperatureGain;
-			}
+			const float neighbourHeatCapacity = heatCapacities[neighbourIndex];
+			// it is assumed neighbours are made of the exact same materials
+			// as this point
+			const float itemTemperatureGain = heatTransfer / neighbourHeatCapacity; // K
+			newTemp[neighbourIndex] += itemTemperatureGain;
+			temperatureGain -= itemTemperatureGain;
 			i += 1;
 		}
 
@@ -86,6 +83,5 @@ __kernel void simulateTemperature(
 			temperatureGain -= temperatureLoss;
 		}
 		newTemp[idx] += temperatureGain;
-
 	}
 }
