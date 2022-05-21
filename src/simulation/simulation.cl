@@ -29,7 +29,7 @@ __kernel void simulateTemperature(
 	const SimulationOptions options
 )
 {
-	const int start = get_global_id(0) * 512;
+	const int start = get_global_id(0) << 9; // 512 points / work-item
 	for (int idx = start; idx < start + 512; idx++) {
 		// Temperature in the current cell
 		const int temp = temperature[idx];

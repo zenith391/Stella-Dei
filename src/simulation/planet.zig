@@ -274,7 +274,9 @@ pub const Planet = struct {
 		const program = cl.clCreateProgramWithSource(
 			context, 1, @ptrCast([*c][*c]const u8, &sources), null, null
 		).?;
-		const buildError = cl.clBuildProgram(program, 1, &device, null, null, null);
+
+		// TODO: use SPIR-V for the kernel?
+		const buildError = cl.clBuildProgram(program, 1, &device, "-cl-fast-relaxed-math", null, null);
 		if (buildError != cl.CL_SUCCESS) {
 			std.log.err("error building opencl program: {d}", .{ buildError });
 
