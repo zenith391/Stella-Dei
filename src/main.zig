@@ -211,7 +211,7 @@ pub fn main() !void {
 	var window = try glfw.Window.create(1280, 720, "Stella Dei", null, null, .{
 		.opengl_profile = .opengl_core_profile,
 		.context_version_major = 4,
-		.context_version_minor = 6,
+		.context_version_minor = 2,
 	});
 	defer window.destroy();
 	window.setCursorPosCallback(cursorPosCallback);

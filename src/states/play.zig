@@ -101,7 +101,7 @@ pub const PlayState = struct {
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u32);
-		const planet = Planet.generate(game.allocator, 7, planetRadius, seed) catch unreachable;
+		const planet = Planet.generate(game.allocator, 6, planetRadius, seed) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
@@ -153,9 +153,9 @@ pub const PlayState = struct {
 		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
 		var sunTheta: f32 = std.math.pi / 2.0;
 		var solarVector = Vec3.new(
-			std.math.cos(sunPhi) * std.math.sin(sunTheta),
-			std.math.sin(sunPhi) * std.math.sin(sunTheta),
-			std.math.cos(sunTheta)
+			@cos(sunPhi) * @sin(sunTheta),
+			@sin(sunPhi) * @sin(sunTheta),
+			@cos(sunTheta)
 		);
 
 		planet.upload(game.loop);
@@ -224,9 +224,9 @@ pub const PlayState = struct {
 		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
 		var sunTheta: f32 = std.math.pi / 2.0;
 		var solarVector = Vec3.new(
-			std.math.cos(sunPhi) * std.math.sin(sunTheta),
-			std.math.sin(sunPhi) * std.math.sin(sunTheta),
-			std.math.cos(sunTheta)
+			@cos(sunPhi) * @sin(sunTheta),
+			@sin(sunPhi) * @sin(sunTheta),
+			@cos(sunTheta)
 		);
 
 		if (self.debug_emitWater and game.window.getMouseButton(.left) == .press) {

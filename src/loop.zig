@@ -160,9 +160,7 @@ pub const EventLoop = struct {
 				resume node.data.frame;
 			} else {
 				// wait until a task is available
-				std.Thread.Futex.wait(&self.numTasks, 0, null) catch |err| switch (err) {
-					error.TimedOut => unreachable
-				};
+				std.Thread.Futex.wait(&self.numTasks, 0);
 			}
 		}
 	}

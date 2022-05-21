@@ -18,9 +18,9 @@ pub fn p3d(in_x: f32, in_y: f32, in_z: f32) f32 {
 	const Z = @truncate(u8, @floatToInt(u32, in_z));
 
 	// find relative x,y,z of point in cube
-	const x = in_x - std.math.floor(in_x);
-	const y = in_y - std.math.floor(in_y);
-	const z = in_z - std.math.floor(in_z);
+	const x = in_x - @floor(in_x);
+	const y = in_y - @floor(in_y);
+	const z = in_z - @floor(in_z);
 
 	// compute fade curves for each of x,y,z
 	const u = fade(x);

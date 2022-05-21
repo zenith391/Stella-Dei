@@ -1,6 +1,7 @@
 id: 93jjp4rc0htntdwlrz4g0rklhhu84ec2kph6j6iu80upc3dq 
 name: Stella-Dei
 license: GPL-3.0-or-later
+min_zig_version: 0.10.0-dev.2220+802f22073
 dev_dependencies:
     - src: git https://github.com/kooparse/zalgebra
       name: zalgebra
@@ -15,6 +16,7 @@ dev_dependencies:
       name: zig-tracy
       main: tracy.zig
     - src: system_lib c
+    - src: system_lib OpenCL
     - src: git https://github.com/hexops/mach-glfw
       name: glfw
       main: src/main.zig

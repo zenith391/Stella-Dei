@@ -22,6 +22,8 @@ $ zigmod fetch
 $ zig build
 ```
 
+*Note: you need the `ocl-icd-opencl-dev` package (only for building the game)*
+
 And now you've got an executable located inside `zig-out/bin/`. If you want to directly run the game, just do:
 ```
 $ zig build run
