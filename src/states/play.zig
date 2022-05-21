@@ -254,11 +254,12 @@ pub const PlayState = struct {
 				// The planet is simulated with a time scale divided by the number
 				// of simulation steps. So that if there are more steps, the same
 				// time speed is kept but the precision is increased.
-				planet.simulate(game.loop, solarVector, .{
+				planet.simulate(game.loop, .{
 					.solarConstant = self.solarConstant,
 					.conductivity = self.conductivity,
 					.timeScale = self.timeScale / simulationSteps,
 					.gameTime = self.gameTime,
+					.solarVector = solarVector,
 				});
 			}
 

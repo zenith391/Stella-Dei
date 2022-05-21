@@ -2,6 +2,9 @@ const std = @import("std");
 const gl = @import("gl");
 const za = @import("zalgebra");
 const tracy = @import("../vendor/tracy.zig");
+const cl = @cImport({
+	@cInclude("CL/cl.h");
+});
 
 const perlin = @import("../perlin.zig");
 const EventLoop = @import("../loop.zig").EventLoop;
@@ -73,6 +76,9 @@ pub const Planet = struct {
 	/// Temperature measured
 	/// Unit: Kelvin
 	temperature: []f32,
+	/// Original pointer to self.temperature,
+	/// this is used for sync up with OpenCL kernels
+	temperaturePtrOrg: [*]f32,
 	/// Cache of the heat capacity for each point, this just used for
 	/// speeding up computations at the expense of some RAM
 	/// Unit: J.K-1
@@ -90,6 +96,15 @@ pub const Planet = struct {
 	/// Neighbours are stored as u32 as icospheres with more than 4 billions vertices aren't worth
 	/// supporting.
 	verticesNeighbours: [][6]u32,
+
+	device: cl.cl_device_id,
+	queue: cl.cl_command_queue,
+	temperatureSimulationKernel: cl.cl_kernel,
+	temperatureBuffer: cl.cl_mem,
+	newTemperatureBuffer: cl.cl_mem,
+	verticesBuffer: cl.cl_mem,
+	heatCapacityBuffer: cl.cl_mem,
+	verticesNeighbourBuffer: cl.cl_mem,
 
 	const LookupMap = std.AutoHashMap(IndexPair, gl.GLuint);
 	fn vertexForEdge(lookup: *LookupMap, vertices: *std.ArrayList(f32), first: gl.GLuint, second: gl.GLuint) !gl.GLuint {
@@ -242,6 +257,36 @@ pub const Planet = struct {
 		}
 		zone2.End();
 
+		var platform: cl.cl_platform_id = undefined;
+		if (cl.clGetPlatformIDs(1, &platform, null) != cl.CL_SUCCESS) {
+			return error.OpenCLError;
+		}
+
+		var device: cl.cl_device_id = undefined;
+		if (cl.clGetDeviceIDs(platform, cl.CL_DEVICE_TYPE_GPU, 1, &device, null) != cl.CL_SUCCESS) {
+			return error.OpenCLError;
+		}
+
+		const context = cl.clCreateContext(null, 1, &device, null, null, null);
+		const queue = cl.clCreateCommandQueue(context, device, 0, null);
+
+		var sources = [_][*c]const u8 { @embedFile("../simulation/simulation.cl") };
+		const program = cl.clCreateProgramWithSource(
+			context, 1, @ptrCast([*c][*c]const u8, &sources), null, null
+		).?;
+		const buildError = cl.clBuildProgram(program, 1, &device, null, null, null);
+		if (buildError != cl.CL_SUCCESS) {
+			std.log.err("error building opencl program: {d}", .{ buildError });
+
+			const log = try allocator.alloc(u8, 16384);
+			defer allocator.free(log);
+			var size: usize = undefined;
+			_ = cl.clGetProgramBuildInfo(program, device, cl.CL_PROGRAM_BUILD_LOG,
+				log.len, log.ptr, &size);
+			std.debug.print("{s}", .{ log[0..size] });
+		}
+		const temperatureKernel = cl.clCreateKernel(program, "simulateTemperature", null).?;
+
 		const zone3 = tracy.ZoneN(@src(), "Initialise with data");
 		const numPoints = subdivided.?.vertices.len / 3; // number of points
 		const vertices       = try allocator.alloc(Vec3,   numPoints);
@@ -252,7 +297,19 @@ pub const Planet = struct {
 		const vegetation     = try allocator.alloc(f32,    numPoints);
 		const newTemp        = try allocator.alloc(f32,    numPoints);
 		const newWaterElev   = try allocator.alloc(f32,    numPoints);
-		
+		const heatCapacCache = try allocator.alloc(f32,    numPoints);
+
+		const temperatureBuffer = cl.clCreateBuffer(context, cl.CL_MEM_READ_WRITE | cl.CL_MEM_USE_HOST_PTR,
+			temperature.len * @sizeOf(f32), temperature.ptr, null);
+		const newTemperatureBuffer = cl.clCreateBuffer(context, cl.CL_MEM_READ_WRITE | cl.CL_MEM_USE_HOST_PTR,
+			newTemp.len * @sizeOf(f32), newTemp.ptr, null);
+		const verticesBuffer = cl.clCreateBuffer(context, cl.CL_MEM_READ_ONLY | cl.CL_MEM_USE_HOST_PTR,
+			vertices.len * @sizeOf(Vec3), vertices.ptr, null);
+		const heatCapacityBuffer = cl.clCreateBuffer(context, cl.CL_MEM_READ_ONLY | cl.CL_MEM_USE_HOST_PTR,
+			heatCapacCache.len * @sizeOf(Vec3), heatCapacCache.ptr, null);
+		const verticesNeighbourBuffer = cl.clCreateBuffer(context, cl.CL_MEM_READ_ONLY | cl.CL_MEM_USE_HOST_PTR,
+			vertNeighbours.len * @sizeOf([6]u32), vertNeighbours.ptr, null);
+
 		var planet = Planet {
 			.vao = vao,
 			.vbo = vbo,
@@ -267,13 +324,23 @@ pub const Planet = struct {
 			.waterElevation = waterElev,
 			.newWaterElevation = newWaterElev,
 			.temperature = temperature,
+			.temperaturePtrOrg = temperature.ptr,
 			.vegetation = vegetation,
 			.newTemperature = newTemp,
-			.heatCapacityCache = try allocator.alloc(f32, numPoints),
+			.heatCapacityCache = heatCapacCache,
 			.lifeforms = std.ArrayList(Lifeform).init(allocator),
 			.bufData = try allocator.alloc(f32, vertices.len * 9),
 			.normals = try allocator.alloc(Vec3, vertices.len),
 			.transformedPoints = try allocator.alloc(Vec3, vertices.len),
+
+			.device = device,
+			.queue = queue,
+			.temperatureSimulationKernel = temperatureKernel,
+			.temperatureBuffer = temperatureBuffer,
+			.newTemperatureBuffer = newTemperatureBuffer,
+			.verticesBuffer = verticesBuffer,
+			.heatCapacityBuffer = heatCapacityBuffer,
+			.verticesNeighbourBuffer = verticesNeighbourBuffer,
 		};
 
 		{
@@ -381,6 +448,7 @@ pub const Planet = struct {
 			job.call(computeAllNormals, .{ self, loop }) catch unreachable;
 		}
 
+		// This could be speeded up by using LOD? (allowing to transfer less data)
 		// NOTE: this has really bad cache locality
 		const STRIDE = 9;
 		for (self.vertices) |point, i| {
@@ -452,12 +520,13 @@ pub const Planet = struct {
 		return closestPoint;
 	}
 
-	pub const SimulationOptions = struct {
+	pub const SimulationOptions = extern struct {
 		solarConstant: f32,
 		conductivity: f32,
 		gameTime: f64,
 		/// Currently, time scale greater than 40000 may result in lots of bugs
 		timeScale: f32 = 1,
+		solarVector: Vec3,
 	};
 
 	/// Much cheaper function than std.math.exp
@@ -530,10 +599,6 @@ pub const Planet = struct {
 			var totalTemperatureGain: f32  = 0;
 
 			for (self.getNeighbours(i)) |neighbourIndex| {
-				// it's the same point
-				// TODO: have a better way of handling points with 5 neighbours
-				if (neighbourIndex == i) continue;
-
 				// We compute the 1-dimensional gradient of T (temperature)
 				// aka T1 - T2
 				const dT = self.temperature[neighbourIndex] - temp;
@@ -625,36 +690,107 @@ pub const Planet = struct {
 		}
 	}
 
-	pub fn simulate(self: *Planet, loop: *EventLoop, solarVector: Vec3, options: SimulationOptions) void {
+	pub fn simulate(self: *Planet, loop: *EventLoop, options: SimulationOptions) void {
 		//const zone = tracy.ZoneN(@src(), "Simulate planet");
 		//defer zone.End();
 
 		const newTemp = self.newTemperature;
 		// Fill newTemp with the current temperatures
+		// NOTE: we can copy using memcpy if another way to avoid negative values is found
 		for (self.vertices) |_, i| {
 			newTemp[i] = std.math.max(0, self.temperature[i]); // temperature may never go below 0°K
 		}
 
 		{
-			var jobs: [32]@Frame(simulateTemperature) = undefined;
-			const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
-			const pointCount = self.vertices.len;
-			var i: usize = 0;
-			while (i < parallelness) : (i += 1) {
-				const start = pointCount / parallelness * i;
-				const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1);
-				jobs[i] = async self.simulateTemperature(loop, solarVector, options, start, end);
+			const zone = tracy.ZoneN(@src(), "Simulate temperature (OpenCL)");
+			defer zone.End();
+
+			// Number of seconds that passes in 1 simulation step
+			const dt = 1.0 / 60.0 * options.timeScale;
+
+			// The surface of the planet (approx.) divided by the numbers of points
+			const meanPointArea = (4 * std.math.pi * (self.radius * 1000) * (self.radius * 1000)) / @intToFloat(f32, self.vertices.len); // m²
+			// The mean distance between points (note: a little lower than the actual mean
+			// due to the fact the point's area aren't squares)
+			const meanDistance = std.math.sqrt(meanPointArea); // m
+
+			// The mean surface of a point multiplied by dt
+			// This is used as an optimization, to compute this value only once
+			const meanPointAreaTime = meanPointArea * dt; // m².s
+
+			{
+				const zone2 = tracy.ZoneN(@src(), "Compute heat capacity");
+				defer zone2.End();
+				var i: usize = 0;
+				// Pre-compute the heat capacity of each point
+				while (i < self.temperature.len) : (i += 1) {
+					self.heatCapacityCache[i] = self.computeHeatCapacity(i, meanPointArea);
+				}
 			}
 
-			i = 0;
-			while (i < parallelness) : (i += 1) {
-				await jobs[i];
+			if (self.temperature.ptr == self.temperaturePtrOrg) {
+				_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 0, @sizeOf(cl.cl_mem), &self.temperatureBuffer);
+				_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 1, @sizeOf(cl.cl_mem), &self.newTemperatureBuffer);
+			} else {
+				_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 1, @sizeOf(cl.cl_mem), &self.temperatureBuffer);
+				_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 0, @sizeOf(cl.cl_mem), &self.newTemperatureBuffer);
 			}
+
+			_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 2, @sizeOf(cl.cl_mem), &self.verticesBuffer);
+			_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 3, @sizeOf(cl.cl_mem), &self.heatCapacityBuffer);
+			_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 4, @sizeOf(cl.cl_mem), &self.verticesNeighbourBuffer);
+			_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 5, @sizeOf(f32), &meanPointAreaTime);
+			_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 6, @sizeOf(f32), &meanDistance);
+			_ = cl.clSetKernelArg(self.temperatureSimulationKernel, 7, @sizeOf(SimulationOptions), &options);
+
+			// TODO: combine with CPU for even faster results!
+			const zone2 = tracy.ZoneN(@src(), "Run kernel");
+			defer zone2.End();
+
+			// TODO: ceil the global work size
+			const global_work_size: usize = self.temperature.len / 512;
+			const kernelError = cl.clEnqueueNDRangeKernel(
+				self.queue, self.temperatureSimulationKernel, 1,
+				null, &global_work_size, null,
+				0, null, null
+			);
+			if (kernelError != cl.CL_SUCCESS) {
+				std.log.err("Error running kernel: {d}", .{ kernelError });
+				std.os.exit(1);
+			}
+			_ = cl.clFinish(self.queue);
 		}
+
+		// const readErr = cl.clEnqueueReadBuffer(self.queue, self.newTemperatureBuffer,
+		// 	cl.CL_TRUE, 0,
+		// 	self.newTemperature.len * @sizeOf(f32), self.newTemperature.ptr,
+		// 	0, null, null);
+		// if (readErr != cl.CL_SUCCESS) {
+		// 	std.log.err("could not read buffer: {d}", .{ readErr });
+		// }
+
+		// {
+		// 	var jobs: [32]@Frame(simulateTemperature) = undefined;
+		// 	const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+		// 	const pointCount = self.vertices.len;
+		// 	var i: usize = 0;
+		// 	while (i < parallelness) : (i += 1) {
+		// 		const start = pointCount / parallelness * i;
+		// 		const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1);
+		// 		jobs[i] = async self.simulateTemperature(loop, solarVector, options, start, end);
+		// 	}
+
+		// 	i = 0;
+		// 	while (i < parallelness) : (i += 1) {
+		// 		await jobs[i];
+		// 	}
+		// }
 
 		// Finish by swapping the new temperature
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
 
+		// TODO: re-do water simulation using Navier-Stokes equations
+		if (true) {
 		var iteration: usize = 0;
 		var numIterations: usize = 1 + @floatToInt(usize, options.timeScale / 5000);
 		while (iteration < numIterations) : (iteration += 1) {
@@ -679,6 +815,7 @@ pub const Planet = struct {
 			}
 
 			std.mem.swap([]f32, &self.waterElevation, &self.newWaterElevation);
+		}
 		}
 
 		{
