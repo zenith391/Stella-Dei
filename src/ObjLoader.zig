@@ -57,7 +57,7 @@ pub fn readObj(allocator: Allocator, reader: anytype) !Mesh {
 	defer normals.deinit();
 	defer texCoords.deinit();
 
-	const text = try reader.readAllAlloc(allocator, std.math.maxInt(u64));
+	const text = try reader.readAllAlloc(allocator, std.math.maxInt(usize));
 	defer allocator.free(text);
 	var linesSplit = std.mem.split(u8, text, "\n");
 

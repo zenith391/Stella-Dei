@@ -60,7 +60,7 @@ pub const Lifeform = struct {
 		return Lifeform {
 			.position = position,
 			.kind = kind,
-			.prng = std.rand.DefaultPrng.init(@bitCast(usize, std.time.milliTimestamp())),
+			.prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp())),
 			.timeBorn = gameTime
 		};
 	}

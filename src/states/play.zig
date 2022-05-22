@@ -52,6 +52,7 @@ pub const PlayState = struct {
 	/// Whether the game is paused, this has the same effect as setting timeScale to
 	/// 0 except it preserves the time scale value.
 	paused: bool = false,
+	showPlanetControl: bool = false,
 
 	/// When enabled, emits water at selected point on click
 	debug_emitWater: bool = false,
@@ -349,37 +350,49 @@ pub const PlayState = struct {
 		const ctx = &renderer.nkContext;
 		nk.nk_style_default(ctx);
 
-		if (nk.nk_begin(ctx, "Planet Control", .{ .x = 100, .y = 100, .w = 450, .h = 320}, 
-			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_MOVABLE | nk.NK_WINDOW_TITLE | nk.NK_WINDOW_SCALABLE) != 0) {
-			// currently unusable
-			//nk.nk_layout_row_dynamic(ctx, 50, 1);
-			//nk.nk_property_float(ctx, "Planet Inclination (rad)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
 
-			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 100, 2);
-
-			// currently unusable
-			//nk.nk_layout_row_dynamic(ctx, 50, 1);
-			//nk.nk_property_float(ctx, "Surface Conductivity", 0.0001, &self.conductivity, 1, 0.1, 0.001);
-			
-			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 160000, 1000, 10);
-
-			nk.nk_layout_row_dynamic(ctx, 50, 1);
-			nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 40000, 1000, 5);
-
-			nk.nk_layout_row_dynamic(ctx, 50, 3);
-			self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
-			self.debug_suckWater = nk.nk_check_label(ctx, "Debug: Suck Water", @boolToInt(self.debug_suckWater)) != 0;
-			self.debug_emitVegetation = nk.nk_check_label(ctx, "Debug: Emit Vegetation", @boolToInt(self.debug_emitVegetation)) != 0;
-
-			nk.nk_layout_row_dynamic(ctx, 50, 2);
-			self.debug_placeLifeform = nk.nk_check_label(ctx, "Debug: Place Life", @boolToInt(self.debug_placeLifeform)) != 0;
-			var buf: [200]u8 = undefined;
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
-				nk.NK_TEXT_ALIGN_CENTERED);
+		if (nk.nk_begin(ctx, "Open Planet Control", .{ .x = 235, .y = 10, .w = 40, .h = 50 }, 
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			nk.nk_layout_row_dynamic(ctx, 40, 1);
+			if (nk.nk_button_label(ctx, "Ctrl") != 0) {
+				self.showPlanetControl = !self.showPlanetControl;
+			}
 		}
 		nk.nk_end(ctx);
+
+		if (self.showPlanetControl) {
+			if (nk.nk_begin(ctx, "Planet Control",.{ .x = 30, .y = 70, .w = 450, .h = 320 },
+			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+				// currently unusable
+				//nk.nk_layout_row_dynamic(ctx, 50, 1);
+				//nk.nk_property_float(ctx, "Planet Inclination (rad)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
+
+				nk.nk_layout_row_dynamic(ctx, 50, 1);
+				nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 100, 2);
+
+				// TODO: instead of changing surface conductivity,
+				// change the surface materials by using meteors and
+				// others
+				
+				nk.nk_layout_row_dynamic(ctx, 50, 1);
+				nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 160000, 1000, 10);
+
+				nk.nk_layout_row_dynamic(ctx, 50, 1);
+				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 40000, 1000, 5);
+
+				nk.nk_layout_row_dynamic(ctx, 50, 3);
+				self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
+				self.debug_suckWater = nk.nk_check_label(ctx, "Debug: Suck Water", @boolToInt(self.debug_suckWater)) != 0;
+				self.debug_emitVegetation = nk.nk_check_label(ctx, "Debug: Emit Vegetation", @boolToInt(self.debug_emitVegetation)) != 0;
+
+				nk.nk_layout_row_dynamic(ctx, 50, 2);
+				self.debug_placeLifeform = nk.nk_check_label(ctx, "Debug: Place Life", @boolToInt(self.debug_placeLifeform)) != 0;
+				var buf: [200]u8 = undefined;
+				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
+					nk.NK_TEXT_ALIGN_CENTERED);
+			}
+			nk.nk_end(ctx);
+		}
 
 		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 200, .w = 300, .h = 150 },
 			0) != 0) {
@@ -390,7 +403,6 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 30, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point #{d}", .{ point }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			// sea level is meant to be = radius - 1
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Elevation: {d:.1} km", .{ planet.waterElevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
