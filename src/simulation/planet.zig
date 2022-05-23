@@ -3,6 +3,7 @@ const gl = @import("gl");
 const za = @import("zalgebra");
 const tracy = @import("../vendor/tracy.zig");
 const cl = @cImport({
+	@cDefine("CL_TARGET_OPENCL_VERSION", "110");
 	@cInclude("CL/cl.h");
 });
 
@@ -75,7 +76,9 @@ pub const CLContext = struct {
 		).?;
 
 		// TODO: use SPIR-V for the kernel?
-		const buildError = cl.clBuildProgram(program, 1, &device, "-cl-fast-relaxed-math", null, null);
+		const buildError = cl.clBuildProgram(program, 1, &device,
+			"-cl-strict-aliasing -cl-fast-relaxed-math",
+			null, null);
 		if (buildError != cl.CL_SUCCESS) {
 			std.log.err("error building opencl program: {d}", .{ buildError });
 
@@ -96,7 +99,7 @@ pub const CLContext = struct {
 		const verticesBuffer = cl.clCreateBuffer(context, cl.CL_MEM_READ_ONLY | cl.CL_MEM_USE_HOST_PTR,
 			self.vertices.len * @sizeOf(Vec3), self.vertices.ptr, null);
 		const heatCapacityBuffer = cl.clCreateBuffer(context, cl.CL_MEM_READ_ONLY | cl.CL_MEM_USE_HOST_PTR,
-			self.heatCapacityCache.len * @sizeOf(Vec3), self.heatCapacityCache.ptr, null);
+			self.heatCapacityCache.len * @sizeOf(f32), self.heatCapacityCache.ptr, null);
 		const verticesNeighbourBuffer = cl.clCreateBuffer(context, cl.CL_MEM_READ_ONLY | cl.CL_MEM_USE_HOST_PTR,
 			self.verticesNeighbours.len * @sizeOf([6]u32), self.verticesNeighbours.ptr, null);
 
@@ -378,7 +381,7 @@ pub const Planet = struct {
 
 				elevation[i / 3] = value;
 				waterElev[i / 3] = std.math.max(0, radius - value);
-				temperature[i / 3] = 303.15;
+				temperature[i / 3] = 293.15;
 				vertices[i / 3] = point.norm();
 				vegetation[i / 3] = perlin.p3do(point.x() + zOffset, point.y() + yOffset, point.z() + xOffset, 4) / 2 + 0.5;
 
@@ -672,7 +675,8 @@ pub const Planet = struct {
 
 	fn simulateTemperature_OpenCL(self: *Planet, ctx: CLContext, options: SimulationOptions, start: usize, end: usize) void {
 		if (start != 0 or end != self.temperature.len) {
-			std.debug.todo("Allow simulateTemperature_OpenCL to have a custom range");
+			//std.debug.todo("Allow simulateTemperature_OpenCL to have a custom range");
+			std.debug.panic("TODO", .{});
 		}
 
 		const zone = tracy.ZoneN(@src(), "Simulate temperature (OpenCL)");
@@ -720,7 +724,6 @@ pub const Planet = struct {
 		const zone2 = tracy.ZoneN(@src(), "Run kernel");
 		defer zone2.End();
 
-		// TODO: ceil the global work size
 		const global_work_size = (end - start + 511) / 512;
 		const kernelError = cl.clEnqueueNDRangeKernel(
 			ctx.queue, ctx.simulationKernel, 1,
@@ -788,8 +791,10 @@ pub const Planet = struct {
 		}
 
 		// TODO: mix both
-		if (self.clContext) |clContext| {
+		if (self.clContext != null and false) {
+			const clContext = self.clContext.?;
 			self.simulateTemperature_OpenCL(clContext, options, 0, self.temperature.len);
+			std.log.info("new temp at 0: {d}", .{ self.newTemperature[0] });
 		} else {
 			var jobs: [32]@Frame(simulateTemperature) = undefined;
 			const parallelness = std.math.min(loop.getParallelCount(), jobs.len);

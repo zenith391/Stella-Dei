@@ -62,6 +62,7 @@ pub const PlayState = struct {
 	debug_suckWater: bool = false,
 	/// When enabled, place lifeform on click
 	debug_placeLifeform: bool = false,
+	meanTemperature: f32 = 0.0,
 
 	const PlanetDisplayMode = enum(c_int) {
 		Normal = 0,
@@ -350,13 +351,31 @@ pub const PlayState = struct {
 		const ctx = &renderer.nkContext;
 		nk.nk_style_default(ctx);
 
-
-		if (nk.nk_begin(ctx, "Open Planet Control", .{ .x = 235, .y = 10, .w = 40, .h = 50 }, 
+		if (nk.nk_begin(ctx, "Open Planet Control", .{ .x = 185, .y = 10, .w = 90, .h = 50 }, 
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_dynamic(ctx, 40, 1);
-			if (nk.nk_button_label(ctx, "Ctrl") != 0) {
+			if (nk.nk_button_label(ctx, "Control") != 0) {
 				self.showPlanetControl = !self.showPlanetControl;
 			}
+		}
+		nk.nk_end(ctx);
+
+		if (nk.nk_begin(ctx, "Mean Temperature", .{ .x = 285, .y = 20, .w = 200, .h = 30 }, 
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+			const random = prng.random();
+			var meanTemperature: f32 = 0;
+			var i: usize = 0;
+			while (i < 1000) : (i += 1) {
+				const pointIdx = random.intRangeLessThanBiased(usize, 0, self.planet.temperature.len);
+				meanTemperature += self.planet.temperature[pointIdx];
+			}
+			meanTemperature /= 1000;
+			self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
+
+			nk.nk_layout_row_dynamic(ctx, 30, 1);
+			var buf: [500]u8 = undefined;
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Mean Temp. : {d:.1}°C", .{ self.meanTemperature - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
 		}
 		nk.nk_end(ctx);
 
