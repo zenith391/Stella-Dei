@@ -80,9 +80,9 @@ pub const Lifeform = struct {
 		const point = planet.transformedPoints[pointIdx];
 		const random = self.prng.random();
 
-		// TODO: access point.waterElevation[pointIdx] and planet.waterElevation[pointIdx] only one time!
+		// TODO: access point.temperature[pointIdx] and planet.waterMass[pointIdx] only one time!
 
-		const isInDeepWater = planet.waterElevation[pointIdx] > 1 and planet.temperature[pointIdx] > 273.15;
+		const isInDeepWater = planet.waterMass[pointIdx] > 1 and planet.temperature[pointIdx] > 273.15;
 		const isFrying = planet.temperature[pointIdx] > 273.15 + 60.0;
 		const age = options.gameTime - self.timeBorn;
 		var shouldDie: bool = isInDeepWater or isFrying or age > 10 * 86400;
@@ -100,7 +100,7 @@ pub const Lifeform = struct {
 					var coldestPointIdx: usize = pointIdx;
 					var coldestTemperature: f32 = planet.temperature[pointIdx];
 					for (planet.getNeighbours(pointIdx)) |neighbourIdx| {
-						const isInWater = planet.waterElevation[neighbourIdx] > 0.1 and planet.temperature[neighbourIdx] > 273.15;
+						const isInWater = planet.waterMass[neighbourIdx] > 0.1 and planet.temperature[neighbourIdx] > 273.15;
 						if (planet.temperature[neighbourIdx] + random.float(f32)*1 < coldestTemperature and !isInWater) {
 							coldestPointIdx = neighbourIdx;
 							coldestTemperature = planet.temperature[neighbourIdx];
@@ -112,7 +112,7 @@ pub const Lifeform = struct {
 					var hottestPointIdx: usize = pointIdx;
 					var hottestTemperature: f32 = planet.temperature[pointIdx];
 					for (planet.getNeighbours(pointIdx)) |neighbourIdx| {
-						const isInWater = planet.waterElevation[neighbourIdx] > 0.1 and planet.temperature[neighbourIdx] > 273.15;
+						const isInWater = planet.waterMass[neighbourIdx] > 0.1 and planet.temperature[neighbourIdx] > 273.15;
 						if (planet.temperature[neighbourIdx] - random.float(f32)*1 > hottestTemperature and !isInWater) {
 							hottestPointIdx = neighbourIdx;
 							hottestTemperature = planet.temperature[neighbourIdx];
@@ -159,7 +159,7 @@ pub const Lifeform = struct {
 						const neighbours = planet.getNeighbours(pointIdx);
 						var attempts: usize = 1;
 						var number = random.intRangeLessThanBiased(u8, 0, 6);
-						while (planet.waterElevation[neighbours[number]] >= 0.1) {
+						while (planet.waterMass[neighbours[number]] >= 0.1) {
 							if (attempts == 6) break;
 							number = random.intRangeLessThanBiased(u8, 0, 6);
 							attempts += 1;

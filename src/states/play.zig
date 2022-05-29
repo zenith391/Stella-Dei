@@ -195,6 +195,10 @@ pub const PlayState = struct {
 		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.cubemap.texture);
 		program.setUniformInt("noiseCubemap", 0);
 
+		gl.enable(gl.CULL_FACE);
+		defer gl.disable(gl.CULL_FACE);
+		gl.frontFace(gl.CW);
+
 		gl.bindVertexArray(planet.vao);
 		gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
 
@@ -232,8 +236,8 @@ pub const PlayState = struct {
 		);
 
 		if (self.debug_emitWater and game.window.getMouseButton(.left) == .press) {
-			if (planet.waterElevation[self.selectedPoint] < 50) {
-				planet.waterElevation[self.selectedPoint] += 0.05 * self.timeScale / (self.timeScale / 10);
+			if (planet.waterMass[self.selectedPoint] < 50) {
+				planet.waterMass[self.selectedPoint] += 0.05 * self.timeScale / (self.timeScale / 10);
 			}
 		}
 		if (self.debug_emitVegetation and game.window.getMouseButton(.left) == .press) {
@@ -241,9 +245,9 @@ pub const PlayState = struct {
 		}
 
 		if (self.debug_suckWater and game.window.getMouseButton(.left) == .press) {
-			planet.waterElevation[self.selectedPoint] = 0;
+			planet.waterMass[self.selectedPoint] = 0;
 			for (planet.getNeighbours(self.selectedPoint)) |idx| {
-				planet.waterElevation[idx] = 0;
+				planet.waterMass[idx] = 0;
 			}
 		}
 
@@ -424,9 +428,11 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Elevation: {d:.1} km", .{ planet.waterElevation[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Mass: {:.1} kg", .{ planet.waterMass[point] * 1_000_000_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point Area: {d}km²", .{ @floor(planet.getMeanPointArea() / 1_000_000) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 		}
 		nk.nk_end(ctx);
 
