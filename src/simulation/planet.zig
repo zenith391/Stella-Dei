@@ -395,7 +395,7 @@ pub const Planet = struct {
 				const value = radius + perlin.p3do(point.x() * 3 + xOffset, point.y() * 3 + yOffset, point.z() * 3 + zOffset, 4) * std.math.min(radius / 2, 15);
 
 				elevation[i / 3] = value;
-				waterElev[i / 3] = std.math.max(0, radius - value) / kmPerWaterMass / 20;
+				waterElev[i / 3] = std.math.max(0, radius - value) / kmPerWaterMass;
 				vertices[i / 3] = point.norm();
 				vegetation[i / 3] = perlin.p3do(point.x() + zOffset, point.y() + yOffset, point.z() + xOffset, 4) / 2 + 0.5;
 
@@ -792,31 +792,71 @@ pub const Planet = struct {
 
 		const newMass = self.newWaterMass;
 		const meanDistance = std.math.sqrt(self.getMeanPointArea()); // m
-		{
-			const diffusivity = 10.0;
-			const a = dt * diffusivity / meanDistance;
-			const kmPerWaterMass = self.getKmPerWaterMass();
-			_ = numIterations;
+		const kmPerWaterMass = self.getKmPerWaterMass(); // km / 10⁹ kg
+		_ = meanDistance;
+		// {
+		// 	const diffusivity = 10.0;
+		// 	const a = dt * diffusivity / meanDistance;
+		// 	_ = numIterations;
 
-			var k: usize = 0;
-			while (k < 20) : (k += 1) {
-				var i: usize = start;
-				while (i < end) : (i += 1) {
-					var mass = self.waterMass[i] + self.elevation[i] / kmPerWaterMass;
-					var numShared: f32 = 0;
-					const selfElevation = self.elevation[i]
-						+ self.waterMass[i] * kmPerWaterMass;
-					for (self.getNeighbours(i)) |neighbourIdx| {
-						const neighbourElevation = self.elevation[neighbourIdx]
-							+ newMass[neighbourIdx] * kmPerWaterMass;
-						if (neighbourElevation > selfElevation) {
-							mass += a * (newMass[neighbourIdx] + self.elevation[neighbourIdx] / kmPerWaterMass);
-							numShared += 1;
-						}
-					}
-					mass = mass / (1 + numShared * a);
-					newMass[i] = mass - self.elevation[i] / kmPerWaterMass;
+		// 	var k: usize = 0;
+		// 	while (k < 20) : (k += 1) {
+		// 		var i: usize = start;
+		// 		while (i < end) : (i += 1) {
+		// 			var mass = self.waterMass[i];// + self.elevation[i] / kmPerWaterMass;
+		// 			var numShared: f32 = 0;
+		// 			const selfElevation = self.elevation[i]
+		// 				+ self.waterMass[i] * kmPerWaterMass;
+		// 			for (self.getNeighbours(i)) |neighbourIdx| {
+		// 				const neighbourElevation = self.elevation[neighbourIdx]
+		// 					+ newMass[neighbourIdx] * kmPerWaterMass;
+		// 					_ = neighbourElevation; _ = selfElevation;
+		// 				//if (neighbourElevation > selfElevation) {
+		// 					mass += a * newMass[neighbourIdx];// + self.elevation[neighbourIdx] / kmPerWaterMass);
+		// 					numShared += 1;
+		// 				//}
+		// 			}
+		// 			mass = mass / (1 + numShared * a);
+		// 			newMass[i] = mass;// - self.elevation[i] / kmPerWaterMass;
+		// 		}
+		// 	}
+		// }
+
+		const shareFactor = 1 / dt * 2 / (6 * @intToFloat(f32, numIterations));
+		
+		// Do some liquid simulation
+		var i: usize = start;
+		while (i < end) : (i += 1) {
+			// only fluid if it's not ice
+			if (self.temperature[i] > 273.15 or true) {
+				var mass = self.newWaterMass[i];
+				// boiling
+				// TODO: more accurate
+				if (self.temperature[i] > 373.15) {
+					mass = std.math.max(
+						0, mass - 0.33
+					);
 				}
+
+				const totalHeight = self.elevation[i] + mass * kmPerWaterMass;
+				var shared = mass * shareFactor;
+				// -1 is to account for rounding errors
+				if (shared > mass/7) {
+					// TODO: increase step size
+					shared = std.math.max(0, mass/7);
+				}
+
+				var sharedMass: f32 = 0;
+				std.debug.assert(self.waterMass[i] >= 0);
+				sharedMass += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight, kmPerWaterMass);
+				sharedMass += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight, kmPerWaterMass);
+				sharedMass += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight, kmPerWaterMass);
+				sharedMass += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight, kmPerWaterMass);
+				sharedMass += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight, kmPerWaterMass);
+				sharedMass += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight, kmPerWaterMass);
+				newMass[i] = mass - sharedMass;
+				if (newMass[i] < 0) std.log.info("{d} - {d}, 6 * shared = {d}", .{ mass, sharedMass, shared * 6 });
+				std.debug.assert(newMass[i] >= 0);
 			}
 		}
 
@@ -861,10 +901,10 @@ pub const Planet = struct {
 		// }
 	}
 
-	fn sendWater(self: Planet, target: usize, shared: f32, totalMass: f32, kmPerWaterMass: f32) f32 {
+	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32, kmPerWaterMass: f32) f32 {
 		const targetTotalHeight = self.elevation[target] + self.waterMass[target] * kmPerWaterMass;
-		if (totalMass > targetTotalHeight) {
-			var transmitted = std.math.min(shared, shared * (totalMass - targetTotalHeight) / 50 / kmPerWaterMass);
+		if (totalHeight > targetTotalHeight) {
+			var transmitted = std.math.min(shared, shared * (totalHeight - targetTotalHeight) / 50 / kmPerWaterMass);
 			std.debug.assert(transmitted >= 0);
 			self.newWaterMass[target] += transmitted;
 			return transmitted;
@@ -911,12 +951,10 @@ pub const Planet = struct {
 
 		// TODO: re-do water simulation using Navier-Stokes equations
 		if (true) {
-			std.mem.copy(f32, self.newWaterMass, self.waterMass);
 		var iteration: usize = 0;
 		var numIterations: usize = 1;
 		while (iteration < numIterations) : (iteration += 1) {
-			const newElev = self.newWaterMass;
-			std.mem.copy(f32, newElev, self.waterMass);
+			std.mem.copy(f32, self.newWaterMass, self.waterMass);
 
 			{
 				var jobs: [32]@Frame(simulateWater) = undefined;

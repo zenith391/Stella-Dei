@@ -16,6 +16,8 @@ var texture: Texture = undefined;
 const MainMenuState = @import("states/main_menu.zig").MainMenuState;
 const PlayState     = @import("states/play.zig").PlayState;
 
+pub const log_level = .debug;
+
 pub const GameState = union(enum) {
 	MainMenu: MainMenuState,
 	Playing: PlayState,

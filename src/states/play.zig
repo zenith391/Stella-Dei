@@ -368,14 +368,17 @@ pub const PlayState = struct {
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
 			const random = prng.random();
-			var meanTemperature: f32 = 0;
-			var i: usize = 0;
-			while (i < 1000) : (i += 1) {
-				const pointIdx = random.intRangeLessThanBiased(usize, 0, self.planet.temperature.len);
-				meanTemperature += self.planet.temperature[pointIdx];
+
+			if (!self.paused) {
+				var meanTemperature: f32 = 0;
+				var i: usize = 0;
+				while (i < 1000) : (i += 1) {
+					const pointIdx = random.intRangeLessThanBiased(usize, 0, self.planet.temperature.len);
+					meanTemperature += self.planet.temperature[pointIdx];
+				}
+				meanTemperature /= 1000;
+				self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
 			}
-			meanTemperature /= 1000;
-			self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
 
 			nk.nk_layout_row_dynamic(ctx, 30, 1);
 			var buf: [500]u8 = undefined;
@@ -404,12 +407,12 @@ pub const PlayState = struct {
 				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 40000, 1000, 5);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 3);
-				self.debug_emitWater = nk.nk_check_label(ctx, "Debug: Emit Water", @boolToInt(self.debug_emitWater)) != 0;
-				self.debug_suckWater = nk.nk_check_label(ctx, "Debug: Suck Water", @boolToInt(self.debug_suckWater)) != 0;
-				self.debug_emitVegetation = nk.nk_check_label(ctx, "Debug: Emit Vegetation", @boolToInt(self.debug_emitVegetation)) != 0;
+				self.debug_emitWater = nk.nk_check_label(ctx, "Emit Water", @boolToInt(self.debug_emitWater)) != 0;
+				self.debug_suckWater = nk.nk_check_label(ctx, "Suck Water", @boolToInt(self.debug_suckWater)) != 0;
+				self.debug_emitVegetation = nk.nk_check_label(ctx, "Place Vegetation", @boolToInt(self.debug_emitVegetation)) != 0;
 
 				nk.nk_layout_row_dynamic(ctx, 50, 2);
-				self.debug_placeLifeform = nk.nk_check_label(ctx, "Debug: Place Life", @boolToInt(self.debug_placeLifeform)) != 0;
+				self.debug_placeLifeform = nk.nk_check_label(ctx, "Place Life (WIP!!)", @boolToInt(self.debug_placeLifeform)) != 0;
 				var buf: [200]u8 = undefined;
 				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
 					nk.NK_TEXT_ALIGN_CENTERED);
