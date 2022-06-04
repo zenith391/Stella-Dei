@@ -1,3 +1,4 @@
+const builtin = @import("builtin");
 const std = @import("std");
 const gl = @import("gl");
 const za = @import("zalgebra");
@@ -368,10 +369,16 @@ pub const Planet = struct {
 			.transformedPoints = try allocator.alloc(Vec3, vertices.len),
 		};
 
-		planet.clContext = CLContext.init(allocator, &planet) catch blk: {
-			std.log.warn("Your system doesn't support OpenCL.", .{});
-			break :blk null;
-		};
+		// OpenCL doesn't really work well on Windows (atleast when testing
+		// using Wine, it might be a missing DLL problem)
+		if (builtin.target.os.tag != .windows) {
+ 			planet.clContext = CLContext.init(allocator, &planet) catch blk: {
+				std.log.warn("Your system doesn't support OpenCL.", .{});
+				break :blk null;
+			};
+		} else {
+			planet.clContext = null;
+		}
 
 		{
 			var i: usize = 0;
@@ -388,7 +395,7 @@ pub const Planet = struct {
 				const value = radius + perlin.p3do(point.x() * 3 + xOffset, point.y() * 3 + yOffset, point.z() * 3 + zOffset, 4) * std.math.min(radius / 2, 15);
 
 				elevation[i / 3] = value;
-				waterElev[i / 3] = std.math.max(0, radius - value) / kmPerWaterMass;
+				waterElev[i / 3] = std.math.max(0, radius - value) / kmPerWaterMass / 20;
 				vertices[i / 3] = point.norm();
 				vegetation[i / 3] = perlin.p3do(point.x() + zOffset, point.y() + yOffset, point.z() + xOffset, 4) / 2 + 0.5;
 

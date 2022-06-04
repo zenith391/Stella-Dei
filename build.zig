@@ -84,14 +84,12 @@ pub fn build(b: *std.build.Builder) void {
     const exe = b.addExecutableSource("stella-dei", convert.getSource());
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    build_tracy.link(b, exe, if (mode == .Debug or true) ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/" else null);
+    build_tracy.link(b, exe, if ((mode == .Debug or true) and target.isNative()) ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/" else null);
     deps.addAllTo(exe);
     glfw.link(b, exe, .{});
 
     exe.addIncludePath("deps");
-    exe.addCSourceFile("deps/nuklear.c", &.{
-        "-DNK_INCLUDE_FIXED_TYPES"
-    });
+    exe.addCSourceFile("deps/nuklear.c", &.{});
     exe.addCSourceFile("deps/miniaudio.c", &.{
         "-fno-sanitize=undefined" // disable UBSAN (due to false positives)
     });

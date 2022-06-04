@@ -43,10 +43,12 @@ pub const Renderer = struct {
 		const zone = tracy.ZoneN(@src(), "Init renderer");
 		defer zone.End();
 		
+		log.debug("  Create shaders", .{});
 		const terrainProgram = try ShaderProgram.createFromName("terrain");
 		const entityProgram = try ShaderProgram.createFromName("entity");
 		const nuklearProgram = try ShaderProgram.createFromName("nuklear");
 
+		log.debug("  Generate Nuklear - OpenGL integration", .{});
 		// Generate the VAO, VBO and EBO that will be used for drawing Nuklear UI.
 		var nkVao: gl.GLuint = undefined;
 		gl.genVertexArrays(1, &nkVao);
@@ -76,6 +78,7 @@ pub const Renderer = struct {
 		// Generate an atlas texture for the font with huge oversample.
 		// TODO: use FreeType for font smoothing, to avoid wasting
 		// VRAM on upscaled fonts
+		log.debug("  Initialize font atlas", .{});
 		var fontAtlas: nk.nk_font_atlas = undefined;
 		nk.nk_font_atlas_init(&fontAtlas, &nkAllocator.nk);
 		nk.nk_font_atlas_begin(&fontAtlas);
@@ -93,11 +96,13 @@ pub const Renderer = struct {
 			img[0..@intCast(usize, imgWidth*imgHeight)]);
 		nk.nk_font_atlas_end(&fontAtlas, nk.nk_handle_id(@intCast(c_int, atlasTex.texture)), 0);
 		
+		log.debug("  Initialize Nuklear", .{});
 		var nkCtx: nk.nk_context = undefined;
 		if (nk.nk_init(&nkCtx, &nkAllocator.nk, &font.handle) == 0) {
 			return error.NuklearError;
 		}
 
+		log.debug("  Allocate Nuklear commands buffers", .{});
 		// At last, initialise the buffers that Nuklear requires for drawing.
 		var cmds: nk.nk_buffer = undefined;
 		var verts: nk.nk_buffer = undefined;
@@ -105,6 +110,7 @@ pub const Renderer = struct {
 		nk.nk_buffer_init(&cmds, &nkAllocator.nk, 8192);
 		nk.nk_buffer_init(&verts, &nkAllocator.nk, 8192*8);
 		nk.nk_buffer_init(&idx, &nkAllocator.nk, 8192*2);
+		log.debug("  Done", .{});
 
 		return Renderer {
 			.window = window,

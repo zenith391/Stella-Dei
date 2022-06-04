@@ -219,11 +219,14 @@ pub fn main() !void {
 	window.setScrollCallback(mouseScroll);
 
 	try glfw.makeContextCurrent(window);
+	std.log.debug("Load OpenGL functions", .{});
 	try gl.load({}, getProcAddress);
 
+	std.log.debug("Initializing renderer..", .{});
 	renderer = try Renderer.init(allocator, window);
 	defer renderer.deinit();
 	
+	std.log.debug("Initializing event loop..", .{});
 	var loop = EventLoop.init();
 
 	loop.beginEvent(); // begin main() event to avoid the loop stopping too soon
@@ -236,6 +239,7 @@ pub fn main() !void {
 	nosuspend game.setState(MainMenuState);
 	defer game.deinit();
 
+	std.log.debug("Creating update loop job..", .{});
 	var updateLoopJob = try Job(void).create(&loop);
 	defer {
 		// 'await' without making the function async
@@ -246,6 +250,7 @@ pub fn main() !void {
 	}
 	try updateLoopJob.call(updateLoop, .{ &loop, window });
 
+	std.log.debug("Done!", .{});
 	while (!window.shouldClose()) {
 		try glfw.makeContextCurrent(window);
 		render(window);

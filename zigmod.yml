@@ -10,7 +10,7 @@ dev_dependencies:
     - src: git https://github.com/MasterQ32/zig-opengl
       name: gl
       license: EUPL-1.2
-      main: exports/gl_4v6.zig
+      main: exports/gl_4v2.zig
     - src: git https://github.com/zigimg/zigimg
     - src: git https://github.com/SpexGuy/Zig-Tracy
       name: zig-tracy

@@ -57,61 +57,61 @@ fn checkMinZig(current: std.SemanticVersion, exe: *std.build.LibExeObjStep) void
 pub const dirs = struct {
     pub const _root = "";
     pub const _93jjp4rc0htn = cache ++ "/../..";
-    pub const _wllanwj7w7d3 = cache ++ "/git/github.com/kooparse/zalgebra";
-    pub const _1w26zzzskmq8 = cache ++ "/git/github.com/MasterQ32/zig-opengl";
+    pub const _zq5iqpwavdh2 = cache ++ "/git/github.com/kooparse/zalgebra";
+    pub const _66n7pgg1c4kt = cache ++ "/git/github.com/MasterQ32/zig-opengl";
     pub const _3hmo0glo2xj9 = cache ++ "/git/github.com/zigimg/zigimg";
-    pub const _52aocl1tx7jy = cache ++ "/git/github.com/SpexGuy/Zig-Tracy";
-    pub const _801pchu4tuu9 = cache ++ "/git/github.com/hexops/mach-glfw";
-    pub const _4aotep54dmfg = cache ++ "/git/github.com/kooparse/zalgebra";
-    pub const _sad4tjjieovg = cache ++ "/git/github.com/MasterQ32/zig-opengl";
-    pub const _6684gldsi5c4 = cache ++ "/git/github.com/SpexGuy/Zig-Tracy";
-    pub const _l28t1wf60xvu = cache ++ "/git/github.com/hexops/mach-glfw";
-    pub const _mz449fdts1q4 = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _35smsidt3jk9 = cache ++ "/git/github.com/SpexGuy/Zig-Tracy";
+    pub const _waki4udw4sw5 = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _wz553969wvug = cache ++ "/git/github.com/kooparse/zalgebra";
+    pub const _1ykdpru6od5p = cache ++ "/git/github.com/MasterQ32/zig-opengl";
+    pub const _xwdwyhi9u0nj = cache ++ "/git/github.com/SpexGuy/Zig-Tracy";
+    pub const _4o4ympedr02g = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _nwe38l4okh63 = cache ++ "/git/github.com/hexops/mach-glfw";
 };
 
 pub const package_data = struct {
     pub const _93jjp4rc0htn = Package{
         .directory = dirs._93jjp4rc0htn,
     };
-    pub const _wllanwj7w7d3 = Package{
-        .directory = dirs._wllanwj7w7d3,
-        .pkg = Pkg{ .name = "zalgebra", .path = .{ .path = dirs._wllanwj7w7d3 ++ "/src/main.zig" }, .dependencies = null },
+    pub const _zq5iqpwavdh2 = Package{
+        .directory = dirs._zq5iqpwavdh2,
+        .pkg = Pkg{ .name = "zalgebra", .path = .{ .path = dirs._zq5iqpwavdh2 ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _1w26zzzskmq8 = Package{
-        .directory = dirs._1w26zzzskmq8,
-        .pkg = Pkg{ .name = "gl", .path = .{ .path = dirs._1w26zzzskmq8 ++ "/exports/gl_4v6.zig" }, .dependencies = null },
+    pub const _66n7pgg1c4kt = Package{
+        .directory = dirs._66n7pgg1c4kt,
+        .pkg = Pkg{ .name = "gl", .path = .{ .path = dirs._66n7pgg1c4kt ++ "/exports/gl_4v2.zig" }, .dependencies = null },
     };
     pub const _3hmo0glo2xj9 = Package{
         .directory = dirs._3hmo0glo2xj9,
         .pkg = Pkg{ .name = "zigimg", .path = .{ .path = dirs._3hmo0glo2xj9 ++ "/zigimg.zig" }, .dependencies = null },
     };
-    pub const _52aocl1tx7jy = Package{
-        .directory = dirs._52aocl1tx7jy,
-        .pkg = Pkg{ .name = "zig-tracy", .path = .{ .path = dirs._52aocl1tx7jy ++ "/tracy.zig" }, .dependencies = null },
+    pub const _35smsidt3jk9 = Package{
+        .directory = dirs._35smsidt3jk9,
+        .pkg = Pkg{ .name = "zig-tracy", .path = .{ .path = dirs._35smsidt3jk9 ++ "/tracy.zig" }, .dependencies = null },
     };
-    pub const _801pchu4tuu9 = Package{
-        .directory = dirs._801pchu4tuu9,
-        .pkg = Pkg{ .name = "glfw", .path = .{ .path = dirs._801pchu4tuu9 ++ "/src/main.zig" }, .dependencies = null },
+    pub const _waki4udw4sw5 = Package{
+        .directory = dirs._waki4udw4sw5,
+        .pkg = Pkg{ .name = "glfw", .path = .{ .path = dirs._waki4udw4sw5 ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _4aotep54dmfg = Package{
-        .directory = dirs._4aotep54dmfg,
-        .pkg = Pkg{ .name = "zalgebra", .path = .{ .path = dirs._4aotep54dmfg ++ "/src/main.zig" }, .dependencies = null },
+    pub const _wz553969wvug = Package{
+        .directory = dirs._wz553969wvug,
+        .pkg = Pkg{ .name = "zalgebra", .path = .{ .path = dirs._wz553969wvug ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _sad4tjjieovg = Package{
-        .directory = dirs._sad4tjjieovg,
-        .pkg = Pkg{ .name = "gl", .path = .{ .path = dirs._sad4tjjieovg ++ "/exports/gl_4v6.zig" }, .dependencies = null },
+    pub const _1ykdpru6od5p = Package{
+        .directory = dirs._1ykdpru6od5p,
+        .pkg = Pkg{ .name = "gl", .path = .{ .path = dirs._1ykdpru6od5p ++ "/exports/gl_4v2.zig" }, .dependencies = null },
     };
-    pub const _6684gldsi5c4 = Package{
-        .directory = dirs._6684gldsi5c4,
-        .pkg = Pkg{ .name = "zig-tracy", .path = .{ .path = dirs._6684gldsi5c4 ++ "/tracy.zig" }, .dependencies = null },
+    pub const _xwdwyhi9u0nj = Package{
+        .directory = dirs._xwdwyhi9u0nj,
+        .pkg = Pkg{ .name = "zig-tracy", .path = .{ .path = dirs._xwdwyhi9u0nj ++ "/tracy.zig" }, .dependencies = null },
     };
-    pub const _l28t1wf60xvu = Package{
-        .directory = dirs._l28t1wf60xvu,
-        .pkg = Pkg{ .name = "glfw", .path = .{ .path = dirs._l28t1wf60xvu ++ "/src/main.zig" }, .dependencies = null },
+    pub const _4o4ympedr02g = Package{
+        .directory = dirs._4o4ympedr02g,
+        .pkg = Pkg{ .name = "glfw", .path = .{ .path = dirs._4o4ympedr02g ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _mz449fdts1q4 = Package{
-        .directory = dirs._mz449fdts1q4,
-        .pkg = Pkg{ .name = "build-glfw", .path = .{ .path = dirs._mz449fdts1q4 ++ "/build.zig" }, .dependencies = null },
+    pub const _nwe38l4okh63 = Package{
+        .directory = dirs._nwe38l4okh63,
+        .pkg = Pkg{ .name = "build-glfw", .path = .{ .path = dirs._nwe38l4okh63 ++ "/build.zig" }, .dependencies = null },
     };
     pub const _root = Package{
         .directory = dirs._root,
@@ -120,24 +120,24 @@ pub const package_data = struct {
 };
 
 pub const packages = &[_]Package{
-    package_data._wllanwj7w7d3,
-    package_data._1w26zzzskmq8,
+    package_data._zq5iqpwavdh2,
+    package_data._66n7pgg1c4kt,
     package_data._3hmo0glo2xj9,
-    package_data._52aocl1tx7jy,
-    package_data._801pchu4tuu9,
+    package_data._35smsidt3jk9,
+    package_data._waki4udw4sw5,
 };
 
 pub const pkgs = struct {
-    pub const zalgebra = package_data._wllanwj7w7d3;
-    pub const gl = package_data._1w26zzzskmq8;
+    pub const zalgebra = package_data._zq5iqpwavdh2;
+    pub const gl = package_data._66n7pgg1c4kt;
     pub const zigimg = package_data._3hmo0glo2xj9;
-    pub const zig_tracy = package_data._52aocl1tx7jy;
-    pub const glfw = package_data._801pchu4tuu9;
+    pub const zig_tracy = package_data._35smsidt3jk9;
+    pub const glfw = package_data._waki4udw4sw5;
 };
 
 pub const imports = struct {
     pub const zalgebra = @import(".zigmod/deps/git/github.com/kooparse/zalgebra/src/main.zig");
-    pub const gl = @import(".zigmod/deps/git/github.com/MasterQ32/zig-opengl/exports/gl_4v6.zig");
+    pub const gl = @import(".zigmod/deps/git/github.com/MasterQ32/zig-opengl/exports/gl_4v2.zig");
     pub const zigimg = @import(".zigmod/deps/git/github.com/zigimg/zigimg/zigimg.zig");
     pub const zig_tracy = @import(".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy.zig");
     pub const glfw = @import(".zigmod/deps/git/github.com/hexops/mach-glfw/src/main.zig");

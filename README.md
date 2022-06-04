@@ -24,7 +24,8 @@ $ zig build
 
 *Note: you need the `ocl-icd-opencl-dev` package (only for building the game)*
 
-Windows require one more step, you need to paste https://pastebin.com/f2ac38b2f into `YOUR_ZIG_FOLDER/lib/libc/mingw/lib-common/OpenCL.def`
+Windows require one more step, you need to paste https://raw.githubusercontent.com/PixelGuys/Stella-Dei/master/deps/OpenCL.def into `YOUR_ZIG_FOLDER/lib/libc/mingw/lib-common/OpenCL.def` for 32-bit cross-compilation to work
+If you want 64-bit to work, paste X to Y
 
 And now you've got an executable located inside `zig-out/bin/`. If you want to directly run the game, just do:
 ```
