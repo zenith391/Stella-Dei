@@ -217,6 +217,18 @@ fn fatalCrash(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anyt
 }
 
 pub fn main() !void {
+	// Only manually catch errors (and show them as message boxes) on Windows
+	if (@import("builtin").target.os.tag == .windows) {
+		main_wrap() catch |err| {
+			fatalCrash(std.heap.page_allocator, "Error: {s}", .{ @errorName(err) });
+		};
+	} else {
+		// Let Zig handle it (it'll log in the terminal, along with optional debug info)
+		try main_wrap();
+	}
+}
+
+inline fn main_wrap() !void {
 	var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
 	defer _ = gpa.deinit();
 
