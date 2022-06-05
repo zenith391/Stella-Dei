@@ -82,6 +82,7 @@ pub fn build(b: *std.build.Builder) void {
     const convert = ConvertStep.create(b, "src/main.zig");
 
     const exe = b.addExecutableSource("stella-dei", convert.getSource());
+    exe.subsystem = .Windows;
     exe.setTarget(target);
     exe.setBuildMode(mode);
     build_tracy.link(b, exe, if ((mode == .Debug or true) and target.isNative()) ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/" else null);

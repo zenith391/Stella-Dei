@@ -198,6 +198,24 @@ fn mouseButtonCallback(window: glfw.Window, button: glfw.mouse_button.MouseButto
 	}
 }
 
+/// Shows an error message box on Windows, logs on console on other platforms.
+/// In all cases it exists with return code 1.
+fn fatalCrash(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void {
+	const L = std.unicode.utf8ToUtf16LeStringLiteral;
+	if (@import("builtin").target.os.tag == .windows) {
+		const msgUtf8 = std.fmt.allocPrint(allocator, fmt, args) catch return;
+		defer allocator.free(msgUtf8);
+		
+		const msgUtf16 = std.unicode.utf8ToUtf16LeWithNull(allocator, msgUtf8) catch return;
+		defer allocator.free(msgUtf16);
+
+		_ = std.os.windows.user32.messageBoxW(null, msgUtf16, L("Fatal Error"), std.os.windows.user32.MB_ICONERROR | std.os.windows.user32.MB_OK) catch return;
+	} else {
+		std.log.err(fmt, args);
+	}
+	std.process.exit(1);
+}
+
 pub fn main() !void {
 	var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
 	defer _ = gpa.deinit();
@@ -210,11 +228,18 @@ pub fn main() !void {
 	try glfw.init(.{});
 	defer glfw.terminate();
 
-	var window = try glfw.Window.create(1280, 720, "Stella Dei", null, null, .{
+	var window = glfw.Window.create(1280, 720, "Stella Dei", null, null, .{
 		.opengl_profile = .opengl_core_profile,
-		.context_version_major = 4,
-		.context_version_minor = 2,
-	});
+		.context_version_major = 3,
+		.context_version_minor = 3,
+	}) catch |err| {
+		switch (err) {
+			error.APIUnavailable => fatalCrash(allocator, "OpenGL is not available! Install drivers!", .{}),
+			error.VersionUnavailable => fatalCrash(allocator, "OpenGL 3.3 (core profile) is not available! Upgrade your drivers!", .{}),
+			else => fatalCrash(allocator, "Could not create the game window: {s}", .{ @errorName(err) }),
+		}
+		std.process.exit(1);
+	};
 	defer window.destroy();
 	window.setCursorPosCallback(cursorPosCallback);
 	window.setMouseButtonCallback(mouseButtonCallback);
