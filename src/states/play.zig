@@ -209,6 +209,7 @@ pub const PlayState = struct {
 		entity.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
+		gl.frontFace(gl.CCW);
 		for (planet.lifeforms.items) |lifeform| {
 			const modelMat = Mat4.recompose(lifeform.position, Vec3.new(0, 0, 0), Vec3.new(1, 1, 1));
 			entity.setUniformMat4("modelMatrix",
@@ -404,7 +405,7 @@ pub const PlayState = struct {
 				nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 160000, 1000, 10);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 40000, 1000, 5);
+				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 1000, 5);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 3);
 				self.debug_emitWater = nk.nk_check_label(ctx, "Emit Water", @boolToInt(self.debug_emitWater)) != 0;
