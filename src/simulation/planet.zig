@@ -89,7 +89,7 @@ pub const CLContext = struct {
 			var size: usize = undefined;
 			_ = cl.clGetProgramBuildInfo(program, device, cl.CL_PROGRAM_BUILD_LOG,
 				log.len, log.ptr, &size);
-			std.debug.print("{s}", .{ log[0..size] });
+			std.log.err("{s}", .{ log[0..size] });
 			return error.OpenCLError;
 		}
 		const temperatureKernel = cl.clCreateKernel(program, "simulateTemperature", null) orelse return error.OpenCLError;
@@ -425,8 +425,8 @@ pub const Planet = struct {
 		computeNeighbours(&planet);
 
 		const meanPointArea = (4 * std.math.pi * radius * radius) / @intToFloat(f32, numPoints);
-		std.debug.print("There are {d} points in the ico-sphere.\n", .{ numPoints });
-		std.debug.print("The mean area per point of the ico-sphere is {d} km²\n", .{ meanPointArea });
+		std.log.info("There are {d} points in the ico-sphere.\n", .{ numPoints });
+		std.log.info("The mean area per point of the ico-sphere is {d} km²\n", .{ meanPointArea });
 
 		return planet;
 	}
@@ -614,7 +614,7 @@ pub const Planet = struct {
 		const waterCp: f32 = if (self.temperature[pointIndex] > 273.15) 4184 else 2093;
 
 		const waterLevel = self.waterMass[pointIndex];
-		const specificHeatCapacity = exp(-waterLevel/20) * (groundCp - waterCp) + waterCp; // J/K/kg
+		const specificHeatCapacity = exp(-waterLevel/2_000_000) * (groundCp - waterCp) + waterCp; // J/K/kg
 		// Earth is about 5513 kg/m³ (https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html) and assume each point is 0.72m thick??
 		const pointMass = pointArea * 0.74 * 5513; // kg
 		const heatCapacity = specificHeatCapacity * pointMass; // J.K-1
@@ -834,7 +834,7 @@ pub const Planet = struct {
 				// TODO: more accurate
 				if (self.temperature[i] > 373.15) {
 					mass = std.math.max(
-						0, mass - 0.33
+						0, mass - 1_000_000_000_000
 					);
 				}
 
