@@ -19,6 +19,7 @@ pub const Renderer = struct {
 	// Shader programs used during the game's lifetime
 	terrainProgram: ShaderProgram,
 	entityProgram: ShaderProgram,
+	skyboxProgram: ShaderProgram,
 	
 	/// Shader program used for Nuklear UI
 	nuklearProgram: ShaderProgram,
@@ -46,6 +47,7 @@ pub const Renderer = struct {
 		log.debug("  Create shaders", .{});
 		const terrainProgram = try ShaderProgram.createFromName("terrain");
 		const entityProgram = try ShaderProgram.createFromName("entity");
+		const skyboxProgram = try ShaderProgram.createFromName("skybox");
 		const nuklearProgram = try ShaderProgram.createFromName("nuklear");
 
 		log.debug("  Generate Nuklear - OpenGL integration", .{});
@@ -117,6 +119,7 @@ pub const Renderer = struct {
 			.textureCache = TextureCache.init(allocator),
 			.terrainProgram = terrainProgram,
 			.entityProgram = entityProgram,
+			.skyboxProgram = skyboxProgram,
 			.nuklearProgram = nuklearProgram,
 			.nuklearVao = nkVao,
 			.nuklearVbo = nkVbo,
@@ -258,7 +261,7 @@ pub const Renderer = struct {
 pub const Texture = struct {
 	texture: gl.GLuint,
 
-	pub fn createFromPath(allocator: Allocator, path: []const u8) !Texture {
+	pub fn loadImage(allocator: Allocator, path: []const u8) !zigimg.Image {
 		const zone = tracy.ZoneN(@src(), "Load texture");
 		defer zone.End();
 		zone.Text(path);
@@ -269,14 +272,19 @@ pub const Texture = struct {
 		// Manually only allow loading PNG files for faster compilation and lower executable size
 		//var image = try zigimg.Image.fromFile(allocator, &file);
 		var image = zigimg.Image.init(allocator);
-		defer image.deinit();
 		var streamSource = std.io.StreamSource{ .file = file };
 		const imageInfo = try zigimg.png.PNG.formatInterface().readForImage(allocator, streamSource.reader(),
 			streamSource.seekableStream(), &image.pixels);
 		image.width = imageInfo.width;
 		image.height = imageInfo.height;
 
-		const first = @ptrCast([*]u8, &image.pixels.?.Rgba32[0]);
+		return image;
+	}
+
+	pub fn createFromPath(allocator: Allocator, path: []const u8) !Texture {
+		const image = try loadImage(allocator, path);
+		defer image.deinit();
+		const first = @ptrCast([*]u8, &image.pixels.?.rgba32[0]);
 		const pixels = first[0..image.width*image.height*4];
 
 		return createFromData(image.width, image.height, pixels);
@@ -323,12 +331,22 @@ pub const Texture = struct {
 		NegativeZ,
 	};
 
-	// Assumes RGB24
+	/// Assumes RGB24
 	pub fn setCubemapFace(self: Texture, face: CubemapFace, width: usize, height: usize, data: []const u8) void {
 		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.texture);
 		gl.texImage2D(@enumToInt(face), 0, gl.RGB, 
 			@intCast(c_int, width), @intCast(c_int, height), 0, gl.RGB, gl.UNSIGNED_BYTE, data.ptr);
 
+	}
+
+	/// Assumes RGB24
+	pub fn loadCubemapFace(self: Texture, allocator: Allocator, face: CubemapFace, path: []const u8) !void {
+		const image = try loadImage(allocator, path);
+		defer image.deinit();
+		const first = @ptrCast([*]u8, &image.pixels.?.rgb24[0]);
+		const pixels = first[0..image.width*image.height*3];
+
+		self.setCubemapFace(face, image.width, image.height, pixels);
 	}
 };
 

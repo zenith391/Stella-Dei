@@ -298,7 +298,7 @@ pub const Planet = struct {
 	}
 
 	/// Note: the data is allocated using the event loop's allocator
-	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize, radius: f32, seed: u32) !Planet {
+	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize, radius: f32, seed: u64) !Planet {
 		const zone = tracy.ZoneN(@src(), "Generate planet");
 		defer zone.End();
 
@@ -384,20 +384,19 @@ pub const Planet = struct {
 			var i: usize = 0;
 			const vert = subdivided.?.vertices;
 			defer allocator.free(vert);
-			const xOffset = @intToFloat(f32, (seed ^ 0xc0ffee11) >> 16) * 14;
-			const yOffset = @intToFloat(f32, (seed ^ 0xdeadbeef) & 0xFFFF) * 14;
-			const zOffset = @intToFloat(f32, (@floatToInt(u32, xOffset + yOffset) ^ 0xcafebabe) & 0xFFFF);
 			const kmPerWaterMass = planet.getKmPerWaterMass();
 			std.log.info("{d} km / water ton", .{ kmPerWaterMass });
-			std.log.info("seed 0x{x} -> noise offset: {d}, {d}, {d}", .{ seed, xOffset, yOffset, zOffset });
+			std.log.info("seed 0x{x}", .{ seed });
+			perlin.setSeed(seed);
 			while (i < vert.len) : (i += 3) {
 				var point = Vec3.fromSlice(vert[i..]);
-				const value = radius + perlin.p3do(point.x() * 3 + xOffset, point.y() * 3 + yOffset, point.z() * 3 + zOffset, 4) * std.math.min(radius / 2, 15);
+				point = point.norm();
+				const value = radius + perlin.p3do(point.x() * 3 + 5, point.y() * 3 + 5, point.z() * 3 + 5, 4) * std.math.min(radius / 2, 15);
 
 				elevation[i / 3] = value;
 				waterElev[i / 3] = std.math.max(0, radius - value) / kmPerWaterMass;
-				vertices[i / 3] = point.norm();
-				vegetation[i / 3] = perlin.p3do(point.x() + zOffset, point.y() + yOffset, point.z() + xOffset, 4) / 2 + 0.5;
+				vertices[i / 3] = point;
+				vegetation[i / 3] = perlin.p3do(point.x() + 5, point.y() + 5, point.z() + 5, 4) / 2 + 0.5;
 
 				const totalElevation = elevation[i / 3] + waterElev[i / 3];
 				const transformedPoint = point.scale(totalElevation);

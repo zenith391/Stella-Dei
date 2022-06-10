@@ -61,8 +61,8 @@ pub fn p3do(x: f32, y: f32, z: f32, octaves: u32) f32 {
     return value;
 }
 
-fn fade(t: f32) f32 {
-	return t * t * t * (t * (t * 6 - 15) + 10);
+fn fade(t: f64) f32 {
+	return @floatCast(f32, t * t * t * (t * (t * 6 - 15) + 10));
 }
 
 fn grad(hash: u8, x: f32, y: f32, z: f32) f32 {
@@ -88,4 +88,14 @@ const permutation = [256]u8 { 151,160,137,91,90,15,
 	49,192,214, 31,181,199,106,157,184, 84,204,176,115,121,50,45,127, 4,150,254,
 	138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180
 };
-const p = permutation ** 2;
+var p = permutation ** 2;
+
+pub fn setSeed(seed: u64) void {
+	var prng = std.rand.DefaultPrng.init(seed);
+	const random = prng.random();
+	var i: usize = 0;
+	while (i < 256) : (i += 1) {
+		p[i] = random.int(u8);
+		p[i + 256] = random.int(u8);
+	}
+}

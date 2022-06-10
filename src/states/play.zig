@@ -16,6 +16,71 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Mat4 = za.Mat4;
 
+pub const CubeMesh = struct {
+	const vertices = [36*3]f32 {
+		-0.5, -0.5, -0.5,
+		 0.5, -0.5, -0.5,
+		 0.5,  0.5, -0.5,
+		 0.5,  0.5, -0.5,
+		-0.5,  0.5, -0.5,
+		-0.5, -0.5, -0.5,
+
+		-0.5, -0.5,  0.5,
+		 0.5, -0.5,  0.5,
+		 0.5,  0.5,  0.5,
+		 0.5,  0.5,  0.5,
+		-0.5,  0.5,  0.5,
+		-0.5, -0.5,  0.5,
+
+		-0.5,  0.5,  0.5,
+		-0.5,  0.5, -0.5,
+		-0.5, -0.5, -0.5,
+		-0.5, -0.5, -0.5,
+		-0.5, -0.5,  0.5,
+		-0.5,  0.5,  0.5,
+
+		 0.5,  0.5,  0.5,
+		 0.5,  0.5, -0.5,
+		 0.5, -0.5, -0.5,
+		 0.5, -0.5, -0.5,
+		 0.5, -0.5,  0.5,
+		 0.5,  0.5,  0.5,
+
+		-0.5, -0.5, -0.5,
+		 0.5, -0.5, -0.5,
+		 0.5, -0.5,  0.5,
+		 0.5, -0.5,  0.5,
+		-0.5, -0.5,  0.5,
+		-0.5, -0.5, -0.5,
+
+		-0.5,  0.5, -0.5,
+		 0.5,  0.5, -0.5,
+		 0.5,  0.5,  0.5,
+		 0.5,  0.5,  0.5,
+		-0.5,  0.5,  0.5,
+		-0.5,  0.5, -0.5,
+	};
+
+	var cube_vao: ?gl.GLuint = null;
+
+	pub fn getVAO() gl.GLuint {
+		if (cube_vao == null) {
+			var vao: gl.GLuint = undefined;
+			gl.genVertexArrays(1, &vao);
+			var vbo: gl.GLuint = undefined;
+			gl.genBuffers(1, &vbo);
+
+			gl.bindVertexArray(vao);
+			gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+			gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), &vertices, gl.STATIC_DRAW);
+			gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+			gl.enableVertexAttribArray(0);
+			cube_vao = vao;
+		}
+		return cube_vao.?;
+	}
+};
+
 pub const PlayState = struct {
 	/// The position of the camera
 	/// This is already scaled by cameraDistance
@@ -25,7 +90,8 @@ pub const PlayState = struct {
 	planet: Planet,
 	/// Noise cubemap used for rendering terrains with a terrain quality that
 	/// seems higher than it is really.
-	cubemap: Texture,
+	noiseCubemap: Texture,
+	skyboxCubemap: Texture,
 
 	/// The distance the camera is from the planet's center
 	cameraDistance: f32,
@@ -100,6 +166,12 @@ pub const PlayState = struct {
 			cubemap.setCubemapFace(face, 512, 512, data);
 		}
 
+		// Create the skybox
+		const skybox = Texture.initCubemap();
+		for (faces) |face| {
+			skybox.loadCubemapFace(game.allocator, face, "assets/starsky-1024.png") catch {};
+		}
+
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u32);
@@ -108,7 +180,8 @@ pub const PlayState = struct {
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
 			.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos)),
-			.cubemap = cubemap,
+			.noiseCubemap = cubemap,
+			.skyboxCubemap = skybox,
 			.planet = planet,
 			.targetCameraDistance = planetRadius * 2.5,
 			.cameraDistance = planetRadius * 5,
@@ -162,12 +235,8 @@ pub const PlayState = struct {
 
 		planet.upload(game.loop);
 
-		const program = renderer.terrainProgram;
 		const zFar = planet.radius * 5;
 		const zNear = zFar / 10000;
-		program.use();
-		program.setUniformMat4("projMatrix",
-			Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
 
 		const right = self.cameraPos.cross(Vec3.forward()).norm();
 		const forward = self.cameraPos.cross(right).norm().negate();
@@ -176,6 +245,40 @@ pub const PlayState = struct {
 		const target = self.cameraPos.add(Vec3.lerp(planetTarget, forward,
 			std.math.pow(f32, 2, -distToPlanet / self.planet.radius * 5) * 0.6
 		));
+
+		// Start by rendering the skybox
+		{
+			const program = renderer.skyboxProgram;
+			program.use();
+			program.setUniformMat4("projMatrix",
+				Mat4.perspective(70, size.x() / size.y(), 0.01, 100));
+			var newViewMatrix = Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1));
+			// remove all the translation part
+			newViewMatrix.data[0][3] = 0;
+			newViewMatrix.data[1][3] = 0;
+			newViewMatrix.data[2][3] = 0;
+			newViewMatrix.data[3][3] = 1;
+			newViewMatrix.data[3][0] = 0;
+			newViewMatrix.data[3][1] = 0;
+			newViewMatrix.data[3][2] = 0;
+			program.setUniformMat4("viewMatrix", newViewMatrix);
+			gl.depthMask(gl.FALSE);
+
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.skyboxCubemap.texture);
+			program.setUniformInt("skyboxCubemap", 0);
+
+			gl.bindVertexArray(CubeMesh.getVAO());
+			gl.drawArrays(gl.TRIANGLES, 0, 36);
+
+			gl.depthMask(gl.TRUE);
+		}
+
+		// Then render the terrain
+		const program = renderer.terrainProgram;
+		program.use();
+		program.setUniformMat4("projMatrix",
+			Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
 		program.setUniformMat4("viewMatrix",
 			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
@@ -192,7 +295,7 @@ pub const PlayState = struct {
 		program.setUniformInt("selectedVertex", @intCast(c_int, self.selectedPoint));
 
 		gl.activeTexture(gl.TEXTURE0);
-		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.cubemap.texture);
+		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);
 		program.setUniformInt("noiseCubemap", 0);
 
 		gl.enable(gl.CULL_FACE);
