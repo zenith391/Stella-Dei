@@ -430,7 +430,7 @@ pub const Planet = struct {
 		return planet;
 	}
 
-	const HEIGHT_EXAGGERATION_FACTOR = 25;
+	const HEIGHT_EXAGGERATION_FACTOR = 10;
 
 	fn computeNormal(self: Planet, a: usize, aVec: Vec3) Vec3 {
 		@setFloatMode(.Optimized);
@@ -1000,12 +1000,11 @@ pub const Planet = struct {
 			var i: usize = 0;
 			while (i < self.vertices.len) : (i += 1) {
 				const vegetation = self.vegetation[i];
-				if (self.waterMass[i] >= 0.1) {
-					self.vegetation[i] = std.math.max(0, vegetation - 0.00001 * options.timeScale);
-				}
-				if (self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0) {
-					self.vegetation[i] = std.math.max(0, vegetation - 0.0000001 * options.timeScale);
-				}
+				var newVegetation: f32 = vegetation;
+				newVegetation -= 0.00001 * options.timeScale * @as(f32, if (self.waterMass[i] >= 1000) 1.0 else 0.0);
+				const isInappropriateTemperature = self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0;
+				newVegetation -= 0.0000001 * options.timeScale * @as(f32, if (isInappropriateTemperature) 1.0 else 0.0);
+				self.vegetation[i] = std.math.max(0, newVegetation);
 
 				for (self.getNeighbours(i)) |neighbour| {
 					if (self.waterMass[neighbour] < 0.1) {

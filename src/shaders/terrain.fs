@@ -47,7 +47,7 @@ void main() {
 		vec3 viewDir = normalize(viewPos - localPosition);
 		vec3 reflectDir = reflect(-lightDir, normal);
 		float spec = pow(max(dot(viewDir, reflectDir), 0.0), specularPower);
-		vec3 specular = specularStrength * spec * lightColor;
+		vec3 specular = specularStrength * spec * lightColor * lightIntensity;
 
 		vec3 result = (ambient + diffuse + specular) * objectColor;
 		if (outSelected > 0) {

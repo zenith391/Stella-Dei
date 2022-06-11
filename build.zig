@@ -82,6 +82,7 @@ pub fn build(b: *std.build.Builder) void {
     const convert = ConvertStep.create(b, "src/main.zig");
 
     const exe = b.addExecutableSource("stella-dei", convert.getSource());
+    exe.strip = mode == .ReleaseFast or mode == .ReleaseSmall;
     exe.subsystem = .Windows;
     exe.setTarget(target);
     exe.setBuildMode(mode);

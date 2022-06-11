@@ -495,7 +495,7 @@ pub const PlayState = struct {
 			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 				// currently unusable
 				//nk.nk_layout_row_dynamic(ctx, 50, 1);
-				//nk.nk_property_float(ctx, "Planet Inclination (rad)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
+				//nk.nk_property_float(ctx, "Axial Tilt (deg)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 100, 2);
@@ -505,7 +505,7 @@ pub const PlayState = struct {
 				// others
 				
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 160000, 1000, 10);
+				nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 1600000, 1000, 10);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 1000, 5);
