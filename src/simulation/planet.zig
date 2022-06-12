@@ -381,20 +381,26 @@ pub const Planet = struct {
 		}
 
 		{
-			var i: usize = 0;
+			var prng = std.rand.DefaultPrng.init(seed);
+			const random = prng.random();
+
 			const vert = subdivided.?.vertices;
 			defer allocator.free(vert);
 			const kmPerWaterMass = planet.getKmPerWaterMass();
+			const seaLevel = radius + (random.float(f32) - 0.5) * 10; // between +5km and -5/km
+
 			std.log.info("{d} km / water ton", .{ kmPerWaterMass });
 			std.log.info("seed 0x{x}", .{ seed });
-			perlin.setSeed(seed);
+			std.log.info("Sea Level: {d} km", .{ seaLevel - radius });
+			perlin.setSeed(random.int(u64));
+			var i: usize = 0;
 			while (i < vert.len) : (i += 3) {
 				var point = Vec3.fromSlice(vert[i..]);
 				point = point.norm();
 				const value = radius + perlin.p3do(point.x() * 3 + 5, point.y() * 3 + 5, point.z() * 3 + 5, 4) * std.math.min(radius / 2, 15);
 
 				elevation[i / 3] = value;
-				waterElev[i / 3] = std.math.max(0, radius - value) / kmPerWaterMass;
+				waterElev[i / 3] = std.math.max(0, seaLevel - value) / kmPerWaterMass;
 				vertices[i / 3] = point;
 				vegetation[i / 3] = perlin.p3do(point.x() + 5, point.y() + 5, point.z() + 5, 4) / 2 + 0.5;
 
@@ -948,35 +954,35 @@ pub const Planet = struct {
 		// Finish by swapping the new temperature
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
 
-		// TODO: re-do water simulation using Navier-Stokes equations
-		if (true) {
-		var iteration: usize = 0;
-		var numIterations: usize = 1;
-		while (iteration < numIterations) : (iteration += 1) {
-			std.mem.copy(f32, self.newWaterMass, self.waterMass);
+		// Disable water simulation when timescale is above 100 000
+		if (options.timeScale < 100000) {
+			var iteration: usize = 0;
+			var numIterations: usize = 1;
+			while (iteration < numIterations) : (iteration += 1) {
+				std.mem.copy(f32, self.newWaterMass, self.waterMass);
 
-			{
-				var jobs: [32]@Frame(simulateWater) = undefined;
-				const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
-				const pointCount = self.vertices.len;
-				var i: usize = 0;
-				while (i < parallelness) : (i += 1) {
-					const start = pointCount / parallelness * i;
-					const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1);
-					jobs[i] = async self.simulateWater(loop, options, numIterations, start, end);
+				{
+					var jobs: [32]@Frame(simulateWater) = undefined;
+					const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+					const pointCount = self.vertices.len;
+					var i: usize = 0;
+					while (i < parallelness) : (i += 1) {
+						const start = pointCount / parallelness * i;
+						const end = if (i == parallelness-1) pointCount else pointCount / parallelness * (i + 1);
+						jobs[i] = async self.simulateWater(loop, options, numIterations, start, end);
+					}
+
+					i = 0;
+					while (i < parallelness) : (i += 1) {
+						await jobs[i];
+					}
 				}
 
-				i = 0;
-				while (i < parallelness) : (i += 1) {
-					await jobs[i];
-				}
+				std.mem.swap([]f32, &self.waterMass, &self.newWaterMass);
 			}
-
-			std.mem.swap([]f32, &self.waterMass, &self.newWaterMass);
-		}
 		}
 
-		{
+		if (options.timeScale < 100000) {
 			const zone = tracy.ZoneN(@src(), "Life Simulation");
 			defer zone.End();
 			
@@ -990,6 +996,8 @@ pub const Planet = struct {
 				}
 				lifeform.aiStep(self, options);
 			}
+		} else {
+			// TODO: switch down to much simplified and "globalized" life simulation
 		}
 
 		{

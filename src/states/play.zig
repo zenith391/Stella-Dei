@@ -340,8 +340,9 @@ pub const PlayState = struct {
 		);
 
 		if (self.debug_emitWater and game.window.getMouseButton(.left) == .press) {
-			if (planet.waterMass[self.selectedPoint] < 50) {
-				planet.waterMass[self.selectedPoint] += 0.05 * self.timeScale / (self.timeScale / 10);
+			const kmPerWaterMass = planet.getKmPerWaterMass();
+			if (planet.waterMass[self.selectedPoint] < 25 / kmPerWaterMass) {
+				planet.waterMass[self.selectedPoint] += 0.00005 * self.timeScale / kmPerWaterMass;
 			}
 		}
 		if (self.debug_emitVegetation and game.window.getMouseButton(.left) == .press) {
