@@ -441,15 +441,14 @@ pub const Planet = struct {
 	fn computeNormal(self: Planet, a: usize, aVec: Vec3) Vec3 {
 		@setFloatMode(.Optimized);
 		var sum = Vec3.zero();
-		const kmPerWaterMass = self.getKmPerWaterMass();
 		const adjacentVertices = self.getNeighbours(a);
 		{
 			var i: usize = 1;
 			while (i < adjacentVertices.len) : (i += 1) {
 				const b = adjacentVertices[i-1];
-				const bVec = self.vertices[b].scale((self.elevation[b] + self.waterMass[b] * kmPerWaterMass - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius);
+				const bVec = self.transformedPoints[b];
 				const c = adjacentVertices[ i ];
-				const cVec = self.vertices[c].scale((self.elevation[c] + self.waterMass[c] * kmPerWaterMass - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius);
+				const cVec = self.transformedPoints[c];
 				var normal = bVec.sub(aVec).cross(cVec.sub(aVec)); // (b-a) x (c-a)
 				// if the normal is pointing inside
 				const aVecTranslate = aVec.add(normal.norm());
@@ -466,13 +465,12 @@ pub const Planet = struct {
 		loop.yield();
 		const zone = tracy.ZoneN(@src(), "Compute normals");
 		defer zone.End();
-		const kmPerWaterMass = self.getKmPerWaterMass();
 
 		// there could potentially be a data race between this function and upload
 		// but it's not a problem as even if only a part of a normal's components are
 		// updated, the glitch is barely noticeable
-		for (self.vertices) |point, i| {
-			self.normals[i] = self.computeNormal(i, point.scale((self.elevation[i] + self.waterMass[i] * kmPerWaterMass - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius));
+		for (self.transformedPoints) |point, i| {
+			self.normals[i] = self.computeNormal(i, point);
 		}
 	}
 
