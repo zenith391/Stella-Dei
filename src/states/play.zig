@@ -102,8 +102,8 @@ pub const PlayState = struct {
 	/// The index of the currently selected point
 	selectedPoint: usize = 0,
 	displayMode: PlanetDisplayMode = .Normal,
-	/// Inclination of rotation, in radians
-	planetInclination: f32 = 0.4,
+	/// Inclination of rotation, in degrees
+	axialTilt: f32 = 23.4,
 	/// The solar constant in W.m-2
 	solarConstant: f32 = 1361,
 	/// The planet's surface conductivity in arbitrary units (TODO: use real unit)
@@ -233,7 +233,7 @@ pub const PlayState = struct {
 			@cos(sunTheta)
 		);
 
-		planet.upload(game.loop);
+		planet.upload(game.loop, self.axialTilt);
 
 		const zFar = planet.radius * 5;
 		const zNear = zFar / 10000;
@@ -494,9 +494,8 @@ pub const PlayState = struct {
 		if (self.showPlanetControl) {
 			if (nk.nk_begin(ctx, "Planet Control",.{ .x = 30, .y = 70, .w = 450, .h = 320 },
 			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-				// currently unusable
-				//nk.nk_layout_row_dynamic(ctx, 50, 1);
-				//nk.nk_property_float(ctx, "Axial Tilt (deg)", 0, &self.planetInclination, 3.14, 0.1, 0.01);
+				nk.nk_layout_row_dynamic(ctx, 50, 1);
+				nk.nk_property_float(ctx, "Axial Tilt (deg)", 0, &self.axialTilt, 360, 1, 0.1);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 100, 2);

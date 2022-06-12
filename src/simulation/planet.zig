@@ -497,8 +497,15 @@ pub const Planet = struct {
 		return @floatCast(f32, meanPointArea);
 	}
 
+	pub fn mulByVec3(self: za.Mat4, v: Vec3) Vec3 {
+		const x = (self.data[0][0] * v.x()) + (self.data[1][0] * v.y()) + (self.data[2][0] * v.z());
+		const y = (self.data[0][1] * v.x()) + (self.data[1][1] * v.y()) + (self.data[2][1] * v.z());
+		const z = (self.data[0][2] * v.x()) + (self.data[1][2] * v.y()) + (self.data[2][2] * v.z());
+		return Vec3.new(x, y, z);
+	}
+
 	/// Upload all changes to the GPU
-	pub fn upload(self: *Planet, loop: *EventLoop) void {
+	pub fn upload(self: *Planet, loop: *EventLoop, axialTilt: f32) void {
 		@setFloatMode(.Optimized);
 		const zone = tracy.ZoneN(@src(), "Planet GPU Upload");
 		defer zone.End();
@@ -517,6 +524,7 @@ pub const Planet = struct {
 			job.call(computeAllNormals, .{ self, loop }) catch unreachable;
 		}
 
+		const rotationMatrix = za.Mat4.fromRotation(axialTilt, Vec3.right());
 		const kmPerWaterMass = self.getKmPerWaterMass();
 		//std.log.info("water: {d} m / kg", .{ kmPerWaterMass * 1000 });
 
@@ -527,7 +535,8 @@ pub const Planet = struct {
 			const waterElevation = self.waterMass[i] * kmPerWaterMass;
 			const totalElevation = self.elevation[i] + waterElevation;
 			const exaggeratedElev = (totalElevation - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius;
-			const transformedPoint = point.scale(exaggeratedElev);
+			const scaledPoint = point.scale(exaggeratedElev);
+			const transformedPoint = mulByVec3(rotationMatrix, scaledPoint);
 			const normal = self.normals[i];
 			self.transformedPoints[i] = transformedPoint;
 
