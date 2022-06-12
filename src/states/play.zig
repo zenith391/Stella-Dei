@@ -81,6 +81,18 @@ pub const CubeMesh = struct {
 	}
 };
 
+const GameTool = enum {
+	None,
+	/// When enabled, emits water at selected point on click
+	EmitWater,
+	/// When enabled, set vegetation level to 1 at selected point on click
+	DrainWater,
+	/// When enabled, drains all water near selected point on click
+	PlaceVegetation,
+	/// When enabled, place lifeform on click
+	PlaceLife
+};
+
 pub const PlayState = struct {
 	/// The position of the camera
 	/// This is already scaled by cameraDistance
@@ -120,14 +132,7 @@ pub const PlayState = struct {
 	paused: bool = false,
 	showPlanetControl: bool = false,
 
-	/// When enabled, emits water at selected point on click
-	debug_emitWater: bool = false,
-	/// When enabled, set vegetation level to 1 at selected point on click
-	debug_emitVegetation: bool = false,
-	/// When enabled, drains all water near selected point on click
-	debug_suckWater: bool = false,
-	/// When enabled, place lifeform on click
-	debug_placeLifeform: bool = false,
+	selectedTool: GameTool = .None,
 	meanTemperature: f32 = 0.0,
 
 	const PlanetDisplayMode = enum(c_int) {
@@ -174,7 +179,7 @@ pub const PlayState = struct {
 
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
-		const seed = randomPrng.random().int(u32);
+		const seed = randomPrng.random().int(u64);
 		const planet = Planet.generate(game.allocator, 6, planetRadius, seed) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
@@ -339,17 +344,17 @@ pub const PlayState = struct {
 			@cos(sunTheta)
 		);
 
-		if (self.debug_emitWater and game.window.getMouseButton(.left) == .press) {
+		if (self.selectedTool == .EmitWater and game.window.getMouseButton(.left) == .press) {
 			const kmPerWaterMass = planet.getKmPerWaterMass();
 			if (planet.waterMass[self.selectedPoint] < 25 / kmPerWaterMass) {
 				planet.waterMass[self.selectedPoint] += 0.00005 * self.timeScale / kmPerWaterMass;
 			}
 		}
-		if (self.debug_emitVegetation and game.window.getMouseButton(.left) == .press) {
+		if (self.selectedTool == .PlaceVegetation and game.window.getMouseButton(.left) == .press) {
 			planet.vegetation[self.selectedPoint] = 1;
 		}
 
-		if (self.debug_suckWater and game.window.getMouseButton(.left) == .press) {
+		if (self.selectedTool == .DrainWater and game.window.getMouseButton(.left) == .press) {
 			planet.waterMass[self.selectedPoint] = 0;
 			for (planet.getNeighbours(self.selectedPoint)) |idx| {
 				planet.waterMass[idx] = 0;
@@ -380,7 +385,7 @@ pub const PlayState = struct {
 	}
 
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {
-		if (self.debug_placeLifeform and button == .left) {
+		if (self.selectedTool == .PlaceLife and button == .left) {
 			const planet = &self.planet;
 			const point = self.selectedPoint;
 			const pointPos = planet.transformedPoints[point];
@@ -511,12 +516,10 @@ pub const PlayState = struct {
 				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 1000, 5);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 3);
-				self.debug_emitWater = nk.nk_check_label(ctx, "Emit Water", @boolToInt(self.debug_emitWater)) != 0;
-				self.debug_suckWater = nk.nk_check_label(ctx, "Suck Water", @boolToInt(self.debug_suckWater)) != 0;
-				self.debug_emitVegetation = nk.nk_check_label(ctx, "Place Vegetation", @boolToInt(self.debug_emitVegetation)) != 0;
+				//self.debug_emitVegetation = nk.nk_check_label(ctx, "Place Vegetation", @boolToInt(self.debug_emitVegetation)) != 0;
 
 				nk.nk_layout_row_dynamic(ctx, 50, 2);
-				self.debug_placeLifeform = nk.nk_check_label(ctx, "Place Life (WIP!!)", @boolToInt(self.debug_placeLifeform)) != 0;
+				//self.debug_placeLifeform = nk.nk_check_label(ctx, "Place Life (WIP!!)", @boolToInt(self.debug_placeLifeform)) != 0;
 				var buf: [200]u8 = undefined;
 				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
 					nk.NK_TEXT_ALIGN_CENTERED);
@@ -558,6 +561,50 @@ pub const PlayState = struct {
 			}
 			if (nk.nk_button_symbol(ctx, nk.NK_SYMBOL_TRIANGLE_RIGHT) != 0) {
 				self.paused = false;
+			}
+		}
+		nk.nk_end(ctx);
+
+		if (nk.nk_begin(ctx, "No Tool",.{ .x = 550, .y = 10, .w = 70, .h = 70 },
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			nk.nk_layout_row_static(ctx, 60, 60, 1);
+			
+			const waterIcon = renderer.textureCache.get("no-tool").toNkImage();
+			if (nk.nk_button_image(ctx, waterIcon) != 0) {
+				self.selectedTool = .None;
+			}
+		}
+		nk.nk_end(ctx);
+
+		if (nk.nk_begin(ctx, "Emit Water Tool",.{ .x = 625, .y = 10, .w = 70, .h = 70 },
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			nk.nk_layout_row_static(ctx, 60, 60, 1);
+			
+			const waterIcon = renderer.textureCache.get("emit-water").toNkImage();
+			if (nk.nk_button_image(ctx, waterIcon) != 0) {
+				self.selectedTool = .EmitWater;
+			}
+		}
+		nk.nk_end(ctx);
+
+		if (nk.nk_begin(ctx, "Drain Water Tool",.{ .x = 700, .y = 10, .w = 70, .h = 70 },
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			nk.nk_layout_row_static(ctx, 60, 60, 1);
+			
+			const waterIcon = renderer.textureCache.get("drain-water").toNkImage();
+			if (nk.nk_button_image(ctx, waterIcon) != 0) {
+				self.selectedTool = .DrainWater;
+			}
+		}
+		nk.nk_end(ctx);
+
+		if (nk.nk_begin(ctx, "Place Vegetation Tool",.{ .x = 775, .y = 10, .w = 70, .h = 70 },
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			nk.nk_layout_row_static(ctx, 60, 60, 1);
+			
+			const waterIcon = renderer.textureCache.get("place-vegetation").toNkImage();
+			if (nk.nk_button_image(ctx, waterIcon) != 0) {
+				self.selectedTool = .PlaceVegetation;
 			}
 		}
 		nk.nk_end(ctx);

@@ -348,6 +348,15 @@ pub const Texture = struct {
 
 		self.setCubemapFace(face, image.width, image.height, pixels);
 	}
+
+	pub fn toNkImage(self: Texture) nk.struct_nk_image {
+		return .{
+			.handle = .{ .id = @intCast(c_int, self.texture) },
+			.w = 0, .h = 0,
+			.region = .{ 0, 0, 0, 0 }
+		};
+	}
+
 };
 
 pub const TextureCache = struct {
