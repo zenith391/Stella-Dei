@@ -668,7 +668,7 @@ pub const Planet = struct {
 		var i: usize = start;
 		// NEW(TM) heat simulation
 		while (i < end) : (i += 1) {
-			const vert = self.vertices[i];
+			const normVert = self.transformedPoints[i].norm();
 			// Temperature in the current cell
 			const temp = self.temperature[i];
 
@@ -706,7 +706,7 @@ pub const Planet = struct {
 
 			// Solar irradiance
 			{
-				const solarCoeff = std.math.max(0, vert.dot(solarVector) / vert.length());
+				const solarCoeff = std.math.max(0, normVert.dot(solarVector) / normVert.length());
 				// TODO: Direct Normal Irradiance? when we have atmosphere
 				//const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
 				// So, we get heat transfer in J
