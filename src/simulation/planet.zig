@@ -126,6 +126,8 @@ pub const Planet = struct {
 	numTriangles: gl.GLint,
 	numSubdivisions: usize,
 	radius: f32,
+	/// Arena allocator for simulation data
+	simulationArena: std.heap.ArenaAllocator,
 	allocator: std.mem.Allocator,
 	/// The *unmodified* vertices of the icosphere
 	vertices: []Vec3,
@@ -150,6 +152,9 @@ pub const Planet = struct {
 	/// The water velocity is a 2D velocity on the plane
 	/// of the point that's perpendicular to the sphere
 	waterVelocity: []Vec2,
+	/// The mass of water vapor at 10 km of altitude
+	/// Unit: 10⁹ kg
+	waterVaporMass: []f32,
 	/// The elevation of each point.
 	/// Unit: Kilometer
 	elevation: []f32,
@@ -167,6 +172,7 @@ pub const Planet = struct {
 	/// Buffer array that is used to store the temperatures to be used after next update
 	newTemperature: []f32,
 	newWaterMass: []f32,
+	newWaterVaporMass: []f32,
 	lifeforms: std.ArrayList(Lifeform),
 	/// Lock used to avoid concurrent reads and writes to lifeforms arraylist
 	lifeformsLock: std.Thread.Mutex = .{},
@@ -179,6 +185,12 @@ pub const Planet = struct {
 
 	/// Is null if OpenCL could not be used.
 	clContext: ?CLContext = null,
+
+	pub const DisplayMode = enum(c_int) {
+		Normal = 0,
+		Temperature = 1,
+		WaterVapor = 2,
+	};
 
 	const LookupMap = std.AutoHashMap(IndexPair, gl.GLuint);
 	fn vertexForEdge(lookup: *LookupMap, vertices: *std.ArrayList(f32), first: gl.GLuint, second: gl.GLuint) !gl.GLuint {
@@ -331,18 +343,29 @@ pub const Planet = struct {
 		}
 		zone2.End();
 
+		// ArenaAllocator for all the simulation data points
+		var simulationArena = std.heap.ArenaAllocator.init(allocator);
+		const simAlloc = simulationArena.allocator();
+
 		const zone3 = tracy.ZoneN(@src(), "Initialise with data");
 		const numPoints = subdivided.?.vertices.len / 3; // number of points
-		const vertices       = try allocator.alloc(Vec3,   numPoints);
-		const vertNeighbours = try allocator.alloc([6]u32, numPoints);
-		const elevation      = try allocator.alloc(f32,    numPoints);
-		const waterElev      = try allocator.alloc(f32,    numPoints);
-		const waterVelocity  = try allocator.alloc(Vec2,   numPoints);
-		const temperature    = try allocator.alloc(f32,    numPoints);
-		const vegetation     = try allocator.alloc(f32,    numPoints);
-		const newTemp        = try allocator.alloc(f32,    numPoints);
-		const newWaterElev   = try allocator.alloc(f32,    numPoints);
-		const heatCapacCache = try allocator.alloc(f32,    numPoints);
+		const vertices       = try simAlloc.alloc(Vec3,   numPoints);
+		const vertNeighbours = try simAlloc.alloc([6]u32, numPoints);
+		const elevation      = try simAlloc.alloc(f32,    numPoints);
+		const waterElev      = try simAlloc.alloc(f32,    numPoints);
+		const waterVelocity  = try simAlloc.alloc(Vec2,   numPoints);
+		const waterVaporMass = try simAlloc.alloc(f32,    numPoints);
+		const temperature    = try simAlloc.alloc(f32,    numPoints);
+		const vegetation     = try simAlloc.alloc(f32,    numPoints);
+		const newTemp        = try simAlloc.alloc(f32,    numPoints);
+		const newWaterElev   = try simAlloc.alloc(f32,    numPoints);
+		const newVaporMass   = try simAlloc.alloc(f32,    numPoints);
+		const heatCapacCache = try simAlloc.alloc(f32,    numPoints);
+
+		const lifeforms = std.ArrayList(Lifeform).init(simAlloc);
+		const bufData = try simAlloc.alloc(f32, vertices.len * 9);
+		const normals = try simAlloc.alloc(Vec3, vertices.len);
+		const transformedPoints = try simAlloc.alloc(Vec3, vertices.len);
 
 		var planet = Planet {
 			.vao = vao,
@@ -350,6 +373,7 @@ pub const Planet = struct {
 			.numTriangles = @intCast(gl.GLint, subdivided.?.indices.len),
 			.numSubdivisions = numSubdivisions,
 			.radius = radius,
+			.simulationArena = simulationArena,
 			.allocator = allocator,
 			.vertices = vertices,
 			.verticesNeighbours = vertNeighbours,
@@ -357,16 +381,18 @@ pub const Planet = struct {
 			.elevation = elevation,
 			.waterMass = waterElev,
 			.waterVelocity = waterVelocity,
+			.waterVaporMass = waterVaporMass,
 			.newWaterMass = newWaterElev,
+			.newWaterVaporMass = newVaporMass,
 			.temperature = temperature,
 			.temperaturePtrOrg = temperature.ptr,
 			.vegetation = vegetation,
 			.newTemperature = newTemp,
 			.heatCapacityCache = heatCapacCache,
-			.lifeforms = std.ArrayList(Lifeform).init(allocator),
-			.bufData = try allocator.alloc(f32, vertices.len * 9),
-			.normals = try allocator.alloc(Vec3, vertices.len),
-			.transformedPoints = try allocator.alloc(Vec3, vertices.len),
+			.lifeforms = lifeforms,
+			.bufData = bufData,
+			.normals = normals,
+			.transformedPoints = transformedPoints,
 		};
 
 		// OpenCL doesn't really work well on Windows (atleast when testing
@@ -401,6 +427,7 @@ pub const Planet = struct {
 
 				elevation[i / 3] = value;
 				waterElev[i / 3] = std.math.max(0, seaLevel - value) / kmPerWaterMass;
+				waterVaporMass[i / 3] = 0;
 				vertices[i / 3] = point;
 				vegetation[i / 3] = perlin.p3do(point.x() + 5, point.y() + 5, point.z() + 5, 4) / 2 + 0.5;
 
@@ -503,7 +530,7 @@ pub const Planet = struct {
 	}
 
 	/// Upload all changes to the GPU
-	pub fn upload(self: *Planet, loop: *EventLoop, axialTilt: f32) void {
+	pub fn upload(self: *Planet, loop: *EventLoop, displayMode: DisplayMode, axialTilt: f32) void {
 		@setFloatMode(.Optimized);
 		const zone = tracy.ZoneN(@src(), "Planet GPU Upload");
 		defer zone.End();
@@ -544,7 +571,7 @@ pub const Planet = struct {
 			bufData[i*STRIDE+3] = normal.x();
 			bufData[i*STRIDE+4] = normal.y();
 			bufData[i*STRIDE+5] = normal.z();
-			bufData[i*STRIDE+6] = self.temperature[i];
+			bufData[i*STRIDE+6] = if (displayMode == .WaterVapor) self.waterVaporMass[i] else self.temperature[i];
 			bufData[i*STRIDE+7] = waterElevation;
 			bufData[i*STRIDE+8] = self.vegetation[i];
 		}
@@ -834,7 +861,7 @@ pub const Planet = struct {
 		// 	}
 		// }
 
-		const shareFactor = 1 / dt * 2 / (6 * @intToFloat(f32, numIterations));
+		const shareFactor = 2 / dt / (6 * @intToFloat(f32, numIterations));
 		
 		// Do some liquid simulation
 		var i: usize = start;
@@ -845,9 +872,9 @@ pub const Planet = struct {
 				// boiling
 				// TODO: more accurate
 				if (self.temperature[i] > 373.15) {
-					mass = std.math.max(
-						0, mass - 1_000_000_000_000
-					);
+					const diff = std.math.min(100_000_000, mass);
+					mass = mass - diff;
+					self.newWaterVaporMass[i] += diff;
 				}
 
 				const totalHeight = self.elevation[i] + mass * kmPerWaterMass;
@@ -872,45 +899,89 @@ pub const Planet = struct {
 			}
 		}
 
-		// const newElev = self.newWaterMass;
+		const substanceDivider: f64 = self.getSubstanceDivider();
 
-		// const shareFactor = 1 / (6 / options.timeScale * 10000 * @intToFloat(f32, numIterations));
-		// const kmPerWaterMass = self.getKmPerWaterMass();
-		
-		// // Do some liquid simulation
-		// var i: usize = start;
-		// while (i < end) : (i += 1) {
-		// 	// only fluid if it's not ice
-		// 	if (self.temperature[i] > 273.15 or true) {
-		// 		var mass = self.newWaterMass[i];
-		// 		// boiling
-		// 		// TODO: more accurate
-		// 		if (self.temperature[i] > 373.15) {
-		// 			mass = std.math.max(
-		// 				0, mass - 0.33
-		// 			);
-		// 		}
+		// Do some water vapor simulation
+		i = start;
+		while (i < end) : (i += 1) {
+			const mass = self.newWaterVaporMass[i];
 
-		// 		const totalHeight = self.elevation[i] + mass;
-		// 		var shared = mass * shareFactor;
-		// 		// -1 is to account for rounding errors
-		// 		if (shared > mass/7) {
-		// 			// TODO: increase step size
-		// 			shared = std.math.max(0, mass/7);
-		// 		}
-		// 		var numShared: f32 = 0;
-		// 		std.debug.assert(self.waterMass[i] >= 0);
-		// 		numShared += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight, kmPerWaterMass);
-		// 		numShared += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight, kmPerWaterMass);
-		// 		numShared += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight, kmPerWaterMass);
-		// 		numShared += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight, kmPerWaterMass);
-		// 		numShared += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight, kmPerWaterMass);
-		// 		numShared += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight, kmPerWaterMass);
-		// 		newElev[i] = mass - numShared;
-		// 		if (newElev[i] < 0) std.log.info("{d} - {d}", .{ mass, numShared });
-		// 		std.debug.assert(newElev[i] >= 0);
-		// 	}
-		// }
+			var shared = mass * shareFactor;
+			// -1 is to account for rounding errors
+			if (shared > mass/7) {
+				// TODO: increase step size
+				shared = std.math.max(0, mass/7);
+			}
+
+			var sharedMass: f32 = 0;
+			std.debug.assert(self.waterVaporMass[i] >= 0);
+			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .ForwardLeft), shared, mass);
+			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .ForwardRight), shared, mass);
+			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .BackwardLeft), shared, mass);
+			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .BackwardRight), shared, mass);
+			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .Left), shared, mass);
+			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .Right), shared, mass);
+			self.newWaterVaporMass[i] = mass - sharedMass;
+			std.debug.assert(self.newWaterVaporMass[i] >= 0);
+
+			// Rainfall
+			{
+				// Compute dew point using Magnus formula
+				const b = 17.625;
+				const c = 243.04;
+				const T = self.temperature[i]; // TODO: separate air temperature?
+
+				const RH = Planet.getRelativeHumidity(substanceDivider, T, mass);
+
+				// TODO: use something less expansive than ln
+				const gamma = std.math.ln(RH) + (b * T / (c + T));
+				const Tdp = (c * gamma) / (b - gamma);
+
+				// rain
+				if (T < Tdp or RH > 1) {
+					const diff = std.math.min(100_000_000, mass - sharedMass);
+					self.newWaterVaporMass[i] -= diff;
+					self.newWaterMass[i] += diff;
+				}
+				_ = Tdp;
+			}
+		}
+	}
+
+	/// Compute partial pressure using ideal gas law, it is done in f64 as
+	/// the amount of substance can get very high.
+	/// Note: instead of using the gas constant, the Boltzmann constant is directly used
+	/// as substanceDivider also accounts for the Avogadro constant (NA)
+	pub inline fn getWaterVaporPartialPressure(substanceDivider: f64, temperature: f32, mass: f64) f64 {
+		const k = 1.380649 * std.math.pow(f64, 10, -23); // Boltzmann constant
+		const waterPartialPressure = (mass * k * temperature) / substanceDivider; // Pa
+		return waterPartialPressure;
+	}
+
+	/// Uses Tetens equation
+	/// The fact that it is off for below 0°C isn't important as we're doing
+	/// quite big approximations anyways
+	pub inline fn getEquilibriumVaporPressure(temperature: f32) f32 {
+		// TODO: precompute boiling point and then do a lerp between precomputed values
+		return 0.61078 * @exp(17.27 * temperature / (temperature + 237.3)) / 1000;
+	}
+
+	pub inline fn getRelativeHumidity(substanceDivider: f64, temperature: f32, mass: f64) f64 {
+		return getWaterVaporPartialPressure(substanceDivider, temperature, mass) / getEquilibriumVaporPressure(temperature);
+	}
+
+	pub fn getSubstanceDivider(self: Planet) f64 {
+		// The mean atmosphere volume per point is approximately equal
+		// to mean point area multiplied by the height of the troposphere (~12km)
+		const meanAtmVolume: f64 = self.getMeanPointArea() * 12_000; // m³
+
+		const NA = 6.02214076 * std.math.pow(f64, 10, 23); // NA = 6.02214076 × 10²³
+		// Atmospheric volume accounted for amount of substance and 10¹² g units
+		const substanceDivider: f64 = meanAtmVolume
+			* 18.015 // there are 18.015g in a mole of water
+			/ std.math.pow(f64, 10, 12) // water mass is in 10⁹ kg (= 10¹² g)
+			/ NA; // account for Avogadro constant
+		return substanceDivider;
 	}
 
 	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32, kmPerWaterMass: f32) f32 {
@@ -919,6 +990,17 @@ pub const Planet = struct {
 			var transmitted = std.math.min(shared, shared * (totalHeight - targetTotalHeight) / 50 / kmPerWaterMass);
 			std.debug.assert(transmitted >= 0);
 			self.newWaterMass[target] += transmitted;
+			return transmitted;
+		} else {
+			return 0;
+		}
+	}
+
+	fn sendWaterVapor(self: Planet, target: usize, shared: f32, selfMass: f32) f32 {
+		const targetMass = self.waterVaporMass[target];
+		if (selfMass > targetMass) {
+			var transmitted = std.math.min(shared, shared * (selfMass - targetMass));
+			self.newWaterVaporMass[target] += transmitted;
 			return transmitted;
 		} else {
 			return 0;
@@ -967,6 +1049,7 @@ pub const Planet = struct {
 			var numIterations: usize = 1;
 			while (iteration < numIterations) : (iteration += 1) {
 				std.mem.copy(f32, self.newWaterMass, self.waterMass);
+				std.mem.copy(f32, self.newWaterVaporMass, self.waterVaporMass);
 
 				{
 					var jobs: [32]@Frame(simulateWater) = undefined;
@@ -986,6 +1069,7 @@ pub const Planet = struct {
 				}
 
 				std.mem.swap([]f32, &self.waterMass, &self.newWaterMass);
+				std.mem.swap([]f32, &self.waterVaporMass, &self.newWaterVaporMass);
 			}
 		}
 
@@ -1043,21 +1127,8 @@ pub const Planet = struct {
 
 		// de-allocate
 		self.lifeforms.deinit();
-		self.allocator.free(self.bufData);
-		self.allocator.free(self.normals);
-		self.allocator.free(self.transformedPoints);
-
-		self.allocator.free(self.elevation);
-		self.allocator.free(self.newWaterMass);
-		self.allocator.free(self.waterMass);
-		self.allocator.free(self.waterVelocity);
-		self.allocator.free(self.newTemperature);
-		self.allocator.free(self.temperature);
-		self.allocator.free(self.vegetation);
-		self.allocator.free(self.heatCapacityCache);
+		self.simulationArena.deinit();
 		
-		self.allocator.free(self.verticesNeighbours);
-		self.allocator.free(self.vertices);
 		self.allocator.free(self.indices);
 	}
 

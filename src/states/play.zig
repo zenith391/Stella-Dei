@@ -113,7 +113,7 @@ pub const PlayState = struct {
 	targetCameraDistance: f32,
 	/// The index of the currently selected point
 	selectedPoint: usize = 0,
-	displayMode: PlanetDisplayMode = .Normal,
+	displayMode: Planet.DisplayMode = .Normal,
 	/// Inclination of rotation, in degrees
 	axialTilt: f32 = 23.4,
 	/// The solar constant in W.m-2
@@ -134,11 +134,6 @@ pub const PlayState = struct {
 
 	selectedTool: GameTool = .None,
 	meanTemperature: f32 = 0.0,
-
-	const PlanetDisplayMode = enum(c_int) {
-		Normal = 0,
-		Temperature = 1,
-	};
 
 	pub fn init(game: *Game) PlayState {
 		const soundTrack = SoundTrack { .items = &.{
@@ -238,7 +233,7 @@ pub const PlayState = struct {
 			@cos(sunTheta)
 		);
 
-		planet.upload(game.loop, self.axialTilt);
+		planet.upload(game.loop, self.displayMode, self.axialTilt);
 
 		const zFar = planet.radius * 5;
 		const zNear = zFar / 10000;
@@ -296,8 +291,9 @@ pub const PlayState = struct {
 		program.setUniformFloat("lightIntensity", self.solarConstant / 1500);
 		program.setUniformVec3("viewPos", self.cameraPos);
 		program.setUniformFloat("planetRadius", planet.radius);
-		program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display temperature
+		program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display mode
 		program.setUniformInt("selectedVertex", @intCast(c_int, self.selectedPoint));
+		program.setUniformFloat("kmPerWaterMass", planet.getKmPerWaterMass());
 
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);
@@ -409,6 +405,8 @@ pub const PlayState = struct {
 			if (self.displayMode == .Normal) {
 				self.displayMode = .Temperature;
 			} else if (self.displayMode == .Temperature) {
+				self.displayMode = .WaterVapor;
+			} else if (self.displayMode == .WaterVapor) {
 				self.displayMode = .Normal;
 			}
 		}
@@ -527,7 +525,7 @@ pub const PlayState = struct {
 			nk.nk_end(ctx);
 		}
 
-		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 200, .w = 300, .h = 150 },
+		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 250, .w = 300, .h = 200 },
 			0) != 0) {
 			var buf: [200]u8 = undefined;
 			const point = self.selectedPoint;
@@ -539,10 +537,20 @@ pub const PlayState = struct {
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Mass: {:.1} kg", .{ planet.waterMass[point] * 1_000_000_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor at 10km: {:.1} kg / m²", .{ planet.waterVaporMass[point] / planet.getMeanPointArea() * 1_000_000_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point Area: {d}km²", .{ @floor(planet.getMeanPointArea() / 1_000_000) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+
+			const RH = Planet.getRelativeHumidity(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]);
+
+			const b = 17.625;
+			const c = 243.04;
+			const T = planet.temperature[point]; // TODO: separate air temperature?
+			const gamma = std.math.ln(RH) + (b * T / (c + T));
+			const Tdp = (c * gamma) / (b - gamma);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Humidity: {d:.1}% Tdp: {d:.1}°C", .{ RH * 100, Tdp }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 		}
 		nk.nk_end(ctx);
 
