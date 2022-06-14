@@ -110,8 +110,8 @@ pub const Renderer = struct {
 		var verts: nk.nk_buffer = undefined;
 		var idx: nk.nk_buffer = undefined;
 		nk.nk_buffer_init(&cmds, &nkAllocator.nk, 8192);
-		nk.nk_buffer_init(&verts, &nkAllocator.nk, 8192*16);
-		nk.nk_buffer_init(&idx, &nkAllocator.nk, 8192*4);
+		nk.nk_buffer_init(&verts, &nkAllocator.nk, 8192);
+		nk.nk_buffer_init(&idx, &nkAllocator.nk, 8192);
 		log.debug("  Done", .{});
 
 		return Renderer {
@@ -516,15 +516,10 @@ const NkAllocator = struct {
 	fn nkAlloc(userdata: nk.nk_handle, old: ?*anyopaque, nsize: nk.nk_size) callconv(.C) ?*anyopaque {
 		const self = @ptrCast(*NkAllocator, @alignCast(@alignOf(NkAllocator), userdata.ptr));
 		const allocator = self.allocationSizes.allocator;
-		if (old) |old_buf| {
-			const size = self.allocationSizes.get(old_buf).?;
-			return (allocator.realloc(
-				@as([]u8, @ptrCast([*]u8, old_buf)[0..size]), nsize) catch unreachable).ptr;
-		} else {
-			const ptr = (allocator.alloc(u8, nsize) catch return null).ptr;
-			self.allocationSizes.put(ptr, nsize) catch return null;
-			return ptr;
-		}
+		_ = old; // old isn't used to realloc as old memory is still expected to work
+		const ptr = (allocator.alloc(u8, nsize) catch return null).ptr;
+		self.allocationSizes.put(ptr, nsize) catch return null;
+		return ptr;
 	}
 
 	fn nkFree(userdata: nk.nk_handle, old: ?*anyopaque) callconv(.C) void {

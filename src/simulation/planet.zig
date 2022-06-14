@@ -152,7 +152,7 @@ pub const Planet = struct {
 	/// The water velocity is a 2D velocity on the plane
 	/// of the point that's perpendicular to the sphere
 	waterVelocity: []Vec2,
-	/// The mass of water vapor at 10 km of altitude
+	/// The mass of water vapor in the troposphere
 	/// Unit: 10⁹ kg
 	waterVaporMass: []f32,
 	/// The elevation of each point.
@@ -879,11 +879,11 @@ pub const Planet = struct {
 					self.newWaterVaporMass[i] += diff;
 				} else {
 					// evaporation
-					// TODO: more accurate
+					// TODO: more accurate (make it depend on temperature and mass / surface area)
 					const RH = Planet.getRelativeHumidity(substanceDivider, temp, self.waterVaporMass[i]);
 					// evaporation only happens when the air isn't saturated
 					if (RH < 1) {
-						const diff = std.math.min(0.1 * dt, mass);
+						const diff = std.math.min(0.01 * dt, mass);
 						mass = mass - diff;
 						self.newWaterVaporMass[i] += diff;
 					}
@@ -1109,8 +1109,15 @@ pub const Planet = struct {
 			var i: usize = 0;
 			while (i < self.vertices.len) : (i += 1) {
 				const vegetation = self.vegetation[i];
+				const waterMass = self.waterMass[i];
 				var newVegetation: f32 = vegetation;
-				newVegetation -= 0.00001 * options.timeScale * @as(f32, if (self.waterMass[i] >= 1000) 1.0 else 0.0);
+				// vegetation roots can drown in too much water
+				newVegetation -= 0.00001 * options.timeScale * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
+				// but it still needs water to grow
+				const shareCoeff = @as(f32, if (waterMass >= 10) 1.0 else 0.0);
+				newVegetation -= 0.000000002 * options.timeScale * (1 - shareCoeff);
+				// TODO: actually consume the water ?
+
 				const isInappropriateTemperature = self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0;
 				newVegetation -= 0.0000001 * options.timeScale * @as(f32, if (isInappropriateTemperature) 1.0 else 0.0);
 				self.vegetation[i] = std.math.max(0, newVegetation);
@@ -1118,7 +1125,7 @@ pub const Planet = struct {
 				for (self.getNeighbours(i)) |neighbour| {
 					if (self.waterMass[neighbour] < 0.1) {
 						self.vegetation[neighbour] = std.math.clamp(
-							self.vegetation[neighbour] + vegetation * 0.00000001 * options.timeScale, 0, 1
+							self.vegetation[neighbour] + vegetation * 0.00000001 * options.timeScale * shareCoeff, 0, 1
 						);
 					}
 				}

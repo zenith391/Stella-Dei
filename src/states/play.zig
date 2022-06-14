@@ -132,6 +132,9 @@ pub const PlayState = struct {
 	paused: bool = false,
 	showPlanetControl: bool = false,
 
+	debug_clearWater: bool = false,
+	debug_deluge: bool = false,
+
 	selectedTool: GameTool = .None,
 	meanTemperature: f32 = 0.0,
 
@@ -357,6 +360,16 @@ pub const PlayState = struct {
 			}
 		}
 
+		if (self.debug_clearWater) {
+			std.mem.set(f32, self.planet.waterMass, 0);
+			std.mem.set(f32, self.planet.waterVaporMass, 0);
+			self.debug_clearWater = true;
+		}
+
+		if (self.debug_deluge) {
+			std.mem.set(f32, self.planet.waterVaporMass, 10_000);
+		}
+
 		if (!self.paused) {
 			// TODO: variable simulation step
 
@@ -495,8 +508,8 @@ pub const PlayState = struct {
 		nk.nk_end(ctx);
 
 		if (self.showPlanetControl) {
-			if (nk.nk_begin(ctx, "Planet Control",.{ .x = 30, .y = 70, .w = 450, .h = 320 },
-			nk.NK_WINDOW_BORDER | nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			if (nk.nk_begin(ctx, "Planet Control",.{ .x = 30, .y = 70, .w = 450, .h = 400 },
+			nk.NK_WINDOW_BORDER) != 0) {
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				nk.nk_property_float(ctx, "Axial Tilt (deg)", 0, &self.axialTilt, 360, 1, 0.1);
 
@@ -513,19 +526,23 @@ pub const PlayState = struct {
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 1000, 5);
 
-				nk.nk_layout_row_dynamic(ctx, 50, 3);
-				//self.debug_emitVegetation = nk.nk_check_label(ctx, "Place Vegetation", @boolToInt(self.debug_emitVegetation)) != 0;
-
-				nk.nk_layout_row_dynamic(ctx, 50, 2);
-				//self.debug_placeLifeform = nk.nk_check_label(ctx, "Place Life (WIP!!)", @boolToInt(self.debug_placeLifeform)) != 0;
+				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				var buf: [200]u8 = undefined;
 				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
 					nk.NK_TEXT_ALIGN_CENTERED);
+				
+				nk.nk_layout_row_dynamic(ctx, 50, 2);
+				if (nk.nk_button_label(ctx, "Clear all water") != 0) {
+					self.debug_clearWater = true;
+				}
+				if (nk.nk_button_label(ctx, "Deluge") != 0) {
+					self.debug_deluge = true;
+				}
 			}
 			nk.nk_end(ctx);
 		}
 
-		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 250, .w = 300, .h = 200 },
+		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 240, .w = 300, .h = 210 },
 			0) != 0) {
 			var buf: [200]u8 = undefined;
 			const point = self.selectedPoint;
@@ -537,22 +554,18 @@ pub const PlayState = struct {
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Mass: {:.1} kg", .{ planet.waterMass[point] * 1_000_000_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor at 10km: {:.1} kg / m²", .{ planet.waterVaporMass[point] / planet.getMeanPointArea() * 1_000_000_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			// The units are given in centimeters, which is the equivalent amount of water that could be produced if all the water vapor in the column were to condense
+			// similar to https://earthobservatory.nasa.gov/global-maps/MYDAL2_M_SKY_WV
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor: {d:.1} cm", .{ planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point Area: {d}km²", .{ @floor(planet.getMeanPointArea() / 1_000_000) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
 			const RH = Planet.getRelativeHumidity(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Humidity: {d:.1}%", .{ RH * 100 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-			const b = 17.625;
-			const c = 243.04;
-			const T = planet.temperature[point]; // TODO: separate air temperature?
-			const gamma = std.math.ln(RH) + (b * T / (c + T));
-			const Tdp = (c * gamma) / (b - gamma);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Humidity: {d:.1}% Tdp: {d:.1}°C", .{ RH * 100, Tdp }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.1} / {d:.1} Pa", .{ Planet.getWaterVaporPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getWaterVaporPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 		}
 		nk.nk_end(ctx);
 
