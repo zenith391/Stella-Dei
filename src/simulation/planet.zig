@@ -883,7 +883,7 @@ pub const Planet = struct {
 					const RH = Planet.getRelativeHumidity(substanceDivider, temp, self.waterVaporMass[i]);
 					// evaporation only happens when the air isn't saturated
 					if (RH < 1) {
-						const diff = std.math.min(100_000, mass);
+						const diff = std.math.min(0.1 * dt, mass);
 						mass = mass - diff;
 						self.newWaterVaporMass[i] += diff;
 					}
