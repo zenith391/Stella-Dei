@@ -862,19 +862,31 @@ pub const Planet = struct {
 		// }
 
 		const shareFactor = 2 / dt / (6 * @intToFloat(f32, numIterations));
+		const substanceDivider: f64 = self.getSubstanceDivider();
 		
 		// Do some liquid simulation
 		var i: usize = start;
 		while (i < end) : (i += 1) {
 			// only fluid if it's not ice
-			if (self.temperature[i] > 273.15 or true) {
+			const temp = self.temperature[i];
+			if (temp > 273.15 or true) {
 				var mass = self.newWaterMass[i];
 				// boiling
 				// TODO: more accurate
-				if (self.temperature[i] > 373.15) {
+				if (temp > 373.15) {
 					const diff = std.math.min(100_000_000, mass);
 					mass = mass - diff;
 					self.newWaterVaporMass[i] += diff;
+				} else {
+					// evaporation
+					// TODO: more accurate
+					const RH = Planet.getRelativeHumidity(substanceDivider, temp, self.waterVaporMass[i]);
+					// evaporation only happens when the air isn't saturated
+					if (RH < 1) {
+						const diff = std.math.min(100_000, mass);
+						mass = mass - diff;
+						self.newWaterVaporMass[i] += diff;
+					}
 				}
 
 				const totalHeight = self.elevation[i] + mass * kmPerWaterMass;
@@ -898,8 +910,6 @@ pub const Planet = struct {
 				std.debug.assert(newMass[i] >= 0);
 			}
 		}
-
-		const substanceDivider: f64 = self.getSubstanceDivider();
 
 		// Do some water vapor simulation
 		i = start;
@@ -927,23 +937,23 @@ pub const Planet = struct {
 			// Rainfall
 			{
 				// Compute dew point using Magnus formula
-				const b = 17.625;
-				const c = 243.04;
+				//const b = 17.625;
+				//const c = 243.04;
 				const T = self.temperature[i]; // TODO: separate air temperature?
 
 				const RH = Planet.getRelativeHumidity(substanceDivider, T, mass);
 
 				// TODO: use something less expansive than ln
-				const gamma = std.math.ln(RH) + (b * T / (c + T));
-				const Tdp = (c * gamma) / (b - gamma);
+				// const gamma = std.math.ln(RH) + (b * T / (c + T));
+				// const Tdp = (c * gamma) / (b - gamma);
 
 				// rain
-				if (T < Tdp or RH > 1) {
-					const diff = std.math.min(100_000_000, mass - sharedMass);
+				if (RH > 1) {
+					// TODO: form cloud as clouds are formed from super-saturated air
+					const diff = std.math.min(mass, mass * 0.0001 * dt);
 					self.newWaterVaporMass[i] -= diff;
 					self.newWaterMass[i] += diff;
 				}
-				_ = Tdp;
 			}
 		}
 	}
@@ -963,7 +973,7 @@ pub const Planet = struct {
 	/// quite big approximations anyways
 	pub inline fn getEquilibriumVaporPressure(temperature: f32) f32 {
 		// TODO: precompute boiling point and then do a lerp between precomputed values
-		return 0.61078 * @exp(17.27 * temperature / (temperature + 237.3)) / 1000;
+		return 0.61078 * @exp(17.27 * (temperature-273.15) / (temperature + 237.3 - 273.15)) * 1000;
 	}
 
 	pub inline fn getRelativeHumidity(substanceDivider: f64, temperature: f32, mass: f64) f64 {

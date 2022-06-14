@@ -551,6 +551,8 @@ pub const PlayState = struct {
 			const gamma = std.math.ln(RH) + (b * T / (c + T));
 			const Tdp = (c * gamma) / (b - gamma);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Humidity: {d:.1}% Tdp: {d:.1}°C", .{ RH * 100, Tdp }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.1} / {d:.1} Pa", .{ Planet.getWaterVaporPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 		}
 		nk.nk_end(ctx);
 

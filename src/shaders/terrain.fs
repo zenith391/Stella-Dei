@@ -65,7 +65,7 @@ void main() {
 		vec3 cold = vec3(0.0f, 0.0f, 0.0f);
 		vec3 hot  = vec3(1.0f, 1.0f, 0.0f);
 		float waterKm = interpData * kmPerWaterMass;
-		vec3 result = mix(cold, hot, (waterKm) / 10);
+		vec3 result = mix(cold, hot, (waterKm) / 1);
 		fragColor = vec4(result, 1.0f);
 	}
 }
