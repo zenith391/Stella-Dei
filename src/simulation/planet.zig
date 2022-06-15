@@ -867,7 +867,7 @@ pub const Planet = struct {
 		// 	}
 		// }
 
-		const shareFactor = 2 / dt / (6 * @intToFloat(f32, numIterations));
+		const shareFactor = 0.00002 * dt / (6 * @intToFloat(f32, numIterations));
 		const substanceDivider: f64 = self.getSubstanceDivider();
 		const meanAtmVolume: f64 = self.getMeanPointArea() * 12_000; // m³
 		
@@ -890,7 +890,7 @@ pub const Planet = struct {
 					const RH = Planet.getRelativeHumidity(substanceDivider, temp, self.waterVaporMass[i]);
 					// evaporation only happens when the air isn't saturated
 					if (RH < 1) {
-						const diff = std.math.min(0.01 * dt, mass);
+						const diff = std.math.min(0.01 * dt, mass) * @as(f32, if (temp > 273.15) 1.0 else 0.0);
 						mass = mass - diff;
 						self.newWaterVaporMass[i] += diff;
 					}
