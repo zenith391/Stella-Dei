@@ -635,6 +635,7 @@ pub const Planet = struct {
 
 	pub const SimulationOptions = extern struct {
 		solarConstant: f32,
+		planetRotationTime: f32,
 		conductivity: f32,
 		gameTime: f64,
 		/// Currently, time scale greater than 40000 may result in lots of bugs
@@ -837,6 +838,7 @@ pub const Planet = struct {
 
 		const newMass = self.newWaterMass;
 		const meanDistance = std.math.sqrt(self.getMeanPointArea()); // m
+		const meanDistanceKm = meanDistance / 1000; // km
 		const kmPerWaterMass = self.getKmPerWaterMass(); // km / 10⁹ kg
 		_ = meanDistance;
 		// {
@@ -918,6 +920,18 @@ pub const Planet = struct {
 			}
 		}
 
+		// Those are simply the coordinates of points in an hexagon,
+		// which is enough to get a (rough approximation of a) tangent
+		// vector.
+		const tangentVectors = [6]Vec2 {
+			Vec2.new(-0.5,  0.9),
+			Vec2.new(-0.5, -0.9),
+			Vec2.new(-1.0,  0.0),
+			Vec2.new( 0.5,  0.9),
+			Vec2.new( 0.5, -0.9),
+			Vec2.new( 1.0,  0.0),
+		};
+
 		// Do some water vapor simulation
 		i = start;
 		while (i < end) : (i += 1) {
@@ -934,24 +948,23 @@ pub const Planet = struct {
 
 			var sharedMass: f32 = 0;
 			std.debug.assert(self.waterVaporMass[i] >= 0);
-			for (self.getNeighbours(i)) |neighbourIdx| {
+
+			for (self.getNeighbours(i)) |neighbourIdx, location| {
 				const neighbourVapor = self.waterVaporMass[neighbourIdx];
-				const neighbourPoint = self.transformedPoints[neighbourIdx];
+				const neighbourAirMass = self.getAirMass(neighbourIdx);
 				const dP = pressure - getAirPressure(substanceDivider, self.temperature[neighbourIdx], neighbourVapor);
-				// TODO: get the tangent vector
+				const tangent = tangentVectors[location];
+
 				// wind is from high pressure to low pressure
 				if (dP > 0) {
-					const direction = neighbourPoint.sub(self.transformedPoints[i]); // km (vec3)
 					// Pressure gradient force
 					const pgf = dP / meanDistance * meanAtmVolume; // N
-					// F = ma, so a = F/m 
-					const acceleration = @floatCast(f32, pgf / (neighbourVapor * 1_000_000_000) / 1000); // km/s
-					_ = acceleration;
-					_ = direction;
-					//self.airVelocity[i].data += direction.scale(acceleration).data;
+					// F = ma, so a = F/m
+					const acceleration = @floatCast(f32, pgf / (neighbourAirMass * 1_000_000_000) / 1000); // km/s
+					self.airVelocity[i].data += tangent.scale(acceleration).data;
 				}
 
-				sharedMass += self.sendWaterVapor(neighbourIdx, shared, mass);
+				//sharedMass += self.sendWaterVapor(neighbourIdx, shared, mass);
 			}
 			self.newWaterVaporMass[i] = mass - sharedMass;
 			std.debug.assert(self.newWaterVaporMass[i] >= 0);
@@ -975,11 +988,42 @@ pub const Planet = struct {
 		// For simplicity, take the viscosity of air at 20°C
 		// (see https://en.wikipedia.org/wiki/Viscosity#Air)
 		const airViscosity = 2.791 * std.math.pow(f32, 10, -7) * std.math.pow(f32, 273.15 + 20.0, 0.7355); // Pa.s
-		const airSpeedMult = 1 - airViscosity;
-		// TODO: account for Coriolis force and friction
+		const airSpeedMult = 1 - (airViscosity * dt);
+		const spinRate = 1.0 / options.planetRotationTime * 2 * std.math.pi;
+		// TODO: account for friction
 		while (i < end) : (i += 1) {
+			const vert = self.vertices[i];
+			const transformedPoint = self.transformedPoints[i];
 			var velocity = self.airVelocity[i];
+			var latitude = std.math.acos(vert.z());
+			const longitude = std.math.atan2(f32, vert.y(), vert.x());
+			if (longitude < std.math.pi / 4.0) {
+				latitude = -latitude;
+			}
+			// note: velocity is assumed to not be above meanDistanceKm
+			velocity = velocity.add(Vec2.new(
+				spinRate * 2.0 * @sin(latitude), 0));
+			if (velocity.length() > meanDistanceKm) {
+				velocity = velocity.norm().scale(meanDistanceKm);
+			}
+
+			const targetPos = transformedPoint.add(Vec3.new(velocity.x(), velocity.y(), 0).cross(Vec3.forward()).cross(transformedPoint));
+			var sharedVapor: f32 = 0;
+			const maxSharedVapor = self.waterVaporMass[i] / 10;
+			for (self.getNeighbours(i)) |neighbourIdx| {
+				const neighbourPos = self.transformedPoints[neighbourIdx];
+				const diff = neighbourPos.distance(targetPos);
+				const t = std.math.min(1.0, (meanDistanceKm - diff) / meanDistanceKm);
+				if (t > 0) {
+					const shared = maxSharedVapor * t;
+					self.newWaterVaporMass[neighbourIdx] += shared;
+					sharedVapor += shared;
+				}
+			}
 			velocity = velocity.scale(airSpeedMult);
+
+			self.newWaterVaporMass[i] -= sharedVapor;
+			self.airVelocity[i] = velocity;
 		}
 	}
 
@@ -991,6 +1035,11 @@ pub const Planet = struct {
 		const k = 1.380649 * comptime std.math.pow(f64, 10, -23); // Boltzmann constant
 		const waterPartialPressure = (mass * k * temperature) / substanceDivider; // Pa
 		return waterPartialPressure;
+	}
+
+	pub inline fn getAirMass(self: Planet, idx: usize) f32 {
+		// + 1 is because there will never be 0 kg of air (and if it's the case it breaks a bunch of computations)
+		return self.waterVaporMass[idx] + 1; // + TODO other gases
 	}
 
 	pub inline fn getAirPressure(substanceDivider: f64, temperature: f32, vaporMass: f64) f64 {
@@ -1024,7 +1073,7 @@ pub const Planet = struct {
 		break :blk values;
 	};
 
-	fn lerp(a: f32, b: f32, t: f32) f32 {
+	inline fn lerp(a: f32, b: f32, t: f32) f32 {
 		@setFloatMode(.Optimized);
 		return a * (1 - t) + b * t;
 	}

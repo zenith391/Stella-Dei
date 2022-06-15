@@ -385,6 +385,7 @@ pub const PlayState = struct {
 					.conductivity = self.conductivity,
 					.timeScale = self.timeScale / simulationSteps,
 					.gameTime = self.gameTime,
+					.planetRotationTime = self.planetRotationTime,
 					.solarVector = solarVector,
 				});
 			}
@@ -540,7 +541,7 @@ pub const PlayState = struct {
 			nk.nk_end(ctx);
 		}
 
-		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 250, .w = 300, .h = 220 },
+		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 300, .w = 300, .h = 270 },
 			0) != 0) {
 			var buf: [200]u8 = undefined;
 			const point = self.selectedPoint;
@@ -560,10 +561,15 @@ pub const PlayState = struct {
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point Area: {d}km²", .{ @floor(planet.getMeanPointArea() / 1_000_000) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			const RH = Planet.getRelativeHumidity(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Humidity: {d:.1}%", .{ RH * 100 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getWaterVaporPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Direction (m/s): {d:.1}, {d:.1}", .{ planet.airVelocity[point].x() * 1000, planet.airVelocity[point].y() * 1000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 		}
 		nk.nk_end(ctx);
 
