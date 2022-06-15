@@ -58,7 +58,7 @@ void main() {
 	} else if (displayMode == 1) {
 		vec3 cold = vec3(0.0f, 0.0f, 1.0f);
 		vec3 hot  = vec3(1.0f, 0.0f, 0.0f);
-		// Default range of 200°K - 400°K (around -273.15°C - 273.15°C)
+		// Default range of 0°K - 546.3°K (around -273.15°C - 273.15°C)
 		vec3 result = mix(cold, hot, (interpData) / 546.3);
 		fragColor = vec4(result, 1.0f);
 	} else if (displayMode == 2) {
@@ -66,6 +66,12 @@ void main() {
 		vec3 hot  = vec3(1.0f, 1.0f, 0.0f);
 		float waterKm = interpData * kmPerWaterMass;
 		vec3 result = mix(cold, hot, (waterKm) / 0.001);
+		fragColor = vec4(result, 1.0f);
+	} else if (displayMode == 3) {
+		vec3 cold = vec3(0.0f, 0.0f, 0.0f);
+		vec3 hot  = vec3(1.0f, 0.0f, 0.0f);
+		// From 0 to 200 km/h
+		vec3 result = mix(cold, hot, interpData * 3600.0 / 200.0);
 		fragColor = vec4(result, 1.0f);
 	}
 }

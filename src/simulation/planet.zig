@@ -149,12 +149,13 @@ pub const Planet = struct {
 	/// The water mass
 	/// Unit: 10⁹ kg
 	waterMass: []f32,
-	/// The water velocity is a 2D velocity on the plane
-	/// of the point that's perpendicular to the sphere
-	waterVelocity: []Vec2,
 	/// The mass of water vapor in the troposphere
 	/// Unit: 10⁹ kg
 	waterVaporMass: []f32,
+	/// The air velocity is a 2D velocity on the plane
+	/// of the point that's tangent to the sphere
+	/// Unit: km/s
+	airVelocity: []Vec2,
 	/// The elevation of each point.
 	/// Unit: Kilometer
 	elevation: []f32,
@@ -190,6 +191,7 @@ pub const Planet = struct {
 		Normal = 0,
 		Temperature = 1,
 		WaterVapor = 2,
+		WindMagnitude = 3,
 	};
 
 	const LookupMap = std.AutoHashMap(IndexPair, gl.GLuint);
@@ -353,7 +355,7 @@ pub const Planet = struct {
 		const vertNeighbours = try simAlloc.alloc([6]u32, numPoints);
 		const elevation      = try simAlloc.alloc(f32,    numPoints);
 		const waterElev      = try simAlloc.alloc(f32,    numPoints);
-		const waterVelocity  = try simAlloc.alloc(Vec2,   numPoints);
+		const airVelocity    = try simAlloc.alloc(Vec2,   numPoints);
 		const waterVaporMass = try simAlloc.alloc(f32,    numPoints);
 		const temperature    = try simAlloc.alloc(f32,    numPoints);
 		const vegetation     = try simAlloc.alloc(f32,    numPoints);
@@ -380,8 +382,8 @@ pub const Planet = struct {
 			.indices = subdivided.?.indices,
 			.elevation = elevation,
 			.waterMass = waterElev,
-			.waterVelocity = waterVelocity,
 			.waterVaporMass = waterVaporMass,
+			.airVelocity = airVelocity,
 			.newWaterMass = newWaterElev,
 			.newWaterVaporMass = newVaporMass,
 			.temperature = temperature,
@@ -427,7 +429,6 @@ pub const Planet = struct {
 
 				elevation[i / 3] = value;
 				waterElev[i / 3] = std.math.max(0, seaLevel - value) / kmPerWaterMass;
-				waterVaporMass[i / 3] = 0;
 				vertices[i / 3] = point;
 				vegetation[i / 3] = perlin.p3do(point.x() + 5, point.y() + 5, point.z() + 5, 4) / 2 + 0.5;
 
@@ -437,7 +438,8 @@ pub const Planet = struct {
 			}
 
 			std.mem.set(f32, temperature, 293.15);
-			std.mem.set(Vec2, waterVelocity, Vec2.zero());
+			std.mem.set(f32, waterVaporMass, 0);
+			std.mem.set(Vec2, airVelocity, Vec2.zero());
 		}
 		zone3.End();
 
@@ -571,7 +573,11 @@ pub const Planet = struct {
 			bufData[i*STRIDE+3] = normal.x();
 			bufData[i*STRIDE+4] = normal.y();
 			bufData[i*STRIDE+5] = normal.z();
-			bufData[i*STRIDE+6] = if (displayMode == .WaterVapor) self.waterVaporMass[i] else self.temperature[i];
+			bufData[i*STRIDE+6] = switch (displayMode) {
+				.WaterVapor => self.waterVaporMass[i],
+				.WindMagnitude => self.airVelocity[i].length(),
+				else => self.temperature[i]
+			};
 			bufData[i*STRIDE+7] = waterElevation;
 			bufData[i*STRIDE+8] = self.vegetation[i];
 		}
@@ -863,6 +869,7 @@ pub const Planet = struct {
 
 		const shareFactor = 2 / dt / (6 * @intToFloat(f32, numIterations));
 		const substanceDivider: f64 = self.getSubstanceDivider();
+		const meanAtmVolume: f64 = self.getMeanPointArea() * 12_000; // m³
 		
 		// Do some liquid simulation
 		var i: usize = start;
@@ -915,6 +922,8 @@ pub const Planet = struct {
 		i = start;
 		while (i < end) : (i += 1) {
 			const mass = self.newWaterVaporMass[i];
+			const T = self.temperature[i]; // TODO: separate air temperature?
+			const pressure = getAirPressure(substanceDivider, T, mass);
 
 			var shared = mass * shareFactor;
 			// -1 is to account for rounding errors
@@ -925,36 +934,52 @@ pub const Planet = struct {
 
 			var sharedMass: f32 = 0;
 			std.debug.assert(self.waterVaporMass[i] >= 0);
-			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .ForwardLeft), shared, mass);
-			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .ForwardRight), shared, mass);
-			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .BackwardLeft), shared, mass);
-			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .BackwardRight), shared, mass);
-			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .Left), shared, mass);
-			sharedMass += self.sendWaterVapor(self.getNeighbour(i, .Right), shared, mass);
+			for (self.getNeighbours(i)) |neighbourIdx| {
+				const neighbourVapor = self.waterVaporMass[neighbourIdx];
+				const neighbourPoint = self.transformedPoints[neighbourIdx];
+				const dP = pressure - getAirPressure(substanceDivider, self.temperature[neighbourIdx], neighbourVapor);
+				// TODO: get the tangent vector
+				// wind is from high pressure to low pressure
+				if (dP > 0) {
+					const direction = neighbourPoint.sub(self.transformedPoints[i]); // km (vec3)
+					// Pressure gradient force
+					const pgf = dP / meanDistance * meanAtmVolume; // N
+					// F = ma, so a = F/m 
+					const acceleration = @floatCast(f32, pgf / (neighbourVapor * 1_000_000_000) / 1000); // km/s
+					_ = acceleration;
+					_ = direction;
+					//self.airVelocity[i].data += direction.scale(acceleration).data;
+				}
+
+				sharedMass += self.sendWaterVapor(neighbourIdx, shared, mass);
+			}
 			self.newWaterVaporMass[i] = mass - sharedMass;
 			std.debug.assert(self.newWaterVaporMass[i] >= 0);
 
 			// Rainfall
 			{
-				// Compute dew point using Magnus formula
-				//const b = 17.625;
-				//const c = 243.04;
-				const T = self.temperature[i]; // TODO: separate air temperature?
-
 				const RH = Planet.getRelativeHumidity(substanceDivider, T, mass);
-
-				// TODO: use something less expansive than ln
-				// const gamma = std.math.ln(RH) + (b * T / (c + T));
-				// const Tdp = (c * gamma) / (b - gamma);
-
 				// rain
-				if (RH > 1) {
+				if (RH > 1 and T < 373.15) {
 					// TODO: form cloud as clouds are formed from super-saturated air
 					const diff = std.math.min(mass, mass * 0.0001 * dt);
 					self.newWaterVaporMass[i] -= diff;
 					self.newWaterMass[i] += diff;
 				}
 			}
+		}
+
+		// Do some wind simulation
+		i = start;
+		
+		// For simplicity, take the viscosity of air at 20°C
+		// (see https://en.wikipedia.org/wiki/Viscosity#Air)
+		const airViscosity = 2.791 * std.math.pow(f32, 10, -7) * std.math.pow(f32, 273.15 + 20.0, 0.7355); // Pa.s
+		const airSpeedMult = 1 - airViscosity;
+		// TODO: account for Coriolis force and friction
+		while (i < end) : (i += 1) {
+			var velocity = self.airVelocity[i];
+			velocity = velocity.scale(airSpeedMult);
 		}
 	}
 
@@ -963,17 +988,56 @@ pub const Planet = struct {
 	/// Note: instead of using the gas constant, the Boltzmann constant is directly used
 	/// as substanceDivider also accounts for the Avogadro constant (NA)
 	pub inline fn getWaterVaporPartialPressure(substanceDivider: f64, temperature: f32, mass: f64) f64 {
-		const k = 1.380649 * std.math.pow(f64, 10, -23); // Boltzmann constant
+		const k = 1.380649 * comptime std.math.pow(f64, 10, -23); // Boltzmann constant
 		const waterPartialPressure = (mass * k * temperature) / substanceDivider; // Pa
 		return waterPartialPressure;
+	}
+
+	pub inline fn getAirPressure(substanceDivider: f64, temperature: f32, vaporMass: f64) f64 {
+		return getWaterVaporPartialPressure(substanceDivider, temperature, vaporMass);
 	}
 
 	/// Uses Tetens equation
 	/// The fact that it is off for below 0°C isn't important as we're doing
 	/// quite big approximations anyways
-	pub inline fn getEquilibriumVaporPressure(temperature: f32) f32 {
+	fn getEquilibriumVaporPressure_Unoptimized(temperature: f32) f32 {
 		// TODO: precompute boiling point and then do a lerp between precomputed values
 		return 0.61078 * @exp(17.27 * (temperature-273.15) / (temperature + 237.3 - 273.15)) * 1000;
+	}
+
+	const equilibriumVaporPressures = blk: {
+		const from = 0.0;
+		const to = 1000.0;
+		const step = 1.0;
+		const arrayLength = @floatToInt(usize, (to-from)/step);
+		var values: [arrayLength]f32 = undefined;
+
+		@setEvalBranchQuota(arrayLength * 10);
+		var x: f32 = from;
+		while (x < to) : (x += step) {
+			const idx = @floatToInt(usize, x / step);
+			values[idx] = getEquilibriumVaporPressure_Unoptimized(x);
+			if (std.math.isInf(values[idx])) { // precision error
+				values[idx] = 0;
+			}
+		}
+		break :blk values;
+	};
+
+	fn lerp(a: f32, b: f32, t: f32) f32 {
+		@setFloatMode(.Optimized);
+		return a * (1 - t) + b * t;
+	}
+
+	pub inline fn getEquilibriumVaporPressure(temperature: f32) f32 {
+		@setFloatMode(.Optimized);
+		if (temperature >= 999) {
+			// This shouldn't be possible with default ranges, so no need to optimize
+			return getEquilibriumVaporPressure_Unoptimized(temperature);
+		} else {
+			const idx = @floatToInt(u32, temperature);
+			return lerp(equilibriumVaporPressures[idx], equilibriumVaporPressures[idx+1], @rem(temperature, 1));
+		}
 	}
 
 	pub inline fn getRelativeHumidity(substanceDivider: f64, temperature: f32, mass: f64) f64 {
@@ -997,7 +1061,7 @@ pub const Planet = struct {
 	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32, kmPerWaterMass: f32) f32 {
 		const targetTotalHeight = self.elevation[target] + self.waterMass[target] * kmPerWaterMass;
 		if (totalHeight > targetTotalHeight) {
-			var transmitted = std.math.min(shared, shared * (totalHeight - targetTotalHeight) / 50 / kmPerWaterMass);
+			var transmitted = std.math.min(shared, shared * (totalHeight - targetTotalHeight) / 2 / kmPerWaterMass);
 			std.debug.assert(transmitted >= 0);
 			self.newWaterMass[target] += transmitted;
 			return transmitted;
@@ -1115,7 +1179,7 @@ pub const Planet = struct {
 				newVegetation -= 0.00001 * options.timeScale * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
 				// but it still needs water to grow
 				const shareCoeff = @as(f32, if (waterMass >= 10) 1.0 else 0.0);
-				newVegetation -= 0.000000002 * options.timeScale * (1 - shareCoeff);
+				newVegetation -= 0.00000002 * options.timeScale * (1 - shareCoeff) / 10;
 				// TODO: actually consume the water ?
 
 				const isInappropriateTemperature = self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0;

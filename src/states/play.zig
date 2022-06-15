@@ -363,11 +363,12 @@ pub const PlayState = struct {
 		if (self.debug_clearWater) {
 			std.mem.set(f32, self.planet.waterMass, 0);
 			std.mem.set(f32, self.planet.waterVaporMass, 0);
-			self.debug_clearWater = true;
+			self.debug_clearWater = false;
 		}
 
 		if (self.debug_deluge) {
-			std.mem.set(f32, self.planet.waterVaporMass, 10_000);
+			std.mem.set(f32, self.planet.waterVaporMass, 500_000);
+			self.debug_deluge = false;
 		}
 
 		if (!self.paused) {
@@ -415,13 +416,10 @@ pub const PlayState = struct {
 			self.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos));
 		}
 		if (button == .middle) {
-			if (self.displayMode == .Normal) {
-				self.displayMode = .Temperature;
-			} else if (self.displayMode == .Temperature) {
-				self.displayMode = .WaterVapor;
-			} else if (self.displayMode == .WaterVapor) {
-				self.displayMode = .Normal;
-			}
+			const numEnumFields = std.meta.fields(Planet.DisplayMode).len;
+			self.displayMode = @intToEnum(Planet.DisplayMode,
+				@mod(@enumToInt(self.displayMode) + 1, numEnumFields)
+			);
 		}
 	}
 
@@ -542,7 +540,7 @@ pub const PlayState = struct {
 			nk.nk_end(ctx);
 		}
 
-		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 240, .w = 300, .h = 210 },
+		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - 250, .w = 300, .h = 220 },
 			0) != 0) {
 			var buf: [200]u8 = undefined;
 			const point = self.selectedPoint;
