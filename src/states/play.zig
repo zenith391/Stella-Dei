@@ -569,7 +569,7 @@ pub const PlayState = struct {
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getWaterVaporPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Direction (m/s): {d:.1}, {d:.1}", .{ planet.airVelocity[point].x() * 1000, planet.airVelocity[point].y() * 1000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Direction (km/h): {d:.1}, {d:.1}", .{ planet.airVelocity[point].x() * 3600, planet.airVelocity[point].y() * 3600 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 		}
 		nk.nk_end(ctx);
 

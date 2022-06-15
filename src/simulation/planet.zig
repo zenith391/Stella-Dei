@@ -575,10 +575,10 @@ pub const Planet = struct {
 			bufData[i*STRIDE+5] = normal.z();
 			bufData[i*STRIDE+6] = switch (displayMode) {
 				.WaterVapor => self.waterVaporMass[i],
-				.WindMagnitude => self.airVelocity[i].length(),
+				.WindMagnitude => self.airVelocity[i].x(),
 				else => self.temperature[i]
 			};
-			bufData[i*STRIDE+7] = waterElevation;
+			bufData[i*STRIDE+7] = if (displayMode == .WindMagnitude) self.airVelocity[i].y() else waterElevation;
 			bufData[i*STRIDE+8] = self.vegetation[i];
 		}
 		
@@ -939,16 +939,6 @@ pub const Planet = struct {
 			const T = self.temperature[i]; // TODO: separate air temperature?
 			const pressure = getAirPressure(substanceDivider, T, mass);
 
-			var shared = mass * shareFactor;
-			// -1 is to account for rounding errors
-			if (shared > mass/7) {
-				// TODO: increase step size
-				shared = std.math.max(0, mass/7);
-			}
-
-			var sharedMass: f32 = 0;
-			std.debug.assert(self.waterVaporMass[i] >= 0);
-
 			for (self.getNeighbours(i)) |neighbourIdx, location| {
 				const neighbourVapor = self.waterVaporMass[neighbourIdx];
 				const neighbourAirMass = self.getAirMass(neighbourIdx);
@@ -960,13 +950,10 @@ pub const Planet = struct {
 					// Pressure gradient force
 					const pgf = dP / meanDistance * meanAtmVolume; // N
 					// F = ma, so a = F/m
-					const acceleration = @floatCast(f32, pgf / (neighbourAirMass * 1_000_000_000) / 1000); // km/s
+					const acceleration = @floatCast(f32, pgf / (neighbourAirMass * 1_000_000_000) / 1000 * dt); // km/s
 					self.airVelocity[i].data += tangent.scale(acceleration).data;
 				}
-
-				//sharedMass += self.sendWaterVapor(neighbourIdx, shared, mass);
 			}
-			self.newWaterVaporMass[i] = mass - sharedMass;
 			std.debug.assert(self.newWaterVaporMass[i] >= 0);
 
 			// Rainfall
@@ -988,7 +975,7 @@ pub const Planet = struct {
 		// For simplicity, take the viscosity of air at 20°C
 		// (see https://en.wikipedia.org/wiki/Viscosity#Air)
 		const airViscosity = 2.791 * std.math.pow(f32, 10, -7) * std.math.pow(f32, 273.15 + 20.0, 0.7355); // Pa.s
-		const airSpeedMult = 1 - (airViscosity * dt);
+		const airSpeedMult = 1 - airViscosity;
 		const spinRate = 1.0 / options.planetRotationTime * 2 * std.math.pi;
 		// TODO: account for friction
 		while (i < end) : (i += 1) {

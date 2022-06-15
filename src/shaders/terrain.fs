@@ -68,10 +68,10 @@ void main() {
 		vec3 result = mix(cold, hot, (waterKm) / 0.001);
 		fragColor = vec4(result, 1.0f);
 	} else if (displayMode == 3) {
-		vec3 cold = vec3(0.0f, 0.0f, 0.0f);
-		vec3 hot  = vec3(1.0f, 0.0f, 0.0f);
 		// From 0 to 200 km/h
-		vec3 result = mix(cold, hot, interpData * 3600.0 / 200.0);
+		float right = interpData * 3600.0 / 200.0;
+		float up = waterElevation * 3600.0 / 200.0;
+		vec3 result = vec3(right / 2, sqrt(right * right + up * up), up / 2);
 		fragColor = vec4(result, 1.0f);
 	}
 }
