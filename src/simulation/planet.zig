@@ -837,7 +837,8 @@ pub const Planet = struct {
 		const dt = 1.0 / 60.0 * options.timeScale;
 
 		const newMass = self.newWaterMass;
-		const meanDistance = std.math.sqrt(self.getMeanPointArea()); // m
+		const meanPointArea = self.getMeanPointArea();
+		const meanDistance = std.math.sqrt(meanPointArea); // m
 		const meanDistanceKm = meanDistance / 1000; // km
 		const kmPerWaterMass = self.getKmPerWaterMass(); // km / 10⁹ kg
 		_ = meanDistance;
@@ -941,7 +942,6 @@ pub const Planet = struct {
 
 			for (self.getNeighbours(i)) |neighbourIdx, location| {
 				const neighbourVapor = self.waterVaporMass[neighbourIdx];
-				const neighbourAirMass = self.getAirMass(neighbourIdx);
 				const dP = pressure - getAirPressure(substanceDivider, self.temperature[neighbourIdx], neighbourVapor);
 				const tangent = tangentVectors[location];
 
@@ -950,8 +950,9 @@ pub const Planet = struct {
 					// Pressure gradient force
 					const pgf = dP / meanDistance * meanAtmVolume; // N
 					// F = ma, so a = F/m
-					const acceleration = @floatCast(f32, pgf / (neighbourAirMass * 1_000_000_000) / 1000 * dt); // km/s
-					self.airVelocity[i].data += tangent.scale(acceleration).data;
+					const acceleration = @floatCast(f32, pgf / (mass * 1_000_000_000) / 1000 * dt); // km/s
+					_ = acceleration; _ = tangent;
+					//self.airVelocity[i].data += tangent.scale(acceleration).data;
 				}
 			}
 			std.debug.assert(self.newWaterVaporMass[i] >= 0);
@@ -981,20 +982,36 @@ pub const Planet = struct {
 		while (i < end) : (i += 1) {
 			const vert = self.vertices[i];
 			const transformedPoint = self.transformedPoints[i];
+			const mass = self.getAirMass(i);
 			var velocity = self.airVelocity[i];
-			var latitude = std.math.acos(vert.z());
-			const longitude = std.math.atan2(f32, vert.y(), vert.x());
-			if (longitude < std.math.pi / 4.0) {
-				latitude = -latitude;
+
+			// Coriolis force
+			{
+				// TODO: implement branchless?
+				var latitude = std.math.acos(vert.z());
+				if (latitude > std.math.pi / 2.0) {
+					latitude = -latitude;
+				}
+				// note: velocity is assumed to not be above meanDistanceKm
+				velocity = velocity.add(Vec2.new(
+					spinRate * 2.0 * @sin(latitude), 0));
 			}
-			// note: velocity is assumed to not be above meanDistanceKm
-			velocity = velocity.add(Vec2.new(
-				spinRate * 2.0 * @sin(latitude), 0));
-			if (velocity.length() > meanDistanceKm) {
-				velocity = velocity.norm().scale(meanDistanceKm);
+			//if (velocity.length() > meanDistanceKm) {
+			//	velocity = velocity.norm().scale(meanDistanceKm);
+			//}
+
+			// Apply drag
+			{
+				const massDensity = 1.2; // air density is about 1.2 kg/m³ at sea level (XXX: take actual density from the game?)
+				const velocityN = velocity.length() * 1000; // m/s
+				const dragCoeff = 1.55;
+				const area = meanPointArea / 10 * @maximum(0, self.elevation[i]); // TODO: depend on steepness!!
+
+				const dragForce = 1 / 2 * massDensity * velocityN * velocityN * dragCoeff * area * dt; // TODO: depend on Mach number?
+				velocity = velocity.sub(velocity.norm().scale(@maximum(0, dragForce / mass)));
 			}
 
-			const targetPos = transformedPoint.add(Vec3.new(velocity.x(), velocity.y(), 0).cross(Vec3.forward()).cross(transformedPoint));
+			const targetPos = transformedPoint.add(Vec3.new(velocity.x() * dt, velocity.y() * dt, 0).cross(Vec3.forward()).cross(transformedPoint));
 			var sharedVapor: f32 = 0;
 			const maxSharedVapor = self.waterVaporMass[i] / 10;
 			for (self.getNeighbours(i)) |neighbourIdx| {
