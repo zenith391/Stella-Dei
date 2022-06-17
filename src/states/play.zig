@@ -88,7 +88,7 @@ pub const SunMesh = struct {
 
 	pub fn getMesh(allocator: std.mem.Allocator) IcosphereMesh {
 		if (sun_mesh == null) {
-			const mesh = IcosphereMesh.generate(allocator, 2) catch unreachable;
+			const mesh = IcosphereMesh.generate(allocator, 3) catch unreachable;
 			gl.bindVertexArray(mesh.vao);
 			gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
 			gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
@@ -306,6 +306,24 @@ pub const PlayState = struct {
 			gl.depthMask(gl.TRUE);
 		}
 
+		// Then render the sun
+		{
+			// TODO: do like skybox so it looks infinitely far
+			const program = renderer.sunProgram;
+			program.use();
+			program.setUniformMat4("projMatrix",
+				Mat4.perspective(70, size.x() / size.y(), 1, 1000000));
+			program.setUniformMat4("viewMatrix",
+				Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
+			const modelMatrix = Mat4.recompose(solarVector.scale(300000), Vec3.new(0, 0, 0), Vec3.new(4000, 4000, 4000));
+			program.setUniformMat4("modelMatrix",
+				modelMatrix);
+
+			const mesh = SunMesh.getMesh(game.allocator);
+			gl.bindVertexArray(mesh.vao);
+			gl.drawElements(gl.TRIANGLES, @intCast(c_int, mesh.indices.len), gl.UNSIGNED_INT, null);
+		}
+
 		// Then render the planet
 		{
 			const program = renderer.terrainProgram;
@@ -339,23 +357,6 @@ pub const PlayState = struct {
 
 			gl.bindVertexArray(planet.mesh.vao);
 			gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
-		}
-
-		// Then render the sun
-		{
-			const program = renderer.sunProgram;
-			program.use();
-			program.setUniformMat4("projMatrix",
-				Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
-			program.setUniformMat4("viewMatrix",
-				Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
-			const modelMatrix = Mat4.recompose(solarVector.scale(zFar - 1000), Vec3.new(0, 0, 0), Vec3.new(1000, 1000, 1000));
-			program.setUniformMat4("modelMatrix",
-				modelMatrix);
-
-			const mesh = SunMesh.getMesh(game.allocator);
-			gl.bindVertexArray(mesh.vao);
-			gl.drawElements(gl.TRIANGLES, @intCast(c_int, mesh.indices.len), gl.UNSIGNED_INT, null);
 		}
 
 		const entity = renderer.entityProgram;
