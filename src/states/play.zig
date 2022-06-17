@@ -94,9 +94,6 @@ const GameTool = enum {
 };
 
 pub const PlayState = struct {
-	/// The position of the camera
-	/// This is already scaled by cameraDistance
-	cameraPos: Vec3 = Vec3.new(0, -8, 2),
 	/// The previous mouse position that was recorded during dragging (to move the camera).
 	dragStart: Vec2,
 	planet: Planet,
@@ -105,11 +102,15 @@ pub const PlayState = struct {
 	noiseCubemap: Texture,
 	skyboxCubemap: Texture,
 
+	/// The position of the camera
+	/// This is already scaled by cameraDistance
+	cameraPos: Vec3 = Vec3.new(0, -8000, 2000),
+	/// The target camera position, every frame, a linear interpolation is done
+	/// between the current camera position and the target position, to create a
+	/// smooth moving effect.
+	targetCameraPos: Vec3 = Vec3.new(0, -8, 2),
 	/// The distance the camera is from the planet's center
 	cameraDistance: f32,
-	/// The target camera distance, every frame, a linear interpolation is done
-	/// between the current camera distance and the target distance, to create a
-	/// smooth (de)zooming effect.
 	targetCameraDistance: f32,
 	/// The index of the currently selected point
 	selectedPoint: usize = 0,
@@ -186,8 +187,8 @@ pub const PlayState = struct {
 			.noiseCubemap = cubemap,
 			.skyboxCubemap = skybox,
 			.planet = planet,
+			.cameraDistance = planetRadius * 10,
 			.targetCameraDistance = planetRadius * 2.5,
-			.cameraDistance = planetRadius * 5,
 		};
 	}
 
@@ -200,27 +201,36 @@ pub const PlayState = struct {
 			const glfwCursorPos = game.window.getCursorPos() catch unreachable;
 			const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
 			const delta = cursorPos.sub(self.dragStart).scale(1 / 100.0);
-			const right = self.cameraPos.cross(Vec3.forward()).norm();
-			const backward = self.cameraPos.cross(right).norm();
-			self.cameraPos = self.cameraPos
+			const right = self.targetCameraPos.cross(Vec3.forward()).norm();
+			const backward = self.targetCameraPos.cross(right).norm();
+			self.targetCameraPos = self.targetCameraPos
 				.add(right.scale(delta.x())
 				.add(backward.scale(-delta.y()))
-				.scale(self.cameraDistance / 5));
+				.scale(self.targetCameraDistance / 5));
 			self.dragStart = cursorPos;
 
-			self.cameraPos = self.cameraPos.norm()
-				.scale(self.cameraDistance);
+			self.targetCameraPos = self.targetCameraPos.norm()
+				.scale(self.targetCameraDistance);
 		}
 
 		{
-			const cameraPoint = self.planet.transformedPoints[self.planet.getNearestPointTo(self.cameraPos)];
-			if (self.targetCameraDistance < cameraPoint.length() + 200) {
-				self.targetCameraDistance = cameraPoint.length() + 200;
+			const cameraPoint = self.planet.transformedPoints[self.planet.getNearestPointTo(self.targetCameraPos)];
+			if (self.cameraDistance < cameraPoint.length() + 100) {
+				self.cameraDistance = cameraPoint.length() + 100;
 			}
 		}
 
-		// Smooth (de)zooming using linear interpolation
-		if (!std.math.approxEqAbs(f32, self.cameraDistance, self.targetCameraDistance, 0.01)) {
+		// Smooth camera move using linear interpolation
+		self.targetCameraPos = self.targetCameraPos.norm()
+			.scale(self.targetCameraDistance);
+		if (!(
+			std.math.approxEqAbs(f32, self.cameraPos.x(), self.targetCameraPos.x(), 0.01) and
+			std.math.approxEqAbs(f32, self.cameraPos.y(), self.targetCameraPos.y(), 0.01) and
+			std.math.approxEqAbs(f32, self.cameraPos.z(), self.targetCameraPos.z(), 0.01) and
+			std.math.approxEqAbs(f32, self.cameraDistance, self.targetCameraDistance, 0.01)
+		)) {
+			// TODO: maybe use Quaternion lerp ? It could help on rotation near the poles.
+			self.cameraPos = self.cameraPos.scale(0.9).add(self.targetCameraPos.scale(0.1));
 			self.cameraDistance = self.cameraDistance * 0.9 + self.targetCameraDistance * 0.1;
 			self.cameraPos = self.cameraPos.norm()
 				.scale(self.cameraDistance);
@@ -306,7 +316,7 @@ pub const PlayState = struct {
 		defer gl.disable(gl.CULL_FACE);
 		gl.frontFace(gl.CW);
 
-		gl.bindVertexArray(planet.vao);
+		gl.bindVertexArray(planet.mesh.vao);
 		gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
 
 		const entity = renderer.entityProgram;
