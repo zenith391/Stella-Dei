@@ -81,6 +81,25 @@ pub const CubeMesh = struct {
 	}
 };
 
+pub const SunMesh = struct {
+	const IcosphereMesh = @import("../utils.zig").IcosphereMesh;
+
+	var sun_mesh: ?IcosphereMesh = null;
+
+	pub fn getMesh(allocator: std.mem.Allocator) IcosphereMesh {
+		if (sun_mesh == null) {
+			const mesh = IcosphereMesh.generate(allocator, 2) catch unreachable;
+			gl.bindVertexArray(mesh.vao);
+			gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
+			gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+			gl.enableVertexAttribArray(0);
+			gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, mesh.vertices.len * @sizeOf(f32)), mesh.vertices.ptr, gl.STREAM_DRAW);
+			sun_mesh = mesh;
+		}
+		return sun_mesh.?;
+	}
+};
+
 const GameTool = enum {
 	None,
 	/// When enabled, emits water at selected point on click
@@ -287,37 +306,57 @@ pub const PlayState = struct {
 			gl.depthMask(gl.TRUE);
 		}
 
-		// Then render the terrain
-		const program = renderer.terrainProgram;
-		program.use();
-		program.setUniformMat4("projMatrix",
-			Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
-		program.setUniformMat4("viewMatrix",
-			Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
+		// Then render the planet
+		{
+			const program = renderer.terrainProgram;
+			program.use();
+			program.setUniformMat4("projMatrix",
+				Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
+			program.setUniformMat4("viewMatrix",
+				Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
 
-		const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(0, 0, 0), Vec3.new(1, 1, 1));
-		program.setUniformMat4("modelMatrix",
-			modelMatrix);
+			const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(0, 0, 0), Vec3.new(1, 1, 1));
+			program.setUniformMat4("modelMatrix",
+				modelMatrix);
 
-		program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
-		program.setUniformVec3("lightDir", solarVector);
-		program.setUniformFloat("lightIntensity", self.solarConstant / 1500);
-		program.setUniformVec3("viewPos", self.cameraPos);
-		program.setUniformFloat("planetRadius", planet.radius);
-		program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display mode
-		program.setUniformInt("selectedVertex", @intCast(c_int, self.selectedPoint));
-		program.setUniformFloat("kmPerWaterMass", planet.getKmPerWaterMass());
+			program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
+			program.setUniformVec3("lightDir", solarVector);
+			program.setUniformFloat("lightIntensity", self.solarConstant / 1500);
+			program.setUniformVec3("viewPos", self.cameraPos);
+			program.setUniformFloat("planetRadius", planet.radius);
+			program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display mode
+			program.setUniformInt("selectedVertex", @intCast(c_int, self.selectedPoint));
+			program.setUniformFloat("kmPerWaterMass", planet.getKmPerWaterMass());
 
-		gl.activeTexture(gl.TEXTURE0);
-		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);
-		program.setUniformInt("noiseCubemap", 0);
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);
+			program.setUniformInt("noiseCubemap", 0);
 
-		gl.enable(gl.CULL_FACE);
-		defer gl.disable(gl.CULL_FACE);
-		gl.frontFace(gl.CW);
+			gl.enable(gl.CULL_FACE);
+			defer gl.disable(gl.CULL_FACE);
+			gl.frontFace(gl.CW);
+			defer gl.frontFace(gl.CCW);
 
-		gl.bindVertexArray(planet.mesh.vao);
-		gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
+			gl.bindVertexArray(planet.mesh.vao);
+			gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
+		}
+
+		// Then render the sun
+		{
+			const program = renderer.sunProgram;
+			program.use();
+			program.setUniformMat4("projMatrix",
+				Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
+			program.setUniformMat4("viewMatrix",
+				Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
+			const modelMatrix = Mat4.recompose(solarVector.scale(zFar - 1000), Vec3.new(0, 0, 0), Vec3.new(1000, 1000, 1000));
+			program.setUniformMat4("modelMatrix",
+				modelMatrix);
+
+			const mesh = SunMesh.getMesh(game.allocator);
+			gl.bindVertexArray(mesh.vao);
+			gl.drawElements(gl.TRIANGLES, @intCast(c_int, mesh.indices.len), gl.UNSIGNED_INT, null);
+		}
 
 		const entity = renderer.entityProgram;
 		entity.use();
