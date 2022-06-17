@@ -11,40 +11,13 @@ const cl = @cImport({
 const perlin = @import("../perlin.zig");
 const EventLoop = @import("../loop.zig").EventLoop;
 const Job = @import("../loop.zig").Job;
+const IcosphereMesh = @import("../utils.zig").IcosphereMesh;
 
 const Lifeform = @import("life.zig").Lifeform;
 
 const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Allocator = std.mem.Allocator;
-
-const icoX = 0.525731112119133606;
-const icoZ = 0.850650808352039932;
-const icoVertices = &[_]f32 {
-	-icoX, 0,  icoZ,
-	 icoX, 0,  icoZ,
-	-icoX, 0, -icoZ,
-	 icoX, 0, -icoZ,
-	0,  icoZ,  icoX,
-	0,  icoZ, -icoX,
-	0, -icoZ,  icoX,
-	0, -icoZ, -icoX,
-	 icoZ,  icoX, 0,
-	-icoZ,  icoX, 0,
-	 icoZ, -icoX, 0,
-	-icoZ, -icoX, 0,
-};
-
-const icoIndices = &[_]gl.GLuint {
-	0, 4, 1, 0, 9, 4, 9, 5, 4, 4, 5, 8, 4, 8, 1, 8, 10, 1, 8, 3, 10, 5, 3, 8,
-	5, 2, 3, 2, 7, 3, 7, 10, 3, 7, 6, 10, 7, 11, 6, 11, 0, 6, 0, 1, 6,
-	6, 1, 10, 9, 0, 11, 9, 11, 2, 9, 2, 5, 7, 2, 11
-};
-
-const IndexPair = struct {
-	first: gl.GLuint,
-	second: gl.GLuint
-};
 
 pub const CLContext = struct {
 	device: cl.cl_device_id,
@@ -120,8 +93,7 @@ pub const CLContext = struct {
 };
 
 pub const Planet = struct {
-	vao: gl.GLuint,
-	vbo: gl.GLuint,
+	mesh: IcosphereMesh,
 
 	numTriangles: gl.GLint,
 	numSubdivisions: usize,
@@ -131,7 +103,7 @@ pub const Planet = struct {
 	allocator: std.mem.Allocator,
 	/// The *unmodified* vertices of the icosphere
 	vertices: []Vec3,
-	indices: []gl.GLuint,
+	indices: []const gl.GLuint,
 	/// Slice changed during each upload() call, it contains the data
 	/// that will be stored in the VBO.
 	bufData: []f32,
@@ -194,79 +166,6 @@ pub const Planet = struct {
 		WindMagnitude = 3,
 	};
 
-	const LookupMap = std.AutoHashMap(IndexPair, gl.GLuint);
-	fn vertexForEdge(lookup: *LookupMap, vertices: *std.ArrayList(f32), first: gl.GLuint, second: gl.GLuint) !gl.GLuint {
-		const a = if (first > second) first  else second;
-		const b = if (first > second) second else first;
-
-		const pair = IndexPair { .first = a, .second = b };
-		const result = try lookup.getOrPut(pair);
-		if (!result.found_existing) {
-			result.value_ptr.* = @intCast(gl.GLuint, vertices.items.len / 3);
-			const edge0 = Vec3.new(
-				vertices.items[a*3+0],
-				vertices.items[a*3+1],
-				vertices.items[a*3+2],
-			);
-			const edge1 = Vec3.new(
-				vertices.items[b*3+0],
-				vertices.items[b*3+1],
-				vertices.items[b*3+2],
-			);
-			const point = edge0.add(edge1).norm();
-			try vertices.append(point.x());
-			try vertices.append(point.y());
-			try vertices.append(point.z());
-		}
-
-		return result.value_ptr.*;
-	}
-
-	const IndexedMesh = struct {
-		vertices: []f32,
-		indices: []gl.GLuint
-	};
-
-	fn subdivide(allocator: std.mem.Allocator, vertices: []const f32, indices: []const gl.GLuint) !IndexedMesh {
-		var lookup = LookupMap.init(allocator);
-		defer lookup.deinit();
-		var result = std.ArrayList(gl.GLuint).init(allocator);
-		var verticesList = std.ArrayList(f32).init(allocator);
-		try verticesList.appendSlice(vertices);
-
-		var i: usize = 0;
-		while (i < indices.len) : (i += 3) {
-			var mid: [3]gl.GLuint = undefined;
-			var edge: usize = 0;
-			while (edge < 3) : (edge += 1) {
-				mid[edge] = try vertexForEdge(&lookup, &verticesList,
-					indices[i+edge], indices[i+(edge+1)%3]);
-			}
-
-			try result.ensureUnusedCapacity(12);
-			result.appendAssumeCapacity(indices[i+0]);
-			result.appendAssumeCapacity(mid[0]);
-			result.appendAssumeCapacity(mid[2]);
-
-			result.appendAssumeCapacity(indices[i+1]);
-			result.appendAssumeCapacity(mid[1]);
-			result.appendAssumeCapacity(mid[0]);
-
-			result.appendAssumeCapacity(indices[i+2]);
-			result.appendAssumeCapacity(mid[2]);
-			result.appendAssumeCapacity(mid[1]);
-
-			result.appendAssumeCapacity(mid[0]);
-			result.appendAssumeCapacity(mid[1]);
-			result.appendAssumeCapacity(mid[2]);
-		}
-
-		return IndexedMesh {
-			.vertices = verticesList.toOwnedSlice(),
-			.indices = result.toOwnedSlice(),
-		};
-	}
-
 	fn appendNeighbor(planet: *Planet, idx: u32, neighbor: u32) void {
 		// Find the next free slot in the list:
 		var i: usize = 0;
@@ -316,41 +215,14 @@ pub const Planet = struct {
 		const zone = tracy.ZoneN(@src(), "Generate planet");
 		defer zone.End();
 
-		const zone2 = tracy.ZoneN(@src(), "Subdivide ico-sphere");
-		var vao: gl.GLuint = undefined;
-		gl.genVertexArrays(1, &vao);
-		var vbo: gl.GLuint = undefined;
-		gl.genBuffers(1, &vbo);
-		var ebo: gl.GLuint = undefined;
-		gl.genBuffers(1, &ebo);
-
-		gl.bindVertexArray(vao);
-		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-		
-		var subdivided: ?IndexedMesh = null;
-		{
-			var i: usize = 0;
-			while (i < numSubdivisions) : (i += 1) {
-				const oldSubdivided = subdivided;
-				const vert = if (subdivided) |s| s.vertices else icoVertices;
-				const indc = if (subdivided) |s| s.indices else icoIndices;
-				subdivided = try subdivide(allocator, vert, indc);
-
-				if (oldSubdivided) |s| {
-					allocator.free(s.vertices);
-					allocator.free(s.indices);
-				}
-			}
-		}
-		zone2.End();
+		const mesh = try IcosphereMesh.generate(allocator, numSubdivisions);
 
 		// ArenaAllocator for all the simulation data points
 		var simulationArena = std.heap.ArenaAllocator.init(allocator);
 		const simAlloc = simulationArena.allocator();
 
 		const zone3 = tracy.ZoneN(@src(), "Initialise with data");
-		const numPoints = subdivided.?.vertices.len / 3; // number of points
+		const numPoints      = mesh.num_points;
 		const vertices       = try simAlloc.alloc(Vec3,   numPoints);
 		const vertNeighbours = try simAlloc.alloc([6]u32, numPoints);
 		const elevation      = try simAlloc.alloc(f32,    numPoints);
@@ -370,16 +242,15 @@ pub const Planet = struct {
 		const transformedPoints = try simAlloc.alloc(Vec3, vertices.len);
 
 		var planet = Planet {
-			.vao = vao,
-			.vbo = vbo,
-			.numTriangles = @intCast(gl.GLint, subdivided.?.indices.len),
+			.mesh = mesh,
+			.numTriangles = @intCast(gl.GLint, mesh.indices.len),
 			.numSubdivisions = numSubdivisions,
 			.radius = radius,
 			.simulationArena = simulationArena,
 			.allocator = allocator,
 			.vertices = vertices,
 			.verticesNeighbours = vertNeighbours,
-			.indices = subdivided.?.indices,
+			.indices = mesh.indices,
 			.elevation = elevation,
 			.waterMass = waterElev,
 			.waterVaporMass = waterVaporMass,
@@ -412,7 +283,7 @@ pub const Planet = struct {
 			var prng = std.rand.DefaultPrng.init(seed);
 			const random = prng.random();
 
-			const vert = subdivided.?.vertices;
+			const vert = mesh.vertices;
 			defer allocator.free(vert);
 			const kmPerWaterMass = planet.getKmPerWaterMass();
 			const seaLevel = radius + (random.float(f32) - 0.5) * 10; // between +5km and -5/km
@@ -443,7 +314,9 @@ pub const Planet = struct {
 		}
 		zone3.End();
 
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.?.indices.len * @sizeOf(f32)), subdivided.?.indices.ptr, gl.STATIC_DRAW);
+		// Pre-compute the neighbours of every point of the ico-sphere.
+		computeNeighbours(&planet);
+
 		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
 		gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
 		gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32))); // temperature (used for a bunch of things)
@@ -454,9 +327,6 @@ pub const Planet = struct {
 		gl.enableVertexAttribArray(2);
 		gl.enableVertexAttribArray(3);
 		gl.enableVertexAttribArray(4);
-
-		// Pre-compute the neighbours of every point of the ico-sphere.
-		computeNeighbours(&planet);
 
 		const meanPointArea = (4 * std.math.pi * radius * radius) / @intToFloat(f32, numPoints);
 		std.log.info("There are {d} points in the ico-sphere.\n", .{ numPoints });
@@ -582,8 +452,8 @@ pub const Planet = struct {
 			bufData[i*STRIDE+8] = self.vegetation[i];
 		}
 		
-		gl.bindVertexArray(self.vao);
-		gl.bindBuffer(gl.ARRAY_BUFFER, self.vbo);
+		gl.bindVertexArray(self.mesh.vao);
+		gl.bindBuffer(gl.ARRAY_BUFFER, self.mesh.vbo);
 		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
 	}
 
