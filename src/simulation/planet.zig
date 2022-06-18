@@ -8,6 +8,8 @@ const cl = @cImport({
 	@cInclude("CL/cl.h");
 });
 
+pub const USE_OPENCL = false;
+
 const perlin = @import("../perlin.zig");
 const EventLoop = @import("../loop.zig").EventLoop;
 const Job = @import("../loop.zig").Job;
@@ -19,7 +21,7 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Allocator = std.mem.Allocator;
 
-pub const CLContext = struct {
+pub const CLContext = if (!USE_OPENCL) struct {} else struct {
 	device: cl.cl_device_id,
 	queue: cl.cl_command_queue,
 	simulationKernel: cl.cl_kernel,
@@ -270,7 +272,7 @@ pub const Planet = struct {
 
 		// OpenCL doesn't really work well on Windows (atleast when testing
 		// using Wine, it might be a missing DLL problem)
-		if (builtin.target.os.tag != .windows) {
+		if (builtin.target.os.tag != .windows and USE_OPENCL) {
  			planet.clContext = CLContext.init(allocator, &planet) catch blk: {
 				std.log.warn("Your system doesn't support OpenCL.", .{});
 				break :blk null;
@@ -506,7 +508,6 @@ pub const Planet = struct {
 	pub const SimulationOptions = extern struct {
 		solarConstant: f32,
 		planetRotationTime: f32,
-		conductivity: f32,
 		gameTime: f64,
 		/// Currently, time scale greater than 40000 may result in lots of bugs
 		timeScale: f32 = 1,
@@ -636,6 +637,7 @@ pub const Planet = struct {
 	}
 
 	fn simulateTemperature_OpenCL(self: *Planet, ctx: CLContext, options: SimulationOptions, start: usize, end: usize) void {
+		if (!USE_OPENCL) @compileError("Not using OpenCL");
 		if (start != 0 or end != self.temperature.len) {
 			//std.debug.todo("Allow simulateTemperature_OpenCL to have a custom range");
 			std.debug.panic("TODO", .{});
@@ -1016,7 +1018,7 @@ pub const Planet = struct {
 		}
 
 		// TODO: mix both
-		if (self.clContext != null and false) {
+		if (USE_OPENCL and self.clContext != null) {
 			const clContext = self.clContext.?;
 			self.simulateTemperature_OpenCL(clContext, options, 0, self.temperature.len);
 			std.log.info("new temp at 0: {d}", .{ self.newTemperature[0] });
