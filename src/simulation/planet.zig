@@ -99,6 +99,7 @@ pub const Planet = struct {
 
 	numTriangles: gl.GLint,
 	numSubdivisions: usize,
+	seed: u64,
 	radius: f32,
 	/// Arena allocator for simulation data
 	simulationArena: std.heap.ArenaAllocator,
@@ -247,6 +248,7 @@ pub const Planet = struct {
 			.mesh = mesh,
 			.numTriangles = @intCast(gl.GLint, mesh.indices.len),
 			.numSubdivisions = numSubdivisions,
+			.seed = seed,
 			.radius = radius,
 			.simulationArena = simulationArena,
 			.allocator = allocator,

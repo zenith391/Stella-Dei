@@ -109,7 +109,9 @@ const GameTool = enum {
 	/// When enabled, drains all water near selected point on click
 	PlaceVegetation,
 	/// When enabled, place lifeform on click
-	PlaceLife
+	PlaceLife,
+	RaiseTerrain,
+	LowerTerrain
 };
 
 pub const PlayState = struct {
@@ -138,8 +140,6 @@ pub const PlayState = struct {
 	axialTilt: f32 = 23.4,
 	/// The solar constant in W.m-2
 	solarConstant: f32 = 1361,
-	/// The planet's surface conductivity in arbitrary units (TODO: use real unit)
-	conductivity: f32 = 0.25,
 	/// The time it takes for the planet to do a full rotation on itself, in seconds
 	planetRotationTime: f32 = 86400,
 	/// The time elapsed in seconds since the start of the game
@@ -154,6 +154,8 @@ pub const PlayState = struct {
 
 	debug_clearWater: bool = false,
 	debug_deluge: bool = false,
+	/// Save the game on the next call to update()
+	defer_saveGame: bool = false,
 
 	selectedTool: GameTool = .None,
 	meanTemperature: f32 = 0.0,
@@ -432,7 +434,6 @@ pub const PlayState = struct {
 				// time speed is kept but the precision is increased.
 				planet.simulate(game.loop, .{
 					.solarConstant = self.solarConstant,
-					.conductivity = self.conductivity,
 					.timeScale = self.timeScale / simulationSteps,
 					.gameTime = self.gameTime,
 					.planetRotationTime = self.planetRotationTime,
@@ -442,6 +443,14 @@ pub const PlayState = struct {
 
 			// TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
 			self.gameTime += 0.016 * self.timeScale;
+		}
+
+		if (self.defer_saveGame) {
+			self.saveGame() catch |err| {
+				// TODO: handle error
+				err catch {};
+			};
+			self.defer_saveGame = false;
 		}
 	}
 
@@ -580,12 +589,15 @@ pub const PlayState = struct {
 				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
 					nk.NK_TEXT_ALIGN_CENTERED);
 				
-				nk.nk_layout_row_dynamic(ctx, 50, 2);
+				nk.nk_layout_row_dynamic(ctx, 50, 3);
 				if (nk.nk_button_label(ctx, "Clear all water") != 0) {
 					self.debug_clearWater = true;
 				}
 				if (nk.nk_button_label(ctx, "Deluge") != 0) {
 					self.debug_deluge = true;
+				}
+				if (nk.nk_button_label(ctx, "Save game") != 0) {
+					self.defer_saveGame = true;
 				}
 			}
 			nk.nk_end(ctx);
@@ -642,7 +654,7 @@ pub const PlayState = struct {
 		}
 		nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "No Tool",.{ .x = 550, .y = 10, .w = 70, .h = 70 },
+		if (nk.nk_begin(ctx, "No Tool", .{ .x = 550, .y = 10, .w = 70, .h = 70 },
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
@@ -653,7 +665,7 @@ pub const PlayState = struct {
 		}
 		nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Emit Water Tool",.{ .x = 625, .y = 10, .w = 70, .h = 70 },
+		if (nk.nk_begin(ctx, "Emit Water Tool", .{ .x = 625, .y = 10, .w = 70, .h = 70 },
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
@@ -664,7 +676,7 @@ pub const PlayState = struct {
 		}
 		nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Drain Water Tool",.{ .x = 700, .y = 10, .w = 70, .h = 70 },
+		if (nk.nk_begin(ctx, "Drain Water Tool", .{ .x = 700, .y = 10, .w = 70, .h = 70 },
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
@@ -675,7 +687,7 @@ pub const PlayState = struct {
 		}
 		nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Place Vegetation Tool",.{ .x = 775, .y = 10, .w = 70, .h = 70 },
+		if (nk.nk_begin(ctx, "Place Vegetation Tool", .{ .x = 775, .y = 10, .w = 70, .h = 70 },
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
@@ -685,6 +697,94 @@ pub const PlayState = struct {
 			}
 		}
 		nk.nk_end(ctx);
+
+		if (nk.nk_begin(ctx, "Raise Terrain Tool", .{ .x = 850, .y = 10, .w = 70, .h = 70 },
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			nk.nk_layout_row_static(ctx, 60, 60, 1);
+			
+			const waterIcon = renderer.textureCache.get("place-vegetation").toNkImage();
+			if (nk.nk_button_image(ctx, waterIcon) != 0) {
+				self.selectedTool = .RaiseTerrain;
+			}
+		}
+		nk.nk_end(ctx);
+
+		if (nk.nk_begin(ctx, "Lower Terrain Tool", .{ .x = 925, .y = 10, .w = 70, .h = 70 },
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			nk.nk_layout_row_static(ctx, 60, 60, 1);
+			
+			const waterIcon = renderer.textureCache.get("place-vegetation").toNkImage();
+			if (nk.nk_button_image(ctx, waterIcon) != 0) {
+				self.selectedTool = .LowerTerrain;
+			}
+		}
+		nk.nk_end(ctx);
+	}
+
+	pub fn saveGame(self: *PlayState) !void {
+		try std.fs.cwd().makePath("saves/abc");
+
+		const metadataFile = try std.fs.cwd().createFile("saves/abc/metadata.json", .{});
+		defer metadataFile.close();
+		const GameMetadata = struct {
+			format_version: u32 = 0,
+			game_time: f64,
+			axial_tilt: f32,
+			solar_constant: f32,
+			planet_rotation_time: f32,
+			time_scale: f32,
+			radius: f32,
+			subdivisions: u64,
+			seed: u64,
+		};
+		try std.json.stringify(GameMetadata {
+			.format_version = 0,
+			.game_time = self.gameTime,
+			.axial_tilt = self.axialTilt,
+			.solar_constant = self.solarConstant,
+			.planet_rotation_time = self.planetRotationTime,
+			.time_scale = self.timeScale,
+			.radius = self.planet.radius,
+			.subdivisions = self.planet.numSubdivisions,
+			.seed = self.planet.seed,
+		}, .{ .whitespace = .{ .indent = .Tab }}, metadataFile.writer());
+		
+		const planetFile = try std.fs.cwd().createFile("saves/abc/planet.dat", .{});
+		defer planetFile.close();
+
+		var buffer = std.io.bufferedWriter(planetFile.writer());
+		const writer = buffer.writer();
+		const planet = self.planet;
+		// planet.vertices can be re-generated using icosphere data, same for indices
+
+		for (planet.elevation) |elevation| {
+			try writer.writeIntLittle(u32, @bitCast(u32, elevation));
+		}
+
+		for (planet.temperature) |temperature| {
+			try writer.writeIntLittle(u32, @bitCast(u32, temperature));
+		}
+
+		for (planet.vegetation) |vegetation| {
+			try writer.writeIntLittle(u32, @bitCast(u32, vegetation));
+		}
+
+		for (planet.waterMass) |waterMass| {
+			try writer.writeIntLittle(u32, @bitCast(u32, waterMass));
+		}
+
+		for (planet.waterVaporMass) |waterVaporMass| {
+			try writer.writeIntLittle(u32, @bitCast(u32, waterVaporMass));
+		}
+
+		for (planet.airVelocity) |airVelocity| {
+			try writer.writeIntLittle(u32, @bitCast(u32, airVelocity.x()));
+			try writer.writeIntLittle(u32, @bitCast(u32, airVelocity.y()));
+		}
+
+		// TODO: save lifeforms
+
+		try buffer.flush();
 	}
 
 	pub fn deinit(self: *PlayState) void {
