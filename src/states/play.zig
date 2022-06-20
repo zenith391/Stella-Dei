@@ -317,7 +317,7 @@ pub const PlayState = struct {
 				Mat4.perspective(70, size.x() / size.y(), 1, 1000000));
 			program.setUniformMat4("viewMatrix",
 				Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
-			const modelMatrix = Mat4.recompose(solarVector.scale(300000), Vec3.new(0, 0, 0), Vec3.new(4000, 4000, 4000));
+			const modelMatrix = Mat4.recompose(solarVector.scale(300000), Vec3.new(0, 0, 0), Vec3.new(8000, 8000, 8000));
 			program.setUniformMat4("modelMatrix",
 				modelMatrix);
 
@@ -409,6 +409,28 @@ pub const PlayState = struct {
 			planet.waterMass[self.selectedPoint] = 0;
 			for (planet.getNeighbours(self.selectedPoint)) |idx| {
 				planet.waterMass[idx] = 0;
+			}
+		}
+
+		if (self.selectedTool == .RaiseTerrain and game.window.getMouseButton(.left) == .press) {
+			if (planet.elevation[self.selectedPoint] < planet.radius + 20) {
+				planet.elevation[self.selectedPoint] += 0.4;
+			}
+			for (planet.getNeighbours(self.selectedPoint)) |idx| {
+				if (planet.elevation[idx] < planet.radius + 20) {
+					planet.elevation[idx] += 0.2;
+				}
+			}
+		}
+
+		if (self.selectedTool == .LowerTerrain and game.window.getMouseButton(.left) == .press) {
+			if (planet.elevation[self.selectedPoint] > planet.radius - 20) {
+				planet.elevation[self.selectedPoint] -= 0.4;
+			}
+			for (planet.getNeighbours(self.selectedPoint)) |idx| {
+				if (planet.elevation[idx] > planet.radius - 20) {
+					planet.elevation[idx] -= 0.2;
+				}
 			}
 		}
 
