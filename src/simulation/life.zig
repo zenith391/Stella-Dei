@@ -87,7 +87,7 @@ pub const Lifeform = struct {
 		const pointIdx = planet.getNearestPointTo(self.position);
 		const point = planet.transformedPoints[pointIdx];
 		const random = self.prng.random();
-		const dt = 1.0 / 60.0 * options.timeScale;
+		const dt = options.dt * options.timeScale;
 		self.reproductionCooldown = std.math.max(0, self.reproductionCooldown - dt);
 		self.satiety = std.math.max(0, self.satiety - dt * 0.001);
 

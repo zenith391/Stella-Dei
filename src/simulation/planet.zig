@@ -508,6 +508,8 @@ pub const Planet = struct {
 	}
 
 	pub const SimulationOptions = extern struct {
+		/// The real time elapsed between two updates
+		dt: f32,
 		solarConstant: f32,
 		planetRotationTime: f32,
 		gameTime: f64,
@@ -552,7 +554,7 @@ pub const Planet = struct {
 		const solarVector = options.solarVector;
 
 		// Number of seconds that passes in 1 simulation step
-		const dt = 1.0 / 60.0 * options.timeScale;
+		const dt = options.dt * options.timeScale;
 
 		// The surface of the planet (approx.) divided by the numbers of points
 		const meanPointArea = self.getMeanPointArea(); // m²
@@ -649,7 +651,7 @@ pub const Planet = struct {
 		defer zone.End();
 
 		// Number of seconds that passes in 1 simulation step
-		const dt = 1.0 / 60.0 * options.timeScale;
+		const dt = options.dt * options.timeScale;
 
 		// The surface of the planet (approx.) divided by the numbers of points
 		const meanPointArea = self.getMeanPointArea(); // m²
@@ -708,7 +710,7 @@ pub const Planet = struct {
 		const zone = tracy.ZoneN(@src(), "Water Simulation");
 		defer zone.End();
 
-		const dt = 1.0 / 60.0 * options.timeScale;
+		const dt = options.dt * options.timeScale;
 
 		const newMass = self.newWaterMass;
 		const meanPointArea = self.getMeanPointArea();

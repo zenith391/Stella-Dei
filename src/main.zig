@@ -167,19 +167,23 @@ fn render(window: glfw.Window) void {
 
 fn updateLoop(loop: *EventLoop, window: glfw.Window) void {
 	loop.yield();
+	var fullLoopTime: f32 = 0;
 	while (!window.shouldClose()) {
 		// Call the update() function of the current game state, if it has one.
+
+		var timer = std.time.Timer.start() catch unreachable; // this just assumes a clock is available
 		inline for (std.meta.fields(GameState)) |field| {
 			if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
 				if (comptime @hasDecl(field.field_type, "update")) {
-					var timer = std.time.Timer.start() catch unreachable; // this just assumes a clock is available
-					@field(game.state, field.name).update(&game);
-					const elapsed = timer.read();
-					std.time.sleep(16 * std.time.ns_per_ms -| elapsed);
+					@field(game.state, field.name).update(&game, fullLoopTime);
 					break;
 				}
 			}
 		}
+		const elapsed = timer.read();
+		std.time.sleep(16666666 -| elapsed);
+		fullLoopTime = @intToFloat(f32, timer.read()) / @intToFloat(f32, std.time.ns_per_s);
+
 		loop.yield();
 	}
 }

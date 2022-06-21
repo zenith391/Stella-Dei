@@ -394,7 +394,7 @@ pub const PlayState = struct {
 
 	// As updated slices (temperature and water elevation) are updated by a
 	// swap. This is atomic.
-	pub fn update(self: *PlayState, game: *Game) void {
+	pub fn update(self: *PlayState, game: *Game, dt: f32) void {
 		const planet = &self.planet;
 
 		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
@@ -465,6 +465,7 @@ pub const PlayState = struct {
 				// of simulation steps. So that if there are more steps, the same
 				// time speed is kept but the precision is increased.
 				planet.simulate(game.loop, .{
+					.dt = dt,
 					.solarConstant = self.solarConstant,
 					.timeScale = self.timeScale / simulationSteps,
 					.gameTime = self.gameTime,
@@ -614,7 +615,7 @@ pub const PlayState = struct {
 				nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 1600000, 1000, 10);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 1000, 5);
+				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 10000, 5);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				var buf: [200]u8 = undefined;
