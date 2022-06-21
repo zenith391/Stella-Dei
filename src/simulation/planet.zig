@@ -853,8 +853,7 @@ pub const Planet = struct {
 		// (see https://en.wikipedia.org/wiki/Viscosity#Air)
 		const airViscosity = 2.791 * std.math.pow(f32, 10, -7) * std.math.pow(f32, 273.15 + 20.0, 0.7355); // Pa.s
 		const airSpeedMult = 1 - airViscosity;
-		const spinRate = 1.0 / options.planetRotationTime * 2 * std.math.pi;
-		// TODO: account for friction
+		const spinRate = 1.0 / options.planetRotationTime * 2 * std.math.pi / 1000;
 		while (i < end) : (i += 1) {
 			const vert = self.vertices[i];
 			const transformedPoint = self.transformedPoints[i];
@@ -870,21 +869,19 @@ pub const Planet = struct {
 				}
 				// note: velocity is assumed to not be above meanDistanceKm
 				velocity = velocity.add(Vec2.new(
-					spinRate * 2.0 * @sin(latitude), 0));
+					spinRate * 2.0 * @sin(latitude) * dt, 0));
 			}
-			//if (velocity.length() > meanDistanceKm) {
-			//	velocity = velocity.norm().scale(meanDistanceKm);
-			//}
 
 			// Apply drag
 			{
 				const massDensity = 1.2; // air density is about 1.2 kg/m³ at sea level (XXX: take actual density from the game?)
 				const velocityN = velocity.length() * 1000; // m/s
 				const dragCoeff = 1.55;
-				const area = meanPointArea / 10 * @maximum(0, self.elevation[i]); // TODO: depend on steepness!!
+				//const area = meanPointArea * (@maximum(0, self.elevation[i] - self.radius)); // TODO: depend on steepness!!
+				const area = meanPointArea / 100.0;
 
-				const dragForce = 1 / 2 * massDensity * velocityN * velocityN * dragCoeff * area * dt; // TODO: depend on Mach number?
-				velocity = velocity.sub(velocity.norm().scale(@maximum(0, dragForce / mass)));
+				const dragForce = 1.0 / 2.0 * massDensity * velocityN * velocityN * dragCoeff * area; // TODO: depend on Mach number?
+				velocity = velocity.sub(velocity.norm().scale(@minimum(velocityN/10000, @maximum(0, dragForce / mass * dt))));
 			}
 
 			var appliedVelocity = Vec3.new(velocity.x() * dt, velocity.y() * dt, 0);
@@ -1128,20 +1125,20 @@ pub const Planet = struct {
 				const waterMass = self.waterMass[i];
 				var newVegetation: f32 = vegetation;
 				// vegetation roots can drown in too much water
-				newVegetation -= 0.00001 * dt * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
+				newVegetation -= 0.0001 * dt * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
 				// but it still needs water to grow
 				const shareCoeff = @as(f32, if (waterMass >= 10) 1.0 else 0.0);
-				newVegetation -= 0.00000002 * dt * (1 - shareCoeff) / 10;
+				newVegetation -= 0.0000002 * dt * (1 - shareCoeff) / 10;
 				// TODO: actually consume the water ?
 
 				const isInappropriateTemperature = self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0;
-				newVegetation -= 0.0000001 * dt * @as(f32, if (isInappropriateTemperature) 1.0 else 0.0);
+				newVegetation -= 0.000001 * dt * @as(f32, if (isInappropriateTemperature) 1.0 else 0.0);
 				self.vegetation[i] = std.math.max(0, newVegetation);
 
 				for (self.getNeighbours(i)) |neighbour| {
 					if (self.waterMass[neighbour] < 0.1) {
 						self.vegetation[neighbour] = std.math.clamp(
-							self.vegetation[neighbour] + vegetation * 0.00000001 * dt * shareCoeff, 0, 1
+							self.vegetation[neighbour] + vegetation * 0.0000001 * dt * shareCoeff, 0, 1
 						);
 					}
 				}
