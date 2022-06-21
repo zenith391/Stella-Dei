@@ -352,6 +352,16 @@ pub const PlayState = struct {
 			gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);
 			program.setUniformInt("noiseCubemap", 0);
 
+			const terrainNormalMap = renderer.textureCache.get("normal-map");
+			gl.activeTexture(gl.TEXTURE1);
+			gl.bindTexture(gl.TEXTURE_2D, terrainNormalMap.texture);
+			program.setUniformInt("terrainNormalMap", 1);
+
+			const waterNormalMap = renderer.textureCache.get("water-normal-map");
+			gl.activeTexture(gl.TEXTURE2);
+			gl.bindTexture(gl.TEXTURE_2D, waterNormalMap.texture);
+			program.setUniformInt("waterNormalMap", 2);
+
 			gl.enable(gl.CULL_FACE);
 			defer gl.disable(gl.CULL_FACE);
 			gl.frontFace(gl.CW);

@@ -97,7 +97,7 @@ pub const Renderer = struct {
 		
 		const img = @ptrCast([*]const u8, nk.nk_font_atlas_bake(&fontAtlas, &imgWidth, &imgHeight, nk.NK_FONT_ATLAS_RGBA32).?);
 		const atlasTex = Texture.createFromData(@intCast(usize, imgWidth), @intCast(usize, imgHeight),
-			img[0..@intCast(usize, imgWidth*imgHeight)]);
+			img[0..@intCast(usize, imgWidth*imgHeight)], .RGBA32);
 		nk.nk_font_atlas_end(&fontAtlas, nk.nk_handle_id(@intCast(c_int, atlasTex.texture)), 0);
 		
 		log.debug("  Initialize Nuklear", .{});
@@ -264,6 +264,11 @@ pub const Renderer = struct {
 pub const Texture = struct {
 	texture: gl.GLuint,
 
+	const PixelFormat = enum(gl.GLenum) {
+		RGBA32 = gl.RGBA,
+		RGB24 = gl.RGB,
+	};
+
 	pub fn loadImage(allocator: Allocator, path: []const u8) !zigimg.Image {
 		const zone = tracy.ZoneN(@src(), "Load texture");
 		defer zone.End();
@@ -287,22 +292,31 @@ pub const Texture = struct {
 	pub fn createFromPath(allocator: Allocator, path: []const u8) !Texture {
 		const image = try loadImage(allocator, path);
 		defer image.deinit();
-		const first = @ptrCast([*]u8, &image.pixels.?.rgba32[0]);
-		const pixels = first[0..image.width*image.height*4];
+		const pixels = &image.pixels.?;
+		var pixelFormat = PixelFormat.RGBA32;
+		const data = blk: {
+			if (pixels.* == .rgba32) {
+				const first = @ptrCast([*]u8, &image.pixels.?.rgba32[0]);
+				break :blk first[0..image.width*image.height*4];
+			} else {
+				const first = @ptrCast([*]u8, &image.pixels.?.rgb24[0]);
+				pixelFormat = .RGB24;
+				break :blk first[0..image.width*image.height*3];
+			}
+		};
 
-		return createFromData(image.width, image.height, pixels);
+		return createFromData(image.width, image.height, data, pixelFormat);
 	}
 
-	/// Assumes RGBA32
-	pub fn createFromData(width: usize, height: usize, data: []const u8) Texture {
+	pub fn createFromData(width: usize, height: usize, data: []const u8, pixelFormat: PixelFormat) Texture {
 		const zone = tracy.ZoneN(@src(), "Upload RGBA texture");
 		defer zone.End();
 
 		var texture: gl.GLuint = undefined;
 		gl.genTextures(1, &texture);
 		gl.bindTexture(gl.TEXTURE_2D, texture);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 
-			@intCast(c_int, width), @intCast(c_int, height), 0, gl.RGBA, gl.UNSIGNED_BYTE, data.ptr);
+		gl.texImage2D(gl.TEXTURE_2D, 0, @intCast(gl.GLint, @enumToInt(pixelFormat)), 
+			@intCast(c_int, width), @intCast(c_int, height), 0, @enumToInt(pixelFormat), gl.UNSIGNED_BYTE, data.ptr);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
 

@@ -248,6 +248,7 @@ inline fn main_wrap() !void {
 		switch (err) {
 			error.APIUnavailable => fatalCrash(allocator, "OpenGL is not available! Install drivers!", .{}),
 			error.VersionUnavailable => {
+				std.log.warn("Switching to OpenGL 3.3 as support for OpenGL 4.0+ is missing", .{});
 				break :blk glfw.Window.create(1280, 720, "Stella Dei", null, null, .{
 					.opengl_profile = .opengl_core_profile,
 					.context_version_major = 4,

@@ -10,8 +10,8 @@ uniform mat4 viewMatrix;
 uniform mat4 modelMatrix;
 uniform int selectedVertex;
 
-out vec3 localPosition;
-out vec3 normal;
+out vec3 worldPosition;
+out vec3 worldNormal;
 out float interpData;
 out float waterElevation;
 out float vegetation;
@@ -20,8 +20,8 @@ out float outSelected;
 void main() {
 	gl_Position = projMatrix * viewMatrix * modelMatrix * vec4(aPos, 1);
 	outSelected = float(selectedVertex == gl_VertexID);
-	normal = aNormal;
-	localPosition = vec3(modelMatrix * vec4(aPos, 1.0));
+	worldNormal = aNormal;
+	worldPosition = vec3(modelMatrix * vec4(aPos, 1.0));
 	interpData = extraData;
 	vegetation = aVegetation;
 	waterElevation = aWaterElevation;

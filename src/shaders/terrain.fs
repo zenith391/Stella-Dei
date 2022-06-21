@@ -8,9 +8,11 @@ uniform int displayMode;
 uniform float planetRadius;
 uniform float kmPerWaterMass;
 uniform samplerCube noiseCubemap;
+uniform sampler2D terrainNormalMap;
+uniform sampler2D waterNormalMap;
 
-in vec3 normal;
-in vec3 localPosition;
+in vec3 worldNormal;
+in vec3 worldPosition;
 in float interpData;
 in float waterElevation;
 in float vegetation;
@@ -20,14 +22,42 @@ out vec4 fragColor;
 
 // Return a single noise value from 0 to 1 computed from data that stays the same frame to frame
 float noiseValue() {
-	return texture(noiseCubemap, localPosition / planetRadius).x;
+	return texture(noiseCubemap, worldPosition / planetRadius).x;
+}
+
+// Whiteout blend from https://bgolus.medium.com/normal-mapping-for-a-triplanar-shader-10bf39dca05a
+vec3 getNormal() {
+	float waterBlend = 1 - exp(-waterElevation * 1.0);
+
+	float scale = 0.003;
+	float strength = 0.5;
+	vec2 uvX = worldPosition.zy * scale;
+	vec2 uvY = worldPosition.xz * scale;
+	vec2 uvZ = worldPosition.xy * scale;
+
+	vec3 normalX = mix(texture(terrainNormalMap, uvX).xyz, texture(waterNormalMap, uvX).xyz, waterBlend);
+	vec3 normalY = mix(texture(terrainNormalMap, uvY).xyz, texture(waterNormalMap, uvY).xyz, waterBlend);
+	vec3 normalZ = mix(texture(terrainNormalMap, uvZ).xyz, texture(waterNormalMap, uvZ).xyz, waterBlend);
+
+	normalX = vec3(normalX.xy + worldNormal.zy, abs(normalX.z) * worldNormal.x);
+	normalY = vec3(normalY.xy + worldNormal.xz, abs(normalY.z) * worldNormal.y);
+	normalZ = vec3(normalZ.xy + worldNormal.xy, abs(normalZ.z) * worldNormal.z);
+
+	vec3 blend = normalize(abs(worldNormal));
+
+	return mix(worldNormal, normalize(
+		normalX.zyx * blend.x + normalY.xzy * blend.y + normalZ.xyz * blend.z
+	), strength);
 }
 
 void main() {
 	if (displayMode == 0) {
 		vec3 ambient = (0.05 + lightIntensity / 10) * lightColor;
+
+		vec3 nNormal = getNormal();
+		// TODO: texture coords
 		
-		vec3 diffuse = max(dot(normal, lightDir) * lightIntensity, 0.0) * lightColor;
+		vec3 diffuse = max(dot(nNormal, lightDir) * lightIntensity, 0.0) * lightColor;
 
 		float specularStrength = 0.2 * lightIntensity;
 		float specularPower = 32;
@@ -36,23 +66,30 @@ void main() {
 
 		float waterTreshold = 0.1 + (noiseValue() * 2 - 1) * 0.025;
 		if (waterElevation >= waterTreshold) {
+			float depthMultiplier = 0.2;
+			float alphaMultiplier = 1.0;
+
 			if (interpData < 273.15) {
 				objectColor = vec3(1.0f, 1.0f, 1.0f);
 			} else {
-				objectColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(waterElevation*0.15, 1)); // ocean blue
+				float opticalDepth = 1 - exp(-waterElevation * depthMultiplier);
+				float alpha = 1 - exp(-waterElevation * alphaMultiplier);
+
+				vec3 waterColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(opticalDepth, 1)); // ocean blue
+				objectColor = mix(objectColor, waterColor, alpha);
 				specularPower = mix(16, 256, min(waterElevation*1, 1));
 				specularStrength = 0.5;
 			}
 		}
 
-		vec3 viewDir = normalize(viewPos - localPosition);
-		vec3 reflectDir = reflect(-lightDir, normal);
+		vec3 viewDir = normalize(viewPos - worldPosition);
+		vec3 reflectDir = reflect(-lightDir, nNormal);
 		float spec = pow(max(dot(viewDir, reflectDir), 0.0), specularPower);
 		vec3 specular = specularStrength * spec * lightColor * lightIntensity;
 
 		vec3 result = (ambient + diffuse + specular) * objectColor;
 		if (outSelected > 0) {
-			result = mix(result, vec3(0.1f, 0.1f, 0.9f), outSelected / 2);
+			result = mix(result, vec3(0.1f, 0.1f, 0.9f), 1 - exp(-outSelected));
 		}
 		fragColor = vec4(result, 1.0f);
 	} else if (displayMode == 1) {
