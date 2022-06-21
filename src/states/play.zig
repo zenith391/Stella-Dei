@@ -475,7 +475,7 @@ pub const PlayState = struct {
 			}
 
 			// TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
-			self.gameTime += 0.016 * self.timeScale;
+			self.gameTime += dt * self.timeScale;
 		}
 
 		if (self.defer_saveGame) {
@@ -651,6 +651,7 @@ pub const PlayState = struct {
 			// The units are given in centimeters, which is the equivalent amount of water that could be produced if all the water vapor in the column were to condense
 			// similar to https://earthobservatory.nasa.gov/global-maps/MYDAL2_M_SKY_WV
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor: {d:.1} cm", .{ planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor: {d:.1} x 10^9 kg", .{ planet.waterVaporMass[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			nk.nk_layout_row_dynamic(ctx, 20, 1);

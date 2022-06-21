@@ -168,6 +168,7 @@ fn render(window: glfw.Window) void {
 fn updateLoop(loop: *EventLoop, window: glfw.Window) void {
 	loop.yield();
 	var fullLoopTime: f32 = 0;
+	var dt: f32 = 0.016;
 	while (!window.shouldClose()) {
 		// Call the update() function of the current game state, if it has one.
 
@@ -175,7 +176,8 @@ fn updateLoop(loop: *EventLoop, window: glfw.Window) void {
 		inline for (std.meta.fields(GameState)) |field| {
 			if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
 				if (comptime @hasDecl(field.field_type, "update")) {
-					@field(game.state, field.name).update(&game, fullLoopTime);
+					dt = dt * 0.9 + fullLoopTime * 0.1; // smoothly go to fullLoopTime
+					@field(game.state, field.name).update(&game, dt);
 					break;
 				}
 			}

@@ -887,22 +887,44 @@ pub const Planet = struct {
 				velocity = velocity.sub(velocity.norm().scale(@maximum(0, dragForce / mass)));
 			}
 
-			const targetPos = transformedPoint.add(Vec3.new(velocity.x() * dt, velocity.y() * dt, 0).cross(Vec3.forward()).cross(transformedPoint));
-			var sharedVapor: f32 = 0;
-			const maxSharedVapor = self.waterVaporMass[i] / 10;
+			var appliedVelocity = Vec3.new(velocity.x() * dt, velocity.y() * dt, 0);
+			if (appliedVelocity.dot(appliedVelocity) > meanDistanceKm * meanDistanceKm) { // length squared > meanDistanceKm²
+				appliedVelocity = appliedVelocity.norm().scale(meanDistanceKm);
+			}
+
+			// Vector corresponding to the right-center point of the tangent plane of the sphere passing through current point
+			const right = transformedPoint.cross(Vec3.back()).norm();
+
+			// Vector corresponding to the center-up point on the tangent plane
+			const up = transformedPoint.cross(right).norm();
+			const targetPos = transformedPoint.add(
+				right.scale(appliedVelocity.x()).add(
+				up.scale(appliedVelocity.y()))
+			);
+
+			var nearestIdx: usize = undefined;
+			var nearestDist: f32 = 10000000;
+			const neighbours = self.getNeighbours(i);
+			nearestIdx = neighbours[0];
 			for (self.getNeighbours(i)) |neighbourIdx| {
 				const neighbourPos = self.transformedPoints[neighbourIdx];
 				const diff = neighbourPos.distance(targetPos);
-				const t = std.math.min(1.0, (meanDistanceKm - diff) / meanDistanceKm);
-				if (t > 0) {
-					const shared = maxSharedVapor * t;
-					self.newWaterVaporMass[neighbourIdx] += shared;
-					sharedVapor += shared;
+				//const t = std.math.min(1.0, (meanDistanceKm - diff) / meanDistanceKm);
+				if (diff < nearestDist) {
+					nearestIdx = neighbourIdx;
+					nearestDist = diff;
 				}
+			}
+			{
+				const shared = std.math.min(1, appliedVelocity.length() / nearestDist);
+				//std.log.info("shared: {d}", .{ shared });
+				const sharedVapor = self.waterVaporMass[i] * shared;
+				self.newWaterVaporMass[nearestIdx] += sharedVapor;
+				// avoid negative values due to imprecision
+				self.newWaterVaporMass[i] = std.math.max(0, self.newWaterVaporMass[i] - sharedVapor);
 			}
 			velocity = velocity.scale(airSpeedMult);
 
-			self.newWaterVaporMass[i] -= sharedVapor;
 			self.airVelocity[i] = velocity;
 		}
 	}
@@ -1098,6 +1120,7 @@ pub const Planet = struct {
 			// TODO: better
 			const zone = tracy.ZoneN(@src(), "Vegetation Simulation");
 			defer zone.End();
+			const dt = options.dt * options.timeScale;
 			
 			var i: usize = 0;
 			while (i < self.vertices.len) : (i += 1) {
@@ -1105,20 +1128,20 @@ pub const Planet = struct {
 				const waterMass = self.waterMass[i];
 				var newVegetation: f32 = vegetation;
 				// vegetation roots can drown in too much water
-				newVegetation -= 0.00001 * options.timeScale * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
+				newVegetation -= 0.00001 * dt * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
 				// but it still needs water to grow
 				const shareCoeff = @as(f32, if (waterMass >= 10) 1.0 else 0.0);
-				newVegetation -= 0.00000002 * options.timeScale * (1 - shareCoeff) / 10;
+				newVegetation -= 0.00000002 * dt * (1 - shareCoeff) / 10;
 				// TODO: actually consume the water ?
 
 				const isInappropriateTemperature = self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0;
-				newVegetation -= 0.0000001 * options.timeScale * @as(f32, if (isInappropriateTemperature) 1.0 else 0.0);
+				newVegetation -= 0.0000001 * dt * @as(f32, if (isInappropriateTemperature) 1.0 else 0.0);
 				self.vegetation[i] = std.math.max(0, newVegetation);
 
 				for (self.getNeighbours(i)) |neighbour| {
 					if (self.waterMass[neighbour] < 0.1) {
 						self.vegetation[neighbour] = std.math.clamp(
-							self.vegetation[neighbour] + vegetation * 0.00000001 * options.timeScale * shareCoeff, 0, 1
+							self.vegetation[neighbour] + vegetation * 0.00000001 * dt * shareCoeff, 0, 1
 						);
 					}
 				}
