@@ -69,7 +69,7 @@ pub const Game = struct {
 			// if the field is active
 			if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
 				if (@hasDecl(field.field_type, "deinit")) {
-					@field(self.state, field.name).deinit();
+					@field(self.state, field.name).deinit(self);
 					return;
 				}
 			}

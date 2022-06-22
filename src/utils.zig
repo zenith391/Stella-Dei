@@ -147,4 +147,9 @@ pub const IcosphereMesh = struct {
 
 		return IcosphereMesh { .vao = vao, .vbo = vbo, .num_points = subdivided.vertices.len / 3, .indices = subdivided.indices, .vertices = subdivided.vertices };
 	}
+
+	pub fn deinit(self: IcosphereMesh, allocator: std.mem.Allocator) void {
+		allocator.free(self.indices);
+		allocator.free(self.vertices);
+	}
 };

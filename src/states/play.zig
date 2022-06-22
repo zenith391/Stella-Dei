@@ -98,6 +98,12 @@ pub const SunMesh = struct {
 		}
 		return sun_mesh.?;
 	}
+
+	pub fn deinit(allocator: std.mem.Allocator) void {
+		if (sun_mesh) |mesh| {
+			mesh.deinit(allocator);
+		}
+	}
 };
 
 const GameTool = enum {
@@ -137,7 +143,7 @@ pub const PlayState = struct {
 	selectedPoint: usize = 0,
 	displayMode: Planet.DisplayMode = .Normal,
 	/// Inclination of rotation, in degrees
-	axialTilt: f32 = 23.4,
+	axialTilt: f32 = 0, //23.4, // TODO: fix axial tilt with wind and solar vector
 	/// The solar constant in W.m-2
 	solarConstant: f32 = 1361,
 	/// The time it takes for the planet to do a full rotation on itself, in seconds
@@ -236,8 +242,8 @@ pub const PlayState = struct {
 
 		{
 			const cameraPoint = self.planet.transformedPoints[self.planet.getNearestPointTo(self.targetCameraPos)];
-			if (self.cameraDistance < cameraPoint.length() + 100) {
-				self.cameraDistance = cameraPoint.length() + 100;
+			if (self.targetCameraDistance < cameraPoint.length() + 100) {
+				self.targetCameraDistance = cameraPoint.length() + 100;
 			}
 		}
 
@@ -451,7 +457,7 @@ pub const PlayState = struct {
 		}
 
 		if (self.debug_deluge) {
-			std.mem.set(f32, self.planet.waterVaporMass, 500_000);
+			std.mem.set(f32, self.planet.waterVaporMass, 5_000_000);
 			self.debug_deluge = false;
 		}
 
@@ -692,7 +698,7 @@ pub const PlayState = struct {
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("no-tool").toNkImage();
+			const waterIcon = renderer.textureCache.get("ui/no-tool").toNkImage();
 			if (nk.nk_button_image(ctx, waterIcon) != 0) {
 				self.selectedTool = .None;
 			}
@@ -703,7 +709,7 @@ pub const PlayState = struct {
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("emit-water").toNkImage();
+			const waterIcon = renderer.textureCache.get("ui/emit-water").toNkImage();
 			if (nk.nk_button_image(ctx, waterIcon) != 0) {
 				self.selectedTool = .EmitWater;
 			}
@@ -714,7 +720,7 @@ pub const PlayState = struct {
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("drain-water").toNkImage();
+			const waterIcon = renderer.textureCache.get("ui/drain-water").toNkImage();
 			if (nk.nk_button_image(ctx, waterIcon) != 0) {
 				self.selectedTool = .DrainWater;
 			}
@@ -725,7 +731,7 @@ pub const PlayState = struct {
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("place-vegetation").toNkImage();
+			const waterIcon = renderer.textureCache.get("ui/place-vegetation").toNkImage();
 			if (nk.nk_button_image(ctx, waterIcon) != 0) {
 				self.selectedTool = .PlaceVegetation;
 			}
@@ -736,7 +742,7 @@ pub const PlayState = struct {
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("place-vegetation").toNkImage();
+			const waterIcon = renderer.textureCache.get("ui/raise-terrain").toNkImage();
 			if (nk.nk_button_image(ctx, waterIcon) != 0) {
 				self.selectedTool = .RaiseTerrain;
 			}
@@ -747,7 +753,7 @@ pub const PlayState = struct {
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("place-vegetation").toNkImage();
+			const waterIcon = renderer.textureCache.get("ui/lower-terrain").toNkImage();
 			if (nk.nk_button_image(ctx, waterIcon) != 0) {
 				self.selectedTool = .LowerTerrain;
 			}
@@ -821,7 +827,8 @@ pub const PlayState = struct {
 		try buffer.flush();
 	}
 
-	pub fn deinit(self: *PlayState) void {
+	pub fn deinit(self: *PlayState, game: *Game) void {
+		SunMesh.deinit(game.allocator);
 		self.planet.deinit();
 	}
 

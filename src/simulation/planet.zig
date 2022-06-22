@@ -853,7 +853,7 @@ pub const Planet = struct {
 		// (see https://en.wikipedia.org/wiki/Viscosity#Air)
 		const airViscosity = 2.791 * std.math.pow(f32, 10, -7) * std.math.pow(f32, 273.15 + 20.0, 0.7355); // Pa.s
 		const airSpeedMult = 1 - airViscosity;
-		const spinRate = 1.0 / options.planetRotationTime * 2 * std.math.pi / 1000;
+		const spinRate = 1.0 / options.planetRotationTime * 2 * std.math.pi / 100;
 		while (i < end) : (i += 1) {
 			const vert = self.vertices[i];
 			const transformedPoint = self.transformedPoints[i];
@@ -875,13 +875,12 @@ pub const Planet = struct {
 			// Apply drag
 			{
 				const massDensity = 1.2; // air density is about 1.2 kg/m³ at sea level (XXX: take actual density from the game?)
-				const velocityN = velocity.length() * 1000; // m/s
+				const velocityN = velocity.length() * 10; // * 10 given the square after, so that the result is in km/s while still being the same as if velocity was expressed in m/s in the computation
 				const dragCoeff = 1.55;
-				//const area = meanPointArea * (@maximum(0, self.elevation[i] - self.radius)); // TODO: depend on steepness!!
-				const area = meanPointArea / 100.0;
+				const area = meanPointArea / 1000 * (@maximum(0.1, (self.elevation[i] - self.radius) / 10)); // TODO: depend on steepness!!
 
 				const dragForce = 1.0 / 2.0 * massDensity * velocityN * velocityN * dragCoeff * area; // TODO: depend on Mach number?
-				velocity = velocity.sub(velocity.norm().scale(@minimum(velocityN/10000, @maximum(0, dragForce / mass * dt))));
+				velocity = velocity.sub(velocity.norm().scale(std.math.clamp(dragForce / mass / 1_000_000_000 * dt, 0, velocityN/20)));
 			}
 
 			var appliedVelocity = Vec3.new(velocity.x() * dt, velocity.y() * dt, 0);
@@ -1159,6 +1158,7 @@ pub const Planet = struct {
 		self.lifeforms.deinit();
 		self.simulationArena.deinit();
 		
+		// Mesh lifetime is managed manually by planet, for efficiency
 		self.allocator.free(self.indices);
 	}
 
