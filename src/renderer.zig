@@ -322,7 +322,6 @@ pub const Texture = struct {
 
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-		// gl.generateMipmap(gl.TEXTURE_2D);
 
 		return Texture { .texture = texture };
 	}
@@ -337,6 +336,13 @@ pub const Texture = struct {
 		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		return Texture { .texture = texture };
+	}
+
+	pub fn generateMipmaps(self: Texture) void {
+		gl.bindTexture(gl.TEXTURE_2D, self.texture);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+		gl.generateMipmap(gl.TEXTURE_2D);
 	}
 
 	pub const CubemapFace = enum(gl.GLenum) {
@@ -386,6 +392,14 @@ pub const TextureCache = struct {
 	}
 
 	pub fn get(self: *TextureCache, name: []const u8) Texture {
+		return getExt(self, name, .{});
+	}
+
+	pub const TextureOptions = struct {
+		mipmaps: bool = false,
+	};
+
+	pub fn getExt(self: *TextureCache, name: []const u8, options: TextureOptions) Texture {
 		if (self.cache.get(name)) |texture| {
 			return texture;
 		} else {
@@ -400,6 +414,9 @@ pub const TextureCache = struct {
 				}
 				@panic("TODO: placeholder texture");
 			};
+			if (options.mipmaps) {
+				texture.generateMipmaps();
+			}
 			self.cache.put(name, texture) catch unreachable;
 
 			return texture;

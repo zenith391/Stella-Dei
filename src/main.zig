@@ -209,13 +209,13 @@ fn mouseButtonCallback(window: glfw.Window, button: glfw.mouse_button.MouseButto
 fn fatalCrash(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) noreturn {
 	const L = std.unicode.utf8ToUtf16LeStringLiteral;
 	if (@import("builtin").target.os.tag == .windows) {
-		const msgUtf8 = std.fmt.allocPrint(allocator, fmt, args) catch return;
+		const msgUtf8 = std.fmt.allocPrint(allocator, fmt, args) catch std.process.exit(1);
 		defer allocator.free(msgUtf8);
 		
-		const msgUtf16 = std.unicode.utf8ToUtf16LeWithNull(allocator, msgUtf8) catch return;
+		const msgUtf16 = std.unicode.utf8ToUtf16LeWithNull(allocator, msgUtf8) catch std.process.exit(1);
 		defer allocator.free(msgUtf16);
 
-		_ = std.os.windows.user32.messageBoxW(null, msgUtf16, L("Fatal Error"), std.os.windows.user32.MB_ICONERROR | std.os.windows.user32.MB_OK) catch return;
+		_ = std.os.windows.user32.messageBoxW(null, msgUtf16, L("Fatal Error"), std.os.windows.user32.MB_ICONERROR | std.os.windows.user32.MB_OK) catch std.process.exit(1);
 	} else {
 		std.log.err(fmt, args);
 	}

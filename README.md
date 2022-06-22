@@ -38,5 +38,5 @@ $ zig build run
 
 To distribute an executable, use:
 ```
-$ zig build -Dtarget=native-windows -Dcpu=x86_64_v3 -Drelease-safe
+$ zig build -Dtarget=native-windows -Dcpu=x86_64_v2 -Drelease-safe
 ```

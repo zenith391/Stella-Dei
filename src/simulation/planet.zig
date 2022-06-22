@@ -1127,7 +1127,7 @@ pub const Planet = struct {
 				newVegetation -= 0.0001 * dt * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
 				// but it still needs water to grow
 				const shareCoeff = @as(f32, if (waterMass >= 10) 1.0 else 0.0);
-				newVegetation -= 0.0000002 * dt * (1 - shareCoeff) / 10;
+				newVegetation -= 0.0000001 * dt / 10;
 				// TODO: actually consume the water ?
 
 				const isInappropriateTemperature = self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0;
