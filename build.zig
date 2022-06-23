@@ -79,14 +79,17 @@ pub fn build(b: *std.build.Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
+    const use_tracy = b.option(bool, "tracy", "Build the game with Tracy support") orelse (mode == .Debug);
+
     const convert = ConvertStep.create(b, "src/main.zig");
 
     const exe = b.addExecutableSource("stella-dei", convert.getSource());
     exe.strip = mode == .ReleaseFast or mode == .ReleaseSmall;
     exe.subsystem = .Windows;
+    exe.emit_asm = .emit;
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    build_tracy.link(b, exe, if ((mode == .Debug or true) and target.isNative()) ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/" else null);
+    build_tracy.link(b, exe, if (use_tracy) ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/" else null);
     deps.addAllTo(exe);
     glfw.link(b, exe, .{});
 

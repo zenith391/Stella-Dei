@@ -29,8 +29,8 @@ float noiseValue() {
 vec3 getNormal() {
 	float waterBlend = 1 - exp(-waterElevation * 1.0);
 
-	float scale = 0.001;
-	float strength = 0.8;
+	float scale = 0.003;
+	float strength = 1.0;
 	vec2 uvX = worldPosition.zy * scale;
 	vec2 uvY = worldPosition.xz * scale;
 	vec2 uvZ = worldPosition.xy * scale;

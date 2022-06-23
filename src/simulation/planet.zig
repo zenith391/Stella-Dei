@@ -300,12 +300,12 @@ pub const Planet = struct {
 			while (i < vert.len) : (i += 3) {
 				var point = Vec3.fromSlice(vert[i..]);
 				point = point.norm();
-				const value = radius + perlin.p3do(point.x() * 3 + 5, point.y() * 3 + 5, point.z() * 3 + 5, 4) * std.math.min(radius / 2, 15);
+				const value = radius + perlin.noise(point.x() * 3 + 5, point.y() * 3 + 5, point.z() * 3 + 5) * std.math.min(radius / 2, 15);
 
 				elevation[i / 3] = value;
 				waterElev[i / 3] = std.math.max(0, seaLevel - value) / kmPerWaterMass;
 				vertices[i / 3] = point;
-				vegetation[i / 3] = perlin.p3do(point.x() + 5, point.y() + 5, point.z() + 5, 4) / 2 + 0.5;
+				vegetation[i / 3] = perlin.fbm(point.x() + 5, point.y() + 5, point.z() + 5, 4) / 2 + 0.5;
 
 				const totalElevation = elevation[i / 3] + waterElev[i / 3];
 				const transformedPoint = point.scale(totalElevation);

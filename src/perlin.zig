@@ -49,16 +49,28 @@ pub fn p3d(in_x: f32, in_y: f32, in_z: f32) f32 {
 
 /// Performs multiple perlin noises (using octaves) on given X, Y and Z coordinates.
 /// Returns a value between -1 and 1.
-pub fn p3do(x: f32, y: f32, z: f32, octaves: u32) f32 {
+pub fn fbm(x: f32, y: f32, z: f32, octaves: u32) f32 {
 	var i: u32 = 0;
     var value: f32 = 0;
+
+	const G = 0.5;
+	var f: f32 = 1.0;
+	var a: f32 = 1.0;
     while (i < octaves) : (i += 1) {
-        const pow = std.math.pow(f32, 2, @intToFloat(f32, i));
-        const res = p3d(x * pow, y * pow, z * pow);
-        value += res / pow;
+        value += a * p3d(x * f, y * f, z * f);
+		f *= 2.0;
+		a *= G;
     }
 
     return value;
+}
+
+pub fn noise(x: f32, y: f32, z: f32) f32 {
+	const qX = fbm(x + 0.0, y + 0.0, z + 0.0, 4) + 1;
+	const qY = fbm(x + 5.2, y + 1.3, z + 2.5, 4) + 1;
+	const qZ = fbm(x + 1.1, y + 5.5, z + 3.2, 4) + 1;
+	const c = 1.05;
+	return fbm(x + c*qX, y + c*qY, z + c*qZ, 4);
 }
 
 fn fade(t: f64) f32 {
