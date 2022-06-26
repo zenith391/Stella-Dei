@@ -152,7 +152,7 @@ pub const PlayState = struct {
 	gameTime: f64 = 0,
 	/// Time scale for the simulation.
 	/// This is the number of in-game seconds that passes for each real second
-	timeScale: f32 = 20000,
+	timeScale: f32 = 6 * @intToFloat(f32, std.time.s_per_hour),
 	/// Whether the game is paused, this has the same effect as setting timeScale to
 	/// 0 except it preserves the time scale value.
 	paused: bool = false,
@@ -621,9 +621,6 @@ pub const PlayState = struct {
 				nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 1600000, 1000, 10);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 10000, 5);
-
-				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				var buf: [200]u8 = undefined;
 				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
 					nk.NK_TEXT_ALIGN_CENTERED);
@@ -682,7 +679,7 @@ pub const PlayState = struct {
 		_ = nk.nk_style_push_style_item(ctx, &ctx.style.window.fixed_background, nk.nk_style_item_color(windowColor));
 		defer _ = nk.nk_style_pop_style_item(ctx);
 
-		if (nk.nk_begin(ctx, "Game Speed", .{ .x = size.x() - 150, .y = 50, .w = 90, .h = 60 }, 
+		if (nk.nk_begin(ctx, "Game Pause", .{ .x = size.x() - 150, .y = 50, .w = 90, .h = 180 }, 
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_dynamic(ctx, 40, 2);
 			if (nk.nk_button_label(ctx, "||") != 0) {
@@ -690,6 +687,24 @@ pub const PlayState = struct {
 			}
 			if (nk.nk_button_symbol(ctx, nk.NK_SYMBOL_TRIANGLE_RIGHT) != 0) {
 				self.paused = false;
+			}
+		}
+		nk.nk_end(ctx);
+
+		if (nk.nk_begin(ctx, "Game Speed", .{ .x = size.x() - 200, .y = 130, .w = 140, .h = 180 }, 
+			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
+			var buf: [200]u8 = undefined;
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{}/s", .{ std.fmt.fmtDuration(@floatToInt(u64, self.timeScale) * std.time.ns_per_s) }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
+
+			nk.nk_layout_row_dynamic(ctx, 40, 2);
+			if (nk.nk_button_label(ctx, "-") != 0) {
+				self.timeScale = std.math.max(1.0, self.timeScale - 21600);
+			}
+			if (nk.nk_button_label(ctx, "+") != 0) {
+				if (self.timeScale < 190000) {
+					self.timeScale = std.math.min(200_000, self.timeScale + 21600);
+				}
 			}
 		}
 		nk.nk_end(ctx);
