@@ -838,10 +838,13 @@ pub const Planet = struct {
 				const RH = Planet.getRelativeHumidity(substanceDivider, T, mass);
 				// rain
 				if (RH > 1 and T < 373.15) {
-					// TODO: form cloud as clouds are formed from super-saturated air
-					const diff = std.math.min(mass, mass * 0.0001 * dt);
-					self.newWaterVaporMass[i] -= diff;
-					self.newWaterMass[i] += diff;
+					// clouds don't go above 10km
+					if (self.newWaterMass[i] * kmPerWaterMass + self.elevation[i] - self.radius < 10) {
+						// TODO: form cloud as clouds are formed from super-saturated air
+						const diff = std.math.min(mass, 0.5 * dt);
+						self.newWaterVaporMass[i] -= diff;
+						self.newWaterMass[i] += diff;
+					}
 				}
 			}
 		}
