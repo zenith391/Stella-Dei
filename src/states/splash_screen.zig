@@ -24,12 +24,12 @@ pub const SplashScreenState = struct {
 		const luminosity = std.math.pow(f32,
 			std.math.clamp((elapsedTime - 2) / 6, 0.0, 1.0),
 			1.0 / gamma);
-		const fadeOut = 1 - std.math.clamp((elapsedTime - 10) / 4, 0.0, 1.0);
+		const fadeOut = 1 - std.math.clamp((elapsedTime - 12) / 1, 0.0, 1.0);
 		gl.clearColor(luminosity * fadeOut, luminosity * fadeOut, luminosity * fadeOut, 1.0);
 		gl.clear(gl.COLOR_BUFFER_BIT);
 		_ = renderer;
 
-		if (elapsedTime > 15) {
+		if (elapsedTime > 14) {
 			game.setState(MainMenuState);
 		}
 	}
@@ -50,8 +50,8 @@ pub const SplashScreenState = struct {
 			nk.nk_layout_row_static(&renderer.nkContext, imageHeight, @floatToInt(c_int, imageWidth), 1);
 
 			const elapsedTime = @intToFloat(f32, std.time.milliTimestamp() - self.start) / 1000;
-			const alpha = std.math.clamp((elapsedTime - 8) / 2, 0.0, 1.0);
-			const fadeOut = 1 - std.math.clamp((elapsedTime - 10) / 4, 0.0, 1.0);
+			const alpha = std.math.clamp((elapsedTime - 8) / 1, 0.0, 1.0);
+			const fadeOut = 1 - std.math.clamp((elapsedTime - 12) / 1, 0.0, 1.0);
 			const imageColor = nk.nk_color { .r = 255, .g = 255, .b = 255, .a = @floatToInt(u8, alpha * fadeOut * 255) };
 			nk.nk_image_color(&renderer.nkContext, logo.toNkImage(), imageColor);
 		}

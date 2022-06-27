@@ -12,7 +12,7 @@ pub const MainMenuState = struct {
 		const soundTrack = @import("../audio.zig").SoundTrack { .items = &.{
 			"assets/music-main-menu.mp3",
 		}};
-		game.audio.playSoundTrack(soundTrack);
+		game.audio.playSoundTrackIn(soundTrack, 3000);
 		return MainMenuState {};
 	}
 
@@ -20,7 +20,7 @@ pub const MainMenuState = struct {
 
 	pub fn renderUI(_: *MainMenuState, game: *Game, renderer: *Renderer) void {
 		const size = renderer.framebufferSize;
-		const windowRect = nk.struct_nk_rect { .x = size.x() - 350, .y = 50, .w = 300, .h = size.y() - 100 };
+		const windowRect = nk.struct_nk_rect { .x = size.x() / 2 - 150, .y = 50, .w = 300, .h = size.y() - 100 };
 
 		const windowColor = nk.nk_color { .r = 0, .g = 0, .b = 0, .a = 0 };
 		renderer.nkContext.style.window.background = windowColor;

@@ -290,9 +290,15 @@ inline fn main_wrap() !void {
 	try loop.start(allocator);
 	game = try Game.init(allocator, window, &renderer, &loop);
 	
-	// Start with main menu
-	// To see the code, look in src/states/main_menu.zig
-	nosuspend game.setState(SplashScreenState);
+	// Start with opening sequence
+	// To see the code, look in src/states/splash_screen.zig
+	if (@import("builtin").mode == .Debug) {
+		// Skip the opening sequence if we're in debug mode
+		// To see the code, look in src/states/main_menu.zig
+		nosuspend game.setState(MainMenuState);
+	} else {
+		nosuspend game.setState(SplashScreenState);
+	}
 	defer game.deinit();
 
 	std.log.debug("Creating update loop job..", .{});

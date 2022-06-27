@@ -34,7 +34,7 @@ pub const AudioSubsystem = struct {
 	/// a music chosen at random in the track.
 	pub fn playSoundTrack(self: *AudioSubsystem, soundTrack: SoundTrack) void {
 		const random = self.musicManager.prng.random();
-		self.playSoundTrackIn(soundTrack, random.intRangeAtMostBiased(i64, 5000, 20000));
+		self.playSoundTrackIn(soundTrack, random.intRangeAtMostBiased(i64, 10000, 15000));
 	}
 
 	pub fn playSoundTrackIn(self: *AudioSubsystem, soundTrack: SoundTrack, time: i64) void {
@@ -44,6 +44,7 @@ pub const AudioSubsystem = struct {
 		const random = self.musicManager.prng.random();
 		self.musicManager.soundTrack.position = random.uintLessThanBiased(usize, soundTrack.items.len);
 		self.musicManager.nextMusicTime = std.time.milliTimestamp() + time;
+		log.debug("Start next music (new sound track) in {d} seconds", .{ @divTrunc(self.musicManager.nextMusicTime - std.time.milliTimestamp(), 1000) });
 	}
 
 	pub fn update(self: *AudioSubsystem) void {
@@ -104,10 +105,13 @@ pub const MusicManager = struct {
 				self.allocator.destroy(sound);
 				self.currentlyPlaying = null;
 
-				// add a silence moment that can last from 15 to 30 seconds
-				const random = self.prng.random();
-				self.nextMusicTime = std.time.milliTimestamp() + random.intRangeAtMostBiased(i64, 15000, 30000);
-				log.debug("Start next music in {d} seconds", .{ @divTrunc(self.nextMusicTime - std.time.milliTimestamp(), 1000) });
+				// if next music time hasn't already been set
+				if (self.nextMusicTime < std.time.milliTimestamp()) {
+					// add a silence moment that can last from 15 to 30 seconds
+					const random = self.prng.random();
+					self.nextMusicTime = std.time.milliTimestamp() + random.intRangeAtMostBiased(i64, 15000, 30000);
+					log.debug("Start next music in {d} seconds", .{ @divTrunc(self.nextMusicTime - std.time.milliTimestamp(), 1000) });
+				}
 			}
 		} else if (std.time.milliTimestamp() >= self.nextMusicTime) { // time for the next music to play
 			if (self.soundTrack.getNextItem()) |nextItem| {
@@ -138,8 +142,10 @@ pub const MusicManager = struct {
 		const subsystem = @fieldParentPtr(AudioSubsystem, "musicManager", self);
 		const engine = subsystem.engine;
 		if (self.currentlyPlaying) |sound| {
-			c.ma_sound_set_fade_in_milliseconds(sound, -1, 0, 5000);
-			c.ma_sound_set_stop_time_in_pcm_frames(sound, c.ma_engine_get_time(engine) + c.ma_engine_get_sample_rate(engine) * 5);
+			if (c.ma_sound_is_playing(sound) != 0) {
+				c.ma_sound_set_fade_in_milliseconds(sound, -1, 0, 5000);
+				c.ma_sound_set_stop_time_in_pcm_frames(sound, c.ma_engine_get_time(engine) + c.ma_engine_get_sample_rate(engine) * 5);
+			}
 		}
 	}
 
