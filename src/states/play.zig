@@ -265,7 +265,7 @@ pub const PlayState = struct {
 
 		const planet = &self.planet;
 
-		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
+		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime * 2*std.math.pi, 2*std.math.pi));
 		var sunTheta: f32 = std.math.pi / 2.0;
 		var solarVector = Vec3.new(
 			@cos(sunPhi) * @sin(sunTheta),
@@ -403,7 +403,7 @@ pub const PlayState = struct {
 	pub fn update(self: *PlayState, game: *Game, dt: f32) void {
 		const planet = &self.planet;
 
-		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime, 2*std.math.pi));
+		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime * 2*std.math.pi, 2*std.math.pi));
 		var sunTheta: f32 = std.math.pi / 2.0;
 		var solarVector = Vec3.new(
 			@cos(sunPhi) * @sin(sunTheta),
