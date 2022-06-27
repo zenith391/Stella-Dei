@@ -621,6 +621,9 @@ pub const PlayState = struct {
 				nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 1600000, 1000, 10);
 
 				nk.nk_layout_row_dynamic(ctx, 50, 1);
+				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 10000, 5);
+
+				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				var buf: [200]u8 = undefined;
 				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
 					nk.NK_TEXT_ALIGN_CENTERED);
@@ -699,11 +702,11 @@ pub const PlayState = struct {
 
 			nk.nk_layout_row_dynamic(ctx, 40, 2);
 			if (nk.nk_button_label(ctx, "-") != 0) {
-				self.timeScale = std.math.max(1.0, self.timeScale - 21600);
+				self.timeScale = std.math.max(1.0, self.timeScale - 3600);
 			}
 			if (nk.nk_button_label(ctx, "+") != 0) {
 				if (self.timeScale < 190000) {
-					self.timeScale = std.math.min(200_000, self.timeScale + 21600);
+					self.timeScale = std.math.min(200_000, self.timeScale + 3600);
 				}
 			}
 		}

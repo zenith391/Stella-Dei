@@ -33,13 +33,17 @@ pub const AudioSubsystem = struct {
 	/// Set the sound track to the one given and wait between 5 and 20 seconds to play
 	/// a music chosen at random in the track.
 	pub fn playSoundTrack(self: *AudioSubsystem, soundTrack: SoundTrack) void {
+		const random = self.musicManager.prng.random();
+		self.playSoundTrackIn(soundTrack, random.intRangeAtMostBiased(i64, 5000, 20000));
+	}
+
+	pub fn playSoundTrackIn(self: *AudioSubsystem, soundTrack: SoundTrack, time: i64) void {
 		self.musicManager.stopCurrentMusic();
 		self.musicManager.soundTrack = soundTrack;
 
 		const random = self.musicManager.prng.random();
 		self.musicManager.soundTrack.position = random.uintLessThanBiased(usize, soundTrack.items.len);
-		self.musicManager.nextMusicTime = std.time.milliTimestamp() + random.intRangeAtMostBiased(i64, 5000, 20000);
-		log.debug("Start music in {d} seconds", .{ @divTrunc(self.musicManager.nextMusicTime - std.time.milliTimestamp(), 1000) });
+		self.musicManager.nextMusicTime = std.time.milliTimestamp() + time;
 	}
 
 	pub fn update(self: *AudioSubsystem) void {

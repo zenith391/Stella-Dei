@@ -13,12 +13,14 @@ const Job = @import("loop.zig").Job;
 var renderer: Renderer = undefined;
 var texture: Texture = undefined;
 
-const MainMenuState = @import("states/main_menu.zig").MainMenuState;
-const PlayState     = @import("states/play.zig").PlayState;
+const SplashScreenState = @import("states/splash_screen.zig").SplashScreenState;
+const MainMenuState     = @import("states/main_menu.zig").MainMenuState;
+const PlayState         = @import("states/play.zig").PlayState;
 
 pub const log_level = .debug;
 
 pub const GameState = union(enum) {
+	SplashScreen: SplashScreenState,
 	MainMenu: MainMenuState,
 	Playing: PlayState,
 };
@@ -257,8 +259,8 @@ inline fn main_wrap() !void {
 				std.log.warn("Switching to OpenGL 3.3 as support for OpenGL 4.0+ is missing", .{});
 				break :blk glfw.Window.create(1280, 720, "Stella Dei", null, null, .{
 					.opengl_profile = .opengl_core_profile,
-					.context_version_major = 4,
-					.context_version_minor = 0,
+					.context_version_major = 3,
+					.context_version_minor = 3,
 				}) catch |err2| switch (err2) {
 					error.VersionUnavailable => fatalCrash(allocator, "OpenGL 3.3 (core profile) is not available! Upgrade your drivers!", .{}),
 					else => unreachable
@@ -290,7 +292,7 @@ inline fn main_wrap() !void {
 	
 	// Start with main menu
 	// To see the code, look in src/states/main_menu.zig
-	nosuspend game.setState(MainMenuState);
+	nosuspend game.setState(SplashScreenState);
 	defer game.deinit();
 
 	std.log.debug("Creating update loop job..", .{});
