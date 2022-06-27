@@ -65,21 +65,24 @@ void main() {
 		vec3 objectColor = terrainColor * (noiseValue() / 20 + 1);
 
 		float waterTreshold = 0.1 + (noiseValue() * 2 - 1) * 0.025;
+		if (interpData < 280.15) {
+			waterTreshold = 0.0002 + (noiseValue() * 2 - 1) * 0.0001;
+		}
 		if (waterElevation >= waterTreshold) {
 			float depthMultiplier = 0.2;
 			float alphaMultiplier = 1.0;
 
-			if (interpData < 273.15) {
-				objectColor = vec3(1.0f, 1.0f, 1.0f);
-			} else {
-				float opticalDepth = 1 - exp(-waterElevation * depthMultiplier);
-				float alpha = 1 - exp(-waterElevation * alphaMultiplier);
+			float opticalDepth = 1 - exp(-waterElevation * depthMultiplier);
+			float alpha = 1 - exp(-waterElevation * alphaMultiplier);
 
-				vec3 waterColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(opticalDepth, 1)); // ocean blue
-				objectColor = mix(objectColor, waterColor, alpha);
+			vec3 waterColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(opticalDepth, 1)); // ocean blue
+			objectColor = mix(objectColor, waterColor, alpha);
+			if (interpData > 273.15) {
 				specularPower = mix(16, 256, min(waterElevation*1, 1));
 				specularStrength = 0.5;
 			}
+			float iceLevel = min(1, exp((-interpData + 272.15) / 3));
+			objectColor = mix(objectColor, vec3(1.0f, 1.0f, 1.0f), iceLevel);
 		}
 
 		vec3 viewDir = normalize(viewPos - worldPosition);

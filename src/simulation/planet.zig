@@ -1067,8 +1067,9 @@ pub const Planet = struct {
 		// Finish by swapping the new temperature
 		std.mem.swap([]f32, &self.temperature, &self.newTemperature);
 
+		const dt = options.dt * options.timeScale;
 		// Disable water simulation when timescale is above 100 000
-		if (options.timeScale < 100000) {
+		if (dt < 15000) {
 			var iteration: usize = 0;
 			var numIterations: usize = 1;
 			while (iteration < numIterations) : (iteration += 1) {
@@ -1119,7 +1120,6 @@ pub const Planet = struct {
 			// TODO: better
 			const zone = tracy.ZoneN(@src(), "Vegetation Simulation");
 			defer zone.End();
-			const dt = options.dt * options.timeScale;
 			
 			var i: usize = 0;
 			while (i < self.vertices.len) : (i += 1) {
