@@ -682,7 +682,7 @@ pub const PlayState = struct {
 		_ = nk.nk_style_push_style_item(ctx, &ctx.style.window.fixed_background, nk.nk_style_item_color(windowColor));
 		defer _ = nk.nk_style_pop_style_item(ctx);
 
-		if (nk.nk_begin(ctx, "Game Pause", .{ .x = size.x() - 150, .y = 50, .w = 90, .h = 180 }, 
+		if (nk.nk_begin(ctx, "Game Pause", .{ .x = size.x() - 150, .y = 50, .w = 90, .h = 60 }, 
 			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
 			nk.nk_layout_row_dynamic(ctx, 40, 2);
 			if (nk.nk_button_label(ctx, "||") != 0) {
