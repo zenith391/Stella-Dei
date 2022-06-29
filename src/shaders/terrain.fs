@@ -50,6 +50,12 @@ vec3 getNormal() {
 	), strength);
 }
 
+vec3 hsv2rgb(vec3 c) {
+	vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+	vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+	return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
 void main() {
 	if (displayMode == 0) {
 		vec3 ambient = (0.05 + lightIntensity / 10) * lightColor;
@@ -77,12 +83,13 @@ void main() {
 
 			vec3 waterColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(opticalDepth, 1)); // ocean blue
 			objectColor = mix(objectColor, waterColor, alpha);
-			if (interpData > 273.15) {
-				specularPower = mix(16, 256, min(waterElevation*1, 1));
-				specularStrength = 0.5;
-			}
+
 			float iceLevel = min(1, exp((-interpData + 272.15) / 3));
 			objectColor = mix(objectColor, vec3(1.0f, 1.0f, 1.0f), iceLevel);
+			if (interpData > 273.15) {
+				specularPower = mix(16, 256, min(waterElevation*1*(1-iceLevel), 1));
+				specularStrength = 0.5;
+			}
 		}
 
 		vec3 viewDir = normalize(viewPos - worldPosition);
@@ -95,23 +102,30 @@ void main() {
 			result = mix(result, vec3(0.1f, 0.1f, 0.9f), 1 - exp(-outSelected));
 		}
 		fragColor = vec4(result, 1.0f);
-	} else if (displayMode == 1) {
+	} else if (displayMode == 1) { // temperature
 		vec3 cold = vec3(0.0f, 0.0f, 1.0f);
 		vec3 hot  = vec3(1.0f, 0.0f, 0.0f);
 		// Default range of 0°K - 546.3°K (around -273.15°C - 273.15°C)
 		vec3 result = mix(cold, hot, (interpData) / 546.3);
 		fragColor = vec4(result, 1.0f);
-	} else if (displayMode == 2) {
+	} else if (displayMode == 2) { // water vapor
 		vec3 cold = vec3(0.0f, 0.0f, 0.0f);
 		vec3 hot  = vec3(1.0f, 1.0f, 0.0f);
 		float waterKm = interpData * kmPerWaterMass;
 		vec3 result = mix(cold, hot, (waterKm) / 0.001);
 		fragColor = vec4(result, 1.0f);
-	} else if (displayMode == 3) {
+	} else if (displayMode == 3) { // wind
 		// From 0 to 200 km/h
 		float right = interpData * 3600.0 / 200.0;
 		float up = waterElevation * 3600.0 / 200.0;
 		vec3 result = vec3(right / 2, sqrt(right * right + up * up), up / 2);
+		fragColor = vec4(result, 1.0f);
+	} else if (displayMode == 4) { // rainfall
+		// for rainfall, colors are in HSV (in order to make a smooth color gradient)
+		vec3 cold = vec3(360.0f / 360.0f, 1.0f, 0.33f);
+		vec3 hot  = vec3(234.0f / 360.0f, 1.0f, 0.5f);
+		float waterKm = interpData * kmPerWaterMass;
+		vec3 result = hsv2rgb(mix(cold, hot, clamp((waterKm) / 0.00001, 0, 1)));
 		fragColor = vec4(result, 1.0f);
 	}
 }

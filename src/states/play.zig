@@ -656,10 +656,15 @@ pub const PlayState = struct {
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Mass: {:.1} kg", .{ planet.waterMass[point] * 1_000_000_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			// The units are given in centimeters, which is the equivalent amount of water that could be produced if all the water vapor in the column were to condense
 			// similar to https://earthobservatory.nasa.gov/global-maps/MYDAL2_M_SKY_WV
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor: {d:.1} cm", .{ planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor: {d:.1} x 10^9 kg", .{ planet.waterVaporMass[point] }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+
+			nk.nk_layout_row_dynamic(ctx, 20, 1);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Rainfall: {d:.3} cm / 24h", .{ planet.rainfall[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point Area: {d}km²", .{ @floor(planet.getMeanPointArea() / 1_000_000) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
@@ -671,7 +676,7 @@ pub const PlayState = struct {
 			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getWaterVaporPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
 			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Direction (km/h): {d:.1}, {d:.1}", .{ planet.airVelocity[point].x() * 3600, planet.airVelocity[point].y() * 3600 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Speed (km/h): {d:.1}", .{ planet.airVelocity[point].length() * 3600 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 		}
 		nk.nk_end(ctx);
 

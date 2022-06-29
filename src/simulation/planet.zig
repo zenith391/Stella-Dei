@@ -127,6 +127,9 @@ pub const Planet = struct {
 	/// The mass of water vapor in the troposphere
 	/// Unit: 10⁹ kg
 	waterVaporMass: []f32,
+	/// Historic rainfall
+	/// Unit: arbitrary
+	rainfall: []f32,
 	/// The air velocity is a 2D velocity on the plane
 	/// of the point that's tangent to the sphere
 	/// Unit: km/s
@@ -167,6 +170,7 @@ pub const Planet = struct {
 		Temperature = 1,
 		WaterVapor = 2,
 		WindMagnitude = 3,
+		Rainfall = 4,
 	};
 
 	fn appendNeighbor(planet: *Planet, idx: u32, neighbor: u32) void {
@@ -232,6 +236,7 @@ pub const Planet = struct {
 		const waterElev      = try simAlloc.alloc(f32,    numPoints);
 		const airVelocity    = try simAlloc.alloc(Vec2,   numPoints);
 		const waterVaporMass = try simAlloc.alloc(f32,    numPoints);
+		const rainfall       = try simAlloc.alloc(f32,    numPoints);
 		const temperature    = try simAlloc.alloc(f32,    numPoints);
 		const vegetation     = try simAlloc.alloc(f32,    numPoints);
 		const newTemp        = try simAlloc.alloc(f32,    numPoints);
@@ -258,6 +263,7 @@ pub const Planet = struct {
 			.elevation = elevation,
 			.waterMass = waterElev,
 			.waterVaporMass = waterVaporMass,
+			.rainfall = rainfall,
 			.airVelocity = airVelocity,
 			.newWaterMass = newWaterElev,
 			.newWaterVaporMass = newVaporMass,
@@ -314,6 +320,7 @@ pub const Planet = struct {
 
 			std.mem.set(f32, temperature, 293.15);
 			std.mem.set(f32, waterVaporMass, 0);
+			std.mem.set(f32, rainfall, 0);
 			std.mem.set(Vec2, airVelocity, Vec2.zero());
 		}
 		zone3.End();
@@ -450,6 +457,7 @@ pub const Planet = struct {
 			bufData[i*STRIDE+6] = switch (displayMode) {
 				.WaterVapor => self.waterVaporMass[i],
 				.WindMagnitude => self.airVelocity[i].x(),
+				.Rainfall => self.rainfall[i],
 				else => self.temperature[i]
 			};
 			bufData[i*STRIDE+7] = if (displayMode == .WindMagnitude) self.airVelocity[i].y() else waterElevation;
@@ -815,7 +823,9 @@ pub const Planet = struct {
 			const mass = self.newWaterVaporMass[i];
 			const T = self.temperature[i]; // TODO: separate air temperature?
 			const pressure = getAirPressure(substanceDivider, T, mass);
+			self.rainfall[i] = std.math.max(0, self.rainfall[i] * (1.0 - dt / 86400.0));
 
+			if (false) {
 			for (self.getNeighbours(i)) |neighbourIdx, location| {
 				const neighbourVapor = self.waterVaporMass[neighbourIdx];
 				const dP = pressure - getAirPressure(substanceDivider, self.temperature[neighbourIdx], neighbourVapor);
@@ -831,6 +841,7 @@ pub const Planet = struct {
 					//self.airVelocity[i].data += tangent.scale(acceleration).data;
 				}
 			}
+			}
 			std.debug.assert(self.newWaterVaporMass[i] >= 0);
 
 			// Rainfall
@@ -844,6 +855,7 @@ pub const Planet = struct {
 						const diff = std.math.min(mass, 0.5 * dt);
 						self.newWaterVaporMass[i] -= diff;
 						self.newWaterMass[i] += diff;
+						self.rainfall[i] += diff / dt;
 					}
 				}
 			}
@@ -851,6 +863,7 @@ pub const Planet = struct {
 
 		// Do some wind simulation
 		i = start;
+		if (true) {
 		
 		// For simplicity, take the viscosity of air at 20°C
 		// (see https://en.wikipedia.org/wiki/Viscosity#Air)
@@ -925,6 +938,7 @@ pub const Planet = struct {
 			velocity = velocity.scale(airSpeedMult);
 
 			self.airVelocity[i] = velocity;
+		}
 		}
 	}
 
