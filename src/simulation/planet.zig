@@ -852,7 +852,7 @@ pub const Planet = struct {
 					// clouds don't go above 10km
 					if (self.newWaterMass[i] * kmPerWaterMass + self.elevation[i] - self.radius < 10) {
 						// TODO: form cloud as clouds are formed from super-saturated air
-						const diff = std.math.min(mass, 0.5 * dt);
+						const diff = std.math.min(mass, 2.5 * dt);
 						self.newWaterVaporMass[i] -= diff;
 						self.newWaterMass[i] += diff;
 						self.rainfall[i] += diff / dt * 86400;
