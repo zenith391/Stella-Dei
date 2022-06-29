@@ -125,7 +125,7 @@ void main() {
 		vec3 cold = vec3(360.0f / 360.0f, 1.0f, 0.33f);
 		vec3 hot  = vec3(234.0f / 360.0f, 1.0f, 0.5f);
 		float waterKm = interpData * kmPerWaterMass;
-		vec3 result = hsv2rgb(mix(cold, hot, clamp((waterKm) / 0.00001, 0, 1)));
+		vec3 result = hsv2rgb(mix(cold, hot, clamp((waterKm) / 0.03, 0, 1)));
 		fragColor = vec4(result, 1.0f);
 	}
 }

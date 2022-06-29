@@ -855,7 +855,7 @@ pub const Planet = struct {
 						const diff = std.math.min(mass, 0.5 * dt);
 						self.newWaterVaporMass[i] -= diff;
 						self.newWaterMass[i] += diff;
-						self.rainfall[i] += diff / dt;
+						self.rainfall[i] += diff / dt * 86400;
 					}
 				}
 			}
