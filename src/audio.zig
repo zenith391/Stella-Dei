@@ -44,7 +44,7 @@ pub const AudioSubsystem = struct {
 		const random = self.musicManager.prng.random();
 		self.musicManager.soundTrack.position = random.uintLessThanBiased(usize, soundTrack.items.len);
 		self.musicManager.nextMusicTime = std.time.milliTimestamp() + time;
-		log.debug("Start next music (new sound track) in {d} seconds", .{ @divTrunc(self.musicManager.nextMusicTime - std.time.milliTimestamp(), 1000) });
+		log.debug("Start next music (new sound track) in {d} seconds: {s}", .{ @divTrunc(self.musicManager.nextMusicTime - std.time.milliTimestamp(), 1000), self.musicManager.soundTrack.getNextItem().? });
 	}
 
 	pub fn update(self: *AudioSubsystem) void {

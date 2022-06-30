@@ -33,7 +33,7 @@ const IndexPair = struct {
 };
 
 pub const IcosphereMesh = struct {
-	vao: gl.GLuint,
+	vao: [8]gl.GLuint,
 	vbo: gl.GLuint,
 	num_points: usize,
 	vertices: []const f32,
@@ -112,20 +112,16 @@ pub const IcosphereMesh = struct {
 		};
 	}
 
-	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize) !IcosphereMesh {
+	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize, octants: bool) !IcosphereMesh {
 		const zone = tracy.ZoneN(@src(), "Generate icosphere");
 		defer zone.End();
 
-		var vao: gl.GLuint = undefined;
-		gl.genVertexArrays(1, &vao);
+		var vao: [8]gl.GLuint = undefined;
+		gl.genVertexArrays(if (octants) 8 else 1, &vao);
 		var vbo: gl.GLuint = undefined;
 		gl.genBuffers(1, &vbo);
-		var ebo: gl.GLuint = undefined;
-		gl.genBuffers(1, &ebo);
-
-		gl.bindVertexArray(vao);
-		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+		var ebo: [8]gl.GLuint = undefined;
+		gl.genBuffers(if (octants) 8 else 1, &ebo);
 
 		var subdivided = IndexedMesh { .vertices = icoVertices, .indices = icoIndices };
 		{
@@ -143,7 +139,52 @@ pub const IcosphereMesh = struct {
 			}
 		}
 
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.indices.len * @sizeOf(f32)), subdivided.indices.ptr, gl.STATIC_DRAW);
+		// The sign (1 or -1) of XYZ for a given octant
+		const octantsSign = [8]Vec3 {
+			Vec3.new( 1,  1,  1), // top right    Z+
+			Vec3.new(-1,  1,  1), // top left     Z+
+			Vec3.new( 1, -1,  1), // bottom right Z+
+			Vec3.new(-1, -1,  1), // bottom left  Z+
+			Vec3.new( 1,  1, -1), // top right    Z-
+			Vec3.new(-1,  1, -1), // top left     Z-
+			Vec3.new( 1, -1, -1), // bottom right Z-
+			Vec3.new(-1, -1, -1), // bottom left  Z-
+		};
+
+		if (octants) {
+			var i: usize = 0;
+			while (i < 8) : (i += 1) {
+				const octant = octantsSign[i];
+				gl.bindVertexArray(vao[i]);
+				gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo[i]);
+
+				// TODO: add triangles not indices!!!
+				var indicesList = std.ArrayList(gl.GLuint).init(allocator);
+				var triangleIdx: c_uint = 0;
+				while (triangleIdx < subdivided.indices.len) : (triangleIdx += 3) {
+					const A = Vec3.fromSlice(subdivided.vertices[subdivided.indices[triangleIdx  ]*3..]);
+					const B = Vec3.fromSlice(subdivided.vertices[subdivided.indices[triangleIdx+1]*3..]);
+					const C = Vec3.fromSlice(subdivided.vertices[subdivided.indices[triangleIdx+2]*3..]);
+					// Barycenter of the triangle
+					const G = A.add(B).add(C).scale(1.0 / 3.0);
+
+					if (@reduce(.And, (G.data >= Vec3.zero().data) == (octant.data >= Vec3.zero().data))) {
+						try indicesList.append(subdivided.indices[triangleIdx  ]);
+						try indicesList.append(subdivided.indices[triangleIdx+1]);
+						try indicesList.append(subdivided.indices[triangleIdx+2]);
+					}
+				}
+				const indices = indicesList.toOwnedSlice();
+
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, indices.len * @sizeOf(c_uint)), indices.ptr, gl.STATIC_DRAW);
+			}
+		} else {
+			gl.bindVertexArray(vao[0]);
+			gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo[0]);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.indices.len * @sizeOf(c_uint)), subdivided.indices.ptr, gl.STATIC_DRAW);
+		}
 
 		return IcosphereMesh { .vao = vao, .vbo = vbo, .num_points = subdivided.vertices.len / 3, .indices = subdivided.indices, .vertices = subdivided.vertices };
 	}

@@ -222,7 +222,7 @@ pub const Planet = struct {
 		const zone = tracy.ZoneN(@src(), "Generate planet");
 		defer zone.End();
 
-		const mesh = try IcosphereMesh.generate(allocator, numSubdivisions);
+		const mesh = try IcosphereMesh.generate(allocator, numSubdivisions, true);
 
 		// ArenaAllocator for all the simulation data points
 		var simulationArena = std.heap.ArenaAllocator.init(allocator);
@@ -328,16 +328,19 @@ pub const Planet = struct {
 		// Pre-compute the neighbours of every point of the ico-sphere.
 		computeNeighbours(&planet);
 
-		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
-		gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
-		gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32))); // temperature (used for a bunch of things)
-		gl.vertexAttribPointer(3, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 7 * @sizeOf(f32))); // water level (used in Normal display mode)
-		gl.vertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 8 * @sizeOf(f32))); // vegetation level (temporary until replaced by actual living vegetation)
-		gl.enableVertexAttribArray(0);
-		gl.enableVertexAttribArray(1);
-		gl.enableVertexAttribArray(2);
-		gl.enableVertexAttribArray(3);
-		gl.enableVertexAttribArray(4);
+		for (mesh.vao) |vao| {
+			gl.bindVertexArray(vao);
+			gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+			gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
+			gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32))); // temperature (used for a bunch of things)
+			gl.vertexAttribPointer(3, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 7 * @sizeOf(f32))); // water level (used in Normal display mode)
+			gl.vertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 8 * @sizeOf(f32))); // vegetation level (temporary until replaced by actual living vegetation)
+			gl.enableVertexAttribArray(0);
+			gl.enableVertexAttribArray(1);
+			gl.enableVertexAttribArray(2);
+			gl.enableVertexAttribArray(3);
+			gl.enableVertexAttribArray(4);
+		}
 
 		const meanPointArea = (4 * std.math.pi * radius * radius) / @intToFloat(f32, numPoints);
 		std.log.info("There are {d} points in the ico-sphere.\n", .{ numPoints });
@@ -464,9 +467,17 @@ pub const Planet = struct {
 			bufData[i*STRIDE+8] = self.vegetation[i];
 		}
 		
-		gl.bindVertexArray(self.mesh.vao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, self.mesh.vbo);
 		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
+	}
+
+	pub fn render(self: *Planet, loop: *EventLoop, displayMode: DisplayMode, axialTilt: f32) void {
+		self.upload(loop, displayMode, axialTilt);
+		for (self.mesh.vao) |vao| {
+			gl.bindVertexArray(vao);
+			// TODO: use actual number of elements per octant
+			gl.drawElements(gl.TRIANGLES, self.numTriangles, gl.UNSIGNED_INT, null);
+		}
 	}
 
 	pub const Direction = enum {

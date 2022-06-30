@@ -88,8 +88,8 @@ pub const SunMesh = struct {
 
 	pub fn getMesh(allocator: std.mem.Allocator) IcosphereMesh {
 		if (sun_mesh == null) {
-			const mesh = IcosphereMesh.generate(allocator, 3) catch unreachable;
-			gl.bindVertexArray(mesh.vao);
+			const mesh = IcosphereMesh.generate(allocator, 3, false) catch unreachable;
+			gl.bindVertexArray(mesh.vao[0]);
 			gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
 			gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
 			gl.enableVertexAttribArray(0);
@@ -274,8 +274,6 @@ pub const PlayState = struct {
 			@cos(sunTheta)
 		);
 
-		planet.upload(game.loop, self.displayMode, self.axialTilt);
-
 		const zFar = planet.radius * 5;
 		const zNear = zFar / 10000;
 
@@ -329,7 +327,7 @@ pub const PlayState = struct {
 				modelMatrix);
 
 			const mesh = SunMesh.getMesh(game.allocator);
-			gl.bindVertexArray(mesh.vao);
+			gl.bindVertexArray(mesh.vao[0]);
 			gl.drawElements(gl.TRIANGLES, @intCast(c_int, mesh.indices.len), gl.UNSIGNED_INT, null);
 		}
 
@@ -374,8 +372,9 @@ pub const PlayState = struct {
 			gl.frontFace(gl.CW);
 			defer gl.frontFace(gl.CCW);
 
-			gl.bindVertexArray(planet.mesh.vao);
-			gl.drawElements(gl.TRIANGLES, planet.numTriangles, gl.UNSIGNED_INT, null);
+			//gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
+			planet.render(game.loop, self.displayMode, self.axialTilt);
+			//gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
 		}
 
 		const entity = renderer.entityProgram;

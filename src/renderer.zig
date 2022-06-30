@@ -74,6 +74,7 @@ pub const Renderer = struct {
 		// TODO: disable depth test in 2D (it causes blending problems)
 		gl.enable(gl.DEPTH_TEST);
 		gl.enable(gl.BLEND);
+		gl.enable(gl.TEXTURE_CUBE_MAP_SEAMLESS);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
 		// Initialise NkAllocator which wraps a Zig allocator as a Nuklear allocator.
