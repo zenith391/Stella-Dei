@@ -169,7 +169,8 @@ pub const PlayState = struct {
 	pub fn init(game: *Game) PlayState {
 		const soundTrack = SoundTrack { .items = &.{
 			"assets/music1.mp3",
-			"assets/music2.mp3"
+			"assets/music2.mp3",
+			"assets/music3.mp3",
 		}};
 		game.audio.playSoundTrack(soundTrack);
 
