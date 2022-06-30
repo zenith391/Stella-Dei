@@ -36,6 +36,7 @@ pub const IcosphereMesh = struct {
 	vao: [8]gl.GLuint,
 	vbo: gl.GLuint,
 	num_points: usize,
+	num_elements: [8]c_int,
 	vertices: []const f32,
 	indices: []const gl.GLuint,
 
@@ -150,6 +151,7 @@ pub const IcosphereMesh = struct {
 			Vec3.new( 1, -1, -1), // bottom right Z-
 			Vec3.new(-1, -1, -1), // bottom left  Z-
 		};
+		var numElements: [8]c_int = undefined;
 
 		if (octants) {
 			var i: usize = 0;
@@ -176,6 +178,7 @@ pub const IcosphereMesh = struct {
 					}
 				}
 				const indices = indicesList.toOwnedSlice();
+				numElements[i] = @intCast(c_int, indices.len);
 
 				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, indices.len * @sizeOf(c_uint)), indices.ptr, gl.STATIC_DRAW);
 			}
@@ -186,7 +189,7 @@ pub const IcosphereMesh = struct {
 			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.indices.len * @sizeOf(c_uint)), subdivided.indices.ptr, gl.STATIC_DRAW);
 		}
 
-		return IcosphereMesh { .vao = vao, .vbo = vbo, .num_points = subdivided.vertices.len / 3, .indices = subdivided.indices, .vertices = subdivided.vertices };
+		return IcosphereMesh { .vao = vao, .vbo = vbo, .num_points = subdivided.vertices.len / 3, .num_elements = numElements, .indices = subdivided.indices, .vertices = subdivided.vertices };
 	}
 
 	pub fn deinit(self: IcosphereMesh, allocator: std.mem.Allocator) void {

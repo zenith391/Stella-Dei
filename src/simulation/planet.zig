@@ -473,10 +473,10 @@ pub const Planet = struct {
 
 	pub fn render(self: *Planet, loop: *EventLoop, displayMode: DisplayMode, axialTilt: f32) void {
 		self.upload(loop, displayMode, axialTilt);
-		for (self.mesh.vao) |vao| {
+		for (self.mesh.vao) |vao, vaoIdx| {
 			gl.bindVertexArray(vao);
 			// TODO: use actual number of elements per octant
-			gl.drawElements(gl.TRIANGLES, self.numTriangles, gl.UNSIGNED_INT, null);
+			gl.drawElements(gl.TRIANGLES, self.mesh.num_elements[vaoIdx], gl.UNSIGNED_INT, null);
 		}
 	}
 
