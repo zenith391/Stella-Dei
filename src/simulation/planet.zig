@@ -852,7 +852,7 @@ pub const Planet = struct {
 					// clouds don't go above 10km
 					if (self.newWaterMass[i] * kmPerWaterMass + self.elevation[i] - self.radius < 10) {
 						// TODO: form cloud as clouds are formed from super-saturated air
-						const diff = std.math.min(mass, 2.5 * dt);
+						const diff = std.math.min(mass, 0.5 * dt * mass / 100000.0);
 						self.newWaterVaporMass[i] -= diff;
 						self.newWaterMass[i] += diff;
 						self.rainfall[i] += diff / dt * 86400;
@@ -869,7 +869,7 @@ pub const Planet = struct {
 		// (see https://en.wikipedia.org/wiki/Viscosity#Air)
 		const airViscosity = 2.791 * std.math.pow(f32, 10, -7) * std.math.pow(f32, 273.15 + 20.0, 0.7355); // Pa.s
 		const airSpeedMult = 1 - airViscosity;
-		const spinRate = 1.0 / options.planetRotationTime * 2 * std.math.pi / 100;
+		const spinRate = 1.0 / options.planetRotationTime * 2 * std.math.pi * self.radius / 500000;
 		while (i < end) : (i += 1) {
 			const vert = self.vertices[i];
 			const transformedPoint = self.transformedPoints[i];
@@ -914,24 +914,22 @@ pub const Planet = struct {
 				up.scale(appliedVelocity.y()))
 			);
 
-			var nearestIdx: usize = undefined;
-			var nearestDist: f32 = 10000000;
+			var neighbourTotalDistance: f32 = 0;
 			const neighbours = self.getNeighbours(i);
-			nearestIdx = neighbours[0];
-			for (self.getNeighbours(i)) |neighbourIdx| {
+			for (neighbours) |neighbourIdx| {
 				const neighbourPos = self.transformedPoints[neighbourIdx];
-				const diff = neighbourPos.distance(targetPos);
-				//const t = std.math.min(1.0, (meanDistanceKm - diff) / meanDistanceKm);
-				if (diff < nearestDist) {
-					nearestIdx = neighbourIdx;
-					nearestDist = diff;
-				}
+				const diff = meanDistanceKm - neighbourPos.distance(targetPos);
+				if (diff > 0) neighbourTotalDistance += diff;
 			}
-			{
-				const shared = std.math.min(1, appliedVelocity.length() / nearestDist);
+
+			for (neighbours) |neighbourIdx| {
+				const neighbourPos = self.transformedPoints[neighbourIdx];
+				const diff = meanDistanceKm - neighbourPos.distance(targetPos);
+
+				const shared = std.math.clamp(diff / neighbourTotalDistance, 0, 1);
 				//std.log.info("shared: {d}", .{ shared });
 				const sharedVapor = self.waterVaporMass[i] * shared;
-				self.newWaterVaporMass[nearestIdx] += sharedVapor;
+				self.newWaterVaporMass[neighbourIdx] += sharedVapor;
 				// avoid negative values due to imprecision
 				self.newWaterVaporMass[i] = std.math.max(0, self.newWaterVaporMass[i] - sharedVapor);
 			}
