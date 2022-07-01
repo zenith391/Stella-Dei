@@ -136,6 +136,31 @@ fn cursorPosCallback(window: glfw.Window, xpos: f64, ypos: f64) void {
 	}
 }
 
+fn keyCallback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
+	_ = window;
+	if (key == .F11 and action == .press) {
+		if (window.getMonitor() == null) {
+			const monitor = glfw.Monitor.getPrimary().?;
+			const videoMode = monitor.getVideoMode() catch return;
+			window.setMonitor(monitor, 0, 0, videoMode.getWidth(), videoMode.getHeight(), null) catch return;
+		} else {
+			window.setMonitor(null, 100, 100, 1280, 720, null) catch unreachable;
+		}
+	}
+
+	inline for (std.meta.fields(GameState)) |field| {
+		// if it is the current game state
+		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
+			// and it has mouseMoved()
+			if (comptime @hasDecl(field.field_type, "keyCallback")) {
+				// call it
+				@field(game.state, field.name).keyCallback(&game, key, scancode, action, mods);
+				return;
+			}
+		}
+	}
+}
+
 fn render(window: glfw.Window) void {
 	game.audio.update();
 
@@ -273,6 +298,7 @@ inline fn main_wrap() !void {
 	window.setCursorPosCallback(cursorPosCallback);
 	window.setMouseButtonCallback(mouseButtonCallback);
 	window.setScrollCallback(mouseScroll);
+	window.setKeyCallback(keyCallback);
 
 	try glfw.makeContextCurrent(window);
 	std.log.debug("Load OpenGL functions", .{});
