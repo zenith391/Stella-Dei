@@ -103,10 +103,10 @@ void main() {
 		}
 		fragColor = vec4(result, 1.0f);
 	} else if (displayMode == 1) { // temperature
-		vec3 cold = vec3(0.0f, 0.0f, 1.0f);
-		vec3 hot  = vec3(1.0f, 0.0f, 0.0f);
-		// Default range of 0°K - 546.3°K (around -273.15°C - 273.15°C)
-		vec3 result = mix(cold, hot, (interpData) / 546.3);
+		vec3 cold = vec3(234.0f / 360.0f, 1.0f, 0.5f);
+		vec3 hot  = vec3(  0.0f / 360.0f, 1.0f, 0.33f);
+		// Default range of -50°C - 50°C
+		vec3 result = hsv2rgb(mix(cold, hot, (interpData - 273.15 + 50) / 100));
 		fragColor = vec4(result, 1.0f);
 	} else if (displayMode == 2) { // water vapor
 		vec3 cold = vec3(0.0f, 0.0f, 0.0f);
@@ -122,7 +122,7 @@ void main() {
 		fragColor = vec4(result, 1.0f);
 	} else if (displayMode == 4) { // rainfall
 		// for rainfall, colors are in HSV (in order to make a smooth color gradient)
-		vec3 cold = vec3(360.0f / 360.0f, 1.0f, 0.33f);
+		vec3 cold = vec3( 25.0f / 360.0f, 1.0f, 0.33f);
 		vec3 hot  = vec3(234.0f / 360.0f, 1.0f, 0.5f);
 		float waterKm = interpData * kmPerWaterMass;
 		vec3 result = hsv2rgb(mix(cold, hot, clamp((waterKm) / 0.03, 0, 1)));
