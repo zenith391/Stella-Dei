@@ -44,7 +44,7 @@ pub const Game = struct {
 
 	pub fn init(allocator: std.mem.Allocator, window: glfw.Window, ptrRenderer: *Renderer, ptrLoop: *EventLoop) !Game {
 		return Game {
-			.state = .{ .MainMenu = .{} },
+			.state = .{ .MainMenu = undefined },
 			.audio = try AudioSubsystem.init(allocator),
 			.window = window,
 			.renderer = ptrRenderer,

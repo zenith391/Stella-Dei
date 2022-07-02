@@ -20,7 +20,7 @@ out float outSelected;
 void main() {
 	gl_Position = projMatrix * viewMatrix * modelMatrix * vec4(aPos, 1);
 	outSelected = float(selectedVertex == gl_VertexID);
-	worldNormal = aNormal;
+	worldNormal = (modelMatrix * vec4(aNormal, 0.0)).xyz;
 	worldPosition = vec3(modelMatrix * vec4(aPos, 1.0));
 	interpData = extraData;
 	vegetation = aVegetation;
