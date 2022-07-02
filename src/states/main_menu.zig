@@ -64,7 +64,7 @@ pub const MainMenuState = struct {
 				Mat4.lookAt(cameraPos, target, Vec3.new(0, 0, 1)));
 			
 			const rot = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 1000.0
-				/ 0.05, 360));
+				/ 0.5, 360));
 			const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(0, 0, rot), Vec3.new(1, 1, 1));
 			program.setUniformMat4("modelMatrix",
 				modelMatrix);
@@ -130,6 +130,11 @@ pub const MainMenuState = struct {
 
 	fn switchToPlay(game: *Game) void {
 		game.setState(PlayState);
+	}
+
+	pub fn deinit(self: *MainMenuState, game: *Game) void {
+		_ = game;
+		self.planet.deinit();
 	}
 
 };

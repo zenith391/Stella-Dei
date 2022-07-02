@@ -27,6 +27,8 @@ pub const GameState = union(enum) {
 
 pub const Game = struct {
 	state: GameState,
+	/// False if the state doesn't contain a valid value
+	state_init: bool = false,
 	audio: AudioSubsystem,
 	window: glfw.Window,
 	renderer: *Renderer,
@@ -55,11 +57,12 @@ pub const Game = struct {
 
 	pub fn setState(self: *Game, comptime NewState: type) void {
 		var state = NewState.init(self);
-		self.deinitState();
+		if (self.state_init) self.deinitState();
 
 		inline for (std.meta.fields(GameState)) |field| {
 			if (field.field_type == NewState) {
 				self.state = @unionInit(GameState, field.name, state);
+				self.state_init = true;
 				return;
 			}
 		}
