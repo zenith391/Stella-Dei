@@ -106,7 +106,7 @@ void main() {
 		vec3 cold = vec3(234.0f / 360.0f, 1.0f, 0.5f);
 		vec3 hot  = vec3(  0.0f / 360.0f, 1.0f, 0.33f);
 		// Default range of -50°C - 50°C
-		vec3 result = hsv2rgb(mix(cold, hot, (interpData - 273.15 + 50) / 100));
+		vec3 result = hsv2rgb(mix(cold, hot, clamp((interpData - 273.15 + 50) / 100, 0, 1)));
 		fragColor = vec4(result, 1.0f);
 	} else if (displayMode == 2) { // water vapor
 		vec3 cold = vec3(0.0f, 0.0f, 0.0f);

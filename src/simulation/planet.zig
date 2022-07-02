@@ -127,6 +127,12 @@ pub const Planet = struct {
 	/// The mass of water vapor in the troposphere
 	/// Unit: 10⁹ kg
 	waterVaporMass: []f32,
+	/// The average O2 mass per point of the planet
+	/// Unit: 10⁹ kg
+	averageOxygenMass: f32 = 0,
+	/// The average CO2 mass per point of the planet
+	/// Unit: 10⁹ kg
+	averageCarbonDioxideMass: f32 = 0,
 	/// Historic rainfall
 	/// Unit: arbitrary
 	rainfall: []f32,
@@ -322,6 +328,12 @@ pub const Planet = struct {
 			std.mem.set(f32, waterVaporMass, 0);
 			std.mem.set(f32, rainfall, 0);
 			std.mem.set(Vec2, airVelocity, Vec2.zero());
+
+			const OXYGEN_PERCENT = 20.946 / 100.0;
+			const CARBON_DIOXIDE_PERCENT = 0.6 / 100.0; // prebiotic percent
+			const ATMOSPHERE_MASS = 5.15 * std.math.pow(f64, 10, 18 - 9);
+			planet.averageOxygenMass = @floatCast(f32, OXYGEN_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
+			planet.averageCarbonDioxideMass = @floatCast(f32, CARBON_DIOXIDE_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
 		}
 		zone3.End();
 
@@ -840,6 +852,13 @@ pub const Planet = struct {
 			for (self.getNeighbours(i)) |neighbourIdx, location| {
 				const neighbourVapor = self.waterVaporMass[neighbourIdx];
 				const dP = pressure - getAirPressure(substanceDivider, self.temperature[neighbourIdx], neighbourVapor);
+				
+				// // Vector corresponding to the right-center point of the tangent plane of the sphere passing through current point
+				// const right = transformedPoint.cross(Vec3.back()).norm();
+
+				// // Vector corresponding to the center-up point on the tangent plane
+				// const up = transformedPoint.cross(right).norm();
+
 				const tangent = tangentVectors[location];
 
 				// wind is from high pressure to low pressure
@@ -849,7 +868,7 @@ pub const Planet = struct {
 					// F = ma, so a = F/m
 					const acceleration = @floatCast(f32, pgf / (mass * 1_000_000_000) / 1000 * dt); // km/s
 					_ = acceleration; _ = tangent;
-					//self.airVelocity[i].data += tangent.scale(acceleration).data;
+					self.airVelocity[i].data += tangent.scale(acceleration).data;
 				}
 			}
 			}
@@ -884,11 +903,10 @@ pub const Planet = struct {
 		while (i < end) : (i += 1) {
 			const vert = self.vertices[i];
 			const transformedPoint = self.transformedPoints[i];
-			const mass = self.getAirMass(i);
 			var velocity = self.airVelocity[i];
 
 			// Coriolis force
-			{
+			if (true) {
 				// TODO: implement branchless?
 				var latitude = std.math.acos(vert.z());
 				if (latitude > std.math.pi / 2.0) {
@@ -901,13 +919,13 @@ pub const Planet = struct {
 
 			// Apply drag
 			{
-				const massDensity = 1.2; // air density is about 1.2 kg/m³ at sea level (XXX: take actual density from the game?)
 				const velocityN = velocity.length() * 10; // * 10 given the square after, so that the result is in km/s while still being the same as if velocity was expressed in m/s in the computation
 				const dragCoeff = 1.55;
 				const area = meanPointArea / 1000 * (@maximum(0.1, (self.elevation[i] - self.radius) / 10)); // TODO: depend on steepness!!
 
-				const dragForce = 1.0 / 2.0 * massDensity * velocityN * velocityN * dragCoeff * area; // TODO: depend on Mach number?
-				velocity = velocity.sub(velocity.norm().scale(std.math.clamp(dragForce / mass / 1_000_000_000 * dt, 0, velocityN/20)));
+				// It's supposed to be * kg/m³ but as we divide by kg later, it's faster to directly divide by m³
+				const dragForce = 1.0 / 2.0 * velocityN * velocityN * dragCoeff * area / meanPointArea; // * massDensity // TODO: depend on Mach number?
+				velocity = velocity.sub(velocity.norm().scale(std.math.clamp(dragForce * dt, 0, velocityN/20)));
 			}
 
 			var appliedVelocity = Vec3.new(velocity.x() * dt, velocity.y() * dt, 0);
@@ -963,7 +981,7 @@ pub const Planet = struct {
 
 	pub inline fn getAirMass(self: Planet, idx: usize) f32 {
 		// + 1 is because there will never be 0 kg of air (and if it's the case it breaks a bunch of computations)
-		return self.waterVaporMass[idx] + 1; // + TODO other gases
+		return self.waterVaporMass[idx] + self.averageOxygenMass + self.averageCarbonDioxideMass + 1; // + TODO other gases
 	}
 
 	pub inline fn getAirPressure(substanceDivider: f64, temperature: f32, vaporMass: f64) f64 {
