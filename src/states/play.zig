@@ -209,7 +209,7 @@ pub const PlayState = struct {
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u64);
-		const planet = Planet.generate(game.allocator, 6, planetRadius, seed) catch unreachable;
+		const planet = Planet.generate(game.allocator, 7, planetRadius, seed) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
@@ -655,7 +655,7 @@ pub const PlayState = struct {
 			nk.nk_end(ctx);
 		}
 
-		const infoHeight: f32 = if (self.debug_showMoreInfo) 270 else 175;
+		const infoHeight: f32 = if (self.debug_showMoreInfo) 290 else 175;
 		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - infoHeight - 30, .w = 300, .h = infoHeight },
 			0) != 0) {
 			var buf: [200]u8 = undefined;
@@ -698,7 +698,10 @@ pub const PlayState = struct {
 				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor: {d:.1} cm", .{ planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
 				nk.nk_layout_row_dynamic(ctx, 20, 1);
-				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getWaterVaporPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+
+				nk.nk_layout_row_dynamic(ctx, 20, 1);
+				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Pressure: {d:.2} bar", .{ planet.getAirPressureOfPoint(point) / 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			}
 		}
 		nk.nk_end(ctx);

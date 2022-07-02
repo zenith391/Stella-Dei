@@ -127,6 +127,9 @@ pub const Planet = struct {
 	/// The mass of water vapor in the troposphere
 	/// Unit: 10⁹ kg
 	waterVaporMass: []f32,
+	/// The average N2 mass per point of the planet
+	/// Unit: 10⁹ kg
+	averageNitrogenMass: f32 = 0,
 	/// The average O2 mass per point of the planet
 	/// Unit: 10⁹ kg
 	averageOxygenMass: f32 = 0,
@@ -329,9 +332,11 @@ pub const Planet = struct {
 			std.mem.set(f32, rainfall, 0);
 			std.mem.set(Vec2, airVelocity, Vec2.zero());
 
+			const NITROGEN_PERCENT = 78.084 / 100.0;
 			const OXYGEN_PERCENT = 20.946 / 100.0;
-			const CARBON_DIOXIDE_PERCENT = 0.6 / 100.0; // prebiotic percent
+			const CARBON_DIOXIDE_PERCENT = 0.6 / 100.0; // estimated value from Earth prebiotic era
 			const ATMOSPHERE_MASS = 5.15 * std.math.pow(f64, 10, 18 - 9);
+			planet.averageNitrogenMass = @floatCast(f32, NITROGEN_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
 			planet.averageOxygenMass = @floatCast(f32, OXYGEN_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
 			planet.averageCarbonDioxideMass = @floatCast(f32, CARBON_DIOXIDE_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
 		}
@@ -845,13 +850,13 @@ pub const Planet = struct {
 		while (i < end) : (i += 1) {
 			const mass = self.newWaterVaporMass[i];
 			const T = self.temperature[i]; // TODO: separate air temperature?
-			const pressure = getAirPressure(substanceDivider, T, mass);
+			const pressure = self.getAirPressure(substanceDivider, T, mass);
 			self.rainfall[i] = std.math.max(0, self.rainfall[i] * (1.0 - dt / 86400.0));
 
 			if (false) {
 			for (self.getNeighbours(i)) |neighbourIdx, location| {
 				const neighbourVapor = self.waterVaporMass[neighbourIdx];
-				const dP = pressure - getAirPressure(substanceDivider, self.temperature[neighbourIdx], neighbourVapor);
+				const dP = pressure - self.getAirPressure(substanceDivider, self.temperature[neighbourIdx], neighbourVapor);
 				
 				// // Vector corresponding to the right-center point of the tangent plane of the sphere passing through current point
 				// const right = transformedPoint.cross(Vec3.back()).norm();
@@ -973,19 +978,25 @@ pub const Planet = struct {
 	/// the amount of substance can get very high.
 	/// Note: instead of using the gas constant, the Boltzmann constant is directly used
 	/// as substanceDivider also accounts for the Avogadro constant (NA)
-	pub inline fn getWaterVaporPartialPressure(substanceDivider: f64, temperature: f32, mass: f64) f64 {
+	pub inline fn getPartialPressure(substanceDivider: f64, temperature: f32, mass: f64) f64 {
 		const k = 1.380649 * comptime std.math.pow(f64, 10, -23); // Boltzmann constant
 		const waterPartialPressure = (mass * k * temperature) / substanceDivider; // Pa
 		return waterPartialPressure;
 	}
 
+	/// Returns the mass of all the air above the given point's area, in 10⁹ kg
 	pub inline fn getAirMass(self: Planet, idx: usize) f32 {
 		// + 1 is because there will never be 0 kg of air (and if it's the case it breaks a bunch of computations)
-		return self.waterVaporMass[idx] + self.averageOxygenMass + self.averageCarbonDioxideMass + 1; // + TODO other gases
+		return self.waterVaporMass[idx] + self.averageNitrogenMass + self.averageOxygenMass + self.averageCarbonDioxideMass + 1; // + TODO other gases
 	}
 
-	pub inline fn getAirPressure(substanceDivider: f64, temperature: f32, vaporMass: f64) f64 {
-		return getWaterVaporPartialPressure(substanceDivider, temperature, vaporMass);
+	pub inline fn getAirPressure(self: Planet, substanceDivider: f64, temperature: f32, vaporMass: f64) f64 {
+		return getPartialPressure(substanceDivider, temperature, vaporMass + self.averageNitrogenMass + self.averageOxygenMass + self.averageCarbonDioxideMass + 1);
+	}
+
+	/// Returns the pressure that air excerts on a given point, in Pascal.
+	pub fn getAirPressureOfPoint(self: Planet, idx: usize) f64 {
+		return self.getAirPressure(self.getSubstanceDivider(), self.temperature[idx], self.waterVaporMass[idx]);
 	}
 
 	/// Uses Tetens equation
@@ -1032,9 +1043,10 @@ pub const Planet = struct {
 	}
 
 	pub inline fn getRelativeHumidity(substanceDivider: f64, temperature: f32, mass: f64) f64 {
-		return getWaterVaporPartialPressure(substanceDivider, temperature, mass) / getEquilibriumVaporPressure(temperature);
+		return getPartialPressure(substanceDivider, temperature, mass) / getEquilibriumVaporPressure(temperature);
 	}
 
+	/// Returns the constant used for computations with the perfect gas law
 	pub fn getSubstanceDivider(self: Planet) f64 {
 		// The mean atmosphere volume per point is approximately equal
 		// to mean point area multiplied by the height of the troposphere (~12km)
