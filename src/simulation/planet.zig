@@ -894,9 +894,9 @@ pub const Planet = struct {
 			{
 				const RH = Planet.getRelativeHumidity(substanceDivider, T, mass);
 				// rain
-				if (RH > 1 and T < 373.15) {
-					// clouds don't go above 10km
-					if (self.newWaterMass[i] * kmPerWaterMass + self.elevation[i] - self.radius < 10) {
+				if (RH > 0.95 and T < 373.15) {
+					// clouds don't go above 15km
+					if (self.newWaterMass[i] * kmPerWaterMass + self.elevation[i] - self.radius < 15) {
 						// TODO: form cloud as clouds are formed from super-saturated air
 						const diff = std.math.min(mass, 0.5 * dt * mass / 100000.0);
 						self.newWaterVaporMass[i] -= diff;
@@ -959,19 +959,12 @@ pub const Planet = struct {
 				up.scale(appliedVelocity.y()))
 			);
 
-			var neighbourTotalDistance: f32 = 0;
 			const neighbours = self.getNeighbours(i);
 			for (neighbours) |neighbourIdx| {
 				const neighbourPos = self.transformedPoints[neighbourIdx];
-				const diff = meanDistanceKm - neighbourPos.distance(targetPos);
-				if (diff > 0) neighbourTotalDistance += diff;
-			}
+				const diff = meanDistanceKm - std.math.min(meanDistanceKm, neighbourPos.distance(targetPos));
 
-			for (neighbours) |neighbourIdx| {
-				const neighbourPos = self.transformedPoints[neighbourIdx];
-				const diff = meanDistanceKm - neighbourPos.distance(targetPos);
-
-				const shared = std.math.clamp(diff / neighbourTotalDistance, 0, 1);
+				const shared = std.math.clamp(diff / (6 * meanDistanceKm), 0, 1);
 				//std.log.info("shared: {d}", .{ shared });
 				const sharedVapor = self.waterVaporMass[i] * shared;
 				self.newWaterVaporMass[neighbourIdx] += sharedVapor;
