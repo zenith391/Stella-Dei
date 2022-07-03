@@ -1178,6 +1178,7 @@ pub const Planet = struct {
 				var newVegetation: f32 = vegetation;
 				// vegetation roots can drown in too much water
 				newVegetation -= 0.0001 * dt * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
+				newVegetation -= 0.0001 * dt * @as(f32, if (self.elevation[i]-self.radius >= 7) 1.0 else 0.0);
 				// but it still needs water to grow
 				const shareCoeff = @as(f32, if (waterMass >= 10) 1.0 else 0.0);
 				newVegetation -= 0.0000001 * dt / 10;

@@ -17,6 +17,8 @@ in float interpData;
 in float waterElevation;
 in float vegetation;
 in float outSelected;
+in vec3 tangentViewPos;
+in vec3 tangentFragPos;
 
 out vec4 fragColor;
 
@@ -25,15 +27,26 @@ float noiseValue() {
 	return texture(noiseCubemap, worldPosition / planetRadius).x;
 }
 
+float getDepth(vec2 coords) {
+	return texture(terrainNormalMap, coords).x;
+}
+
+vec2 parallaxMapping(vec2 texCoords, vec3 viewDir) {
+	float heightScale = 100.0;
+	float height = 1 - getDepth(texCoords);
+	vec2 p = viewDir.xy / viewDir.z * (height * heightScale);
+	return texCoords - p;
+}
+
 // Whiteout blend from https://bgolus.medium.com/normal-mapping-for-a-triplanar-shader-10bf39dca05a
-vec3 getNormal() {
+vec3 getNormal(vec3 viewDir) {
 	float waterBlend = 1 - exp(-waterElevation * 1.0);
 
 	float scale = 0.003;
-	float strength = 0.5;
-	vec2 uvX = worldPosition.zy * scale;
-	vec2 uvY = worldPosition.xz * scale;
-	vec2 uvZ = worldPosition.xy * scale;
+	float strength = 1.0;
+	vec2 uvX = parallaxMapping(worldPosition.zy * scale, viewDir);
+	vec2 uvY = parallaxMapping(worldPosition.xz * scale, viewDir);
+	vec2 uvZ = parallaxMapping(worldPosition.xy * scale, viewDir);
 
 	vec3 normalX = mix(texture(terrainNormalMap, uvX).xyz, texture(waterNormalMap, uvX).xyz, waterBlend);
 	vec3 normalY = mix(texture(terrainNormalMap, uvY).xyz, texture(waterNormalMap, uvY).xyz, waterBlend);
@@ -60,7 +73,8 @@ void main() {
 	if (displayMode == 0) {
 		vec3 ambient = (0.05 + lightIntensity / 10) * lightColor;
 
-		vec3 nNormal = getNormal();
+		vec3 nViewDir = normalize(tangentViewPos - tangentFragPos);
+		vec3 nNormal = getNormal(nViewDir);
 		// TODO: texture coords
 		
 		vec3 diffuse = max(dot(nNormal, lightDir) * lightIntensity, 0.0) * lightColor;
@@ -103,7 +117,8 @@ void main() {
 		}
 		
 		float gamma = 1.0; // 2.2
-		fragColor = vec4(pow(result / (result + vec3(1.0)), vec3(1.0 / gamma)), 1.0f);
+		fragColor = vec4(pow(vec3(1.0) - exp(-result * 1.0), vec3(1.0 / gamma)), 1.0f);
+		//fragColor = vec4(pow(result / (result + vec3(1.0)), vec3(1.0 / gamma)), 1.0f);
 	} else if (displayMode == 1) { // temperature
 		vec3 cold = vec3(234.0f / 360.0f, 1.0f, 0.5f);
 		vec3 hot  = vec3(  0.0f / 360.0f, 1.0f, 0.33f);
