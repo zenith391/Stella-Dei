@@ -427,6 +427,9 @@ pub const Planet = struct {
 	}
 
 	pub fn mulByVec3(self: za.Mat4, v: Vec3) Vec3 {
+		@setFloatMode(.Optimized);
+		@setRuntimeSafety(false);
+
 		const x = (self.data[0][0] * v.x()) + (self.data[1][0] * v.y()) + (self.data[2][0] * v.z());
 		const y = (self.data[0][1] * v.x()) + (self.data[1][1] * v.y()) + (self.data[2][1] * v.z());
 		const z = (self.data[0][2] * v.x()) + (self.data[1][2] * v.y()) + (self.data[2][2] * v.z());
@@ -436,6 +439,8 @@ pub const Planet = struct {
 	/// Upload all changes to the GPU
 	pub fn upload(self: *Planet, loop: *EventLoop, displayMode: DisplayMode, axialTilt: f32) void {
 		@setFloatMode(.Optimized);
+		@setRuntimeSafety(false);
+
 		const zone = tracy.ZoneN(@src(), "Planet GPU Upload");
 		defer zone.End();
 		
@@ -469,20 +474,25 @@ pub const Planet = struct {
 			const normal = self.normals[i];
 			self.transformedPoints[i] = transformedPoint;
 
-			bufData[i*STRIDE+0] = transformedPoint.x();
-			bufData[i*STRIDE+1] = transformedPoint.y();
-			bufData[i*STRIDE+2] = transformedPoint.z();
-			bufData[i*STRIDE+3] = normal.x();
-			bufData[i*STRIDE+4] = normal.y();
-			bufData[i*STRIDE+5] = normal.z();
-			bufData[i*STRIDE+6] = switch (displayMode) {
+			const bytePos = i * STRIDE;
+			const bufSlice = bufData[bytePos+0..bytePos+10];
+			bufData[bytePos+0] = transformedPoint.x();
+			bufData[bytePos+1] = transformedPoint.y();
+			bufData[bytePos+2] = transformedPoint.z();
+			bufData[bytePos+3] = normal.x();
+			bufData[bytePos+4] = normal.y();
+			bufData[bytePos+5] = normal.z();
+			_ = bufSlice;
+			// bufSlice[0..3].* = transformedPoint.data;
+			// bufSlice[3..6].* = normal.data;
+			bufData[bytePos+6] = switch (displayMode) {
 				.WaterVapor => self.waterVaporMass[i],
 				.WindMagnitude => self.airVelocity[i].x(),
 				.Rainfall => self.rainfall[i],
 				else => self.temperature[i]
 			};
-			bufData[i*STRIDE+7] = if (displayMode == .WindMagnitude) self.airVelocity[i].y() else waterElevation;
-			bufData[i*STRIDE+8] = self.vegetation[i];
+			bufData[bytePos+7] = if (displayMode == .WindMagnitude) self.airVelocity[i].y() else waterElevation;
+			bufData[bytePos+8] = self.vegetation[i];
 		}
 		
 		gl.bindBuffer(gl.ARRAY_BUFFER, self.mesh.vbo);
