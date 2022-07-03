@@ -476,15 +476,8 @@ pub const Planet = struct {
 
 			const bytePos = i * STRIDE;
 			const bufSlice = bufData[bytePos+0..bytePos+10];
-			bufData[bytePos+0] = transformedPoint.x();
-			bufData[bytePos+1] = transformedPoint.y();
-			bufData[bytePos+2] = transformedPoint.z();
-			bufData[bytePos+3] = normal.x();
-			bufData[bytePos+4] = normal.y();
-			bufData[bytePos+5] = normal.z();
-			_ = bufSlice;
-			// bufSlice[0..3].* = transformedPoint.data;
-			// bufSlice[3..6].* = normal.data;
+			bufSlice[0..3].* = transformedPoint.data;
+			bufSlice[3..6].* = normal.data;
 			bufData[bytePos+6] = switch (displayMode) {
 				.WaterVapor => self.waterVaporMass[i],
 				.WindMagnitude => self.airVelocity[i].x(),

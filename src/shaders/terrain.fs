@@ -30,7 +30,7 @@ vec3 getNormal() {
 	float waterBlend = 1 - exp(-waterElevation * 1.0);
 
 	float scale = 0.003;
-	float strength = 1.0;
+	float strength = 0.5;
 	vec2 uvX = worldPosition.zy * scale;
 	vec2 uvY = worldPosition.xz * scale;
 	vec2 uvZ = worldPosition.xy * scale;
@@ -101,7 +101,9 @@ void main() {
 		if (outSelected > 0) {
 			result = mix(result, vec3(0.1f, 0.1f, 0.9f), 1 - exp(-outSelected));
 		}
-		fragColor = vec4(result, 1.0f);
+		
+		float gamma = 1.0; // 2.2
+		fragColor = vec4(pow(result / (result + vec3(1.0)), vec3(1.0 / gamma)), 1.0f);
 	} else if (displayMode == 1) { // temperature
 		vec3 cold = vec3(234.0f / 360.0f, 1.0f, 0.5f);
 		vec3 hot  = vec3(  0.0f / 360.0f, 1.0f, 0.33f);
