@@ -322,12 +322,13 @@ pub const Planet = struct {
 				vertices[i / 3] = point;
 				vegetation[i / 3] = perlin.fbm(point.x() + 5, point.y() + 5, point.z() + 5, 4) / 2 + 0.5;
 
+				temperature[i / 3] = (1 - @fabs(point.z())) * 55 + 273.15 - 25.0;
+
 				const totalElevation = elevation[i / 3] + waterElev[i / 3];
 				const transformedPoint = point.scale(totalElevation);
 				planet.transformedPoints[i / 3] = transformedPoint;
 			}
 
-			std.mem.set(f32, temperature, 293.15);
 			std.mem.set(f32, waterVaporMass, 0);
 			std.mem.set(f32, rainfall, 0);
 			std.mem.set(Vec2, airVelocity, Vec2.zero());

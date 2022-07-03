@@ -211,6 +211,10 @@ pub const PlayState = struct {
 		const seed = randomPrng.random().int(u64);
 		const planet = Planet.generate(game.allocator, 6, planetRadius, seed) catch unreachable;
 
+		// Temperature difference breaks the start of the game for some reason
+		// TODO: fix the bug
+		std.mem.set(f32, planet.temperature, 293.15);
+
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
 			.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos)),
