@@ -161,7 +161,7 @@ pub const Planet = struct {
 	newTemperature: []f32,
 	newWaterMass: []f32,
 	newWaterVaporMass: []f32,
-	lifeforms: std.ArrayList(Lifeform),
+	lifeforms: std.ArrayListUnmanaged(Lifeform),
 	/// Lock used to avoid concurrent reads and writes to lifeforms arraylist
 	lifeformsLock: std.Thread.Mutex = .{},
 
@@ -253,7 +253,7 @@ pub const Planet = struct {
 		const newVaporMass   = try simAlloc.alloc(f32,    numPoints);
 		const heatCapacCache = try simAlloc.alloc(f32,    numPoints);
 
-		const lifeforms = std.ArrayList(Lifeform).init(simAlloc);
+		const lifeforms = try std.ArrayListUnmanaged(Lifeform).initCapacity(simAlloc, 0);
 		const bufData = try simAlloc.alloc(f32, vertices.len * 9);
 		const normals = try simAlloc.alloc(Vec3, vertices.len);
 		const transformedPoints = try simAlloc.alloc(Vec3, vertices.len);
@@ -1199,6 +1199,13 @@ pub const Planet = struct {
 		}
 	}
 
+	pub fn addLifeform(self: *Planet, lifeform: Lifeform) !void {
+		self.lifeformsLock.lock();
+		defer self.lifeformsLock.unlock();
+
+		try self.lifeforms.append(self.simulationArena.allocator(), lifeform);
+	}
+
 	pub fn deinit(self: Planet) void {
 		// wait for pending jobs
 		if (self.normalComputeJob) |job| {
@@ -1209,7 +1216,6 @@ pub const Planet = struct {
 		}
 
 		// de-allocate
-		self.lifeforms.deinit();
 		self.simulationArena.deinit();
 		
 		// Mesh lifetime is managed manually by planet, for efficiency

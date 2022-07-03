@@ -162,6 +162,7 @@ pub const PlayState = struct {
 	debug_showMoreInfo: bool = false,
 	debug_clearWater: bool = false,
 	debug_deluge: bool = false,
+	debug_spawnRabbits: bool = false,
 	/// Save the game on the next call to update()
 	defer_saveGame: bool = false,
 
@@ -214,6 +215,8 @@ pub const PlayState = struct {
 		// Temperature difference breaks the start of the game for some reason
 		// TODO: fix the bug
 		std.mem.set(f32, planet.temperature, 293.15);
+
+		Lifeform.initMeshes(game.allocator) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
 		return PlayState {
@@ -467,6 +470,19 @@ pub const PlayState = struct {
 			self.debug_deluge = false;
 		}
 
+		if (self.debug_spawnRabbits) {
+			var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+			const random = prng.random();
+
+			var i: usize = 0;
+			while (i < 100) : (i += 1) {
+				const point = planet.transformedPoints[random.intRangeLessThanBiased(usize, 0, planet.temperature.len)];
+				const lifeform = Lifeform.init(point, .Rabbit, self.gameTime);
+				planet.addLifeform(lifeform) catch unreachable;
+			}
+			self.debug_spawnRabbits = false;
+		}
+
 		if (!self.paused) {
 			// TODO: variable simulation step
 
@@ -521,16 +537,10 @@ pub const PlayState = struct {
 			const planet = &self.planet;
 			const point = self.selectedPoint;
 			const pointPos = planet.transformedPoints[point];
-			if (Lifeform.init(game.allocator, pointPos, .Rabbit, self.gameTime)) |lifeform| {
-				planet.lifeformsLock.lock();
-				defer planet.lifeformsLock.unlock();
-				planet.lifeforms.append(lifeform) catch unreachable;
-			} else |err| {
-				std.log.err("Could not load Rabbit: {s}", .{ @errorName(err) });
-				if (@errorReturnTrace()) |trace| {
-					std.debug.dumpStackTrace(trace.*);
-				}
-			}
+			const lifeform = Lifeform.init(pointPos, .Rabbit, self.gameTime);
+			planet.lifeformsLock.lock();
+			defer planet.lifeformsLock.unlock();
+			planet.addLifeform(lifeform) catch unreachable;
 		}
 
 		if (button == .right) {
@@ -652,6 +662,11 @@ pub const PlayState = struct {
 				if (nk.nk_button_label(ctx, "Deluge") != 0) {
 					self.debug_deluge = true;
 				}
+				if (nk.nk_button_label(ctx, "Spawn 100 rabbits") != 0) {
+					self.debug_spawnRabbits = true;
+				}
+
+				nk.nk_layout_row_dynamic(ctx, 50, 1);
 				if (nk.nk_button_label(ctx, "Save game") != 0) {
 					self.defer_saveGame = true;
 				}

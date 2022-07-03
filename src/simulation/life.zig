@@ -55,16 +55,13 @@ pub const Lifeform = struct {
 		}
 	};
 
-	pub fn init(allocator: Allocator, position: Vec3, kind: Kind, gameTime: f64) !Lifeform {
-		// init the mesh
-		switch (kind) {
-			.Rabbit => {
-				if (rabbitMesh == null) {
-					const mesh = try ObjLoader.readObjFromFile(allocator, "assets/rabbit/rabbit.obj");
-					rabbitMesh = mesh;
-				}
-			}
+	pub fn initMeshes(allocator: Allocator) !void {
+		if (rabbitMesh == null) {
+			rabbitMesh = try ObjLoader.readObjFromFile(allocator, "assets/rabbit/rabbit.obj");
 		}
+	}
+
+	pub fn init(position: Vec3, kind: Kind, gameTime: f64) Lifeform {
 		return Lifeform {
 			.position = position,
 			.kind = kind,
@@ -212,10 +209,8 @@ pub const Lifeform = struct {
 					self.state = .wander;
 					self.sexualCriteria = 25;
 					
-					// doesn't need allocator (and thus can't throw error) as the resource for
-					// the current kind is already loaded
-					const lifeform = Lifeform.init(undefined, point, self.kind, options.gameTime) catch unreachable;
-					planet.lifeforms.append(lifeform) catch {
+					const lifeform = Lifeform.init(point, self.kind, options.gameTime);
+					planet.addLifeform(lifeform) catch {
 						// TODO?
 					};
 					// Must return as the array list may have expanded, in which case
