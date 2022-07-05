@@ -96,6 +96,7 @@ pub const CLContext = if (!USE_OPENCL) struct {} else struct {
 
 pub const Planet = struct {
 	mesh: IcosphereMesh,
+	atmosphereMesh: IcosphereMesh,
 
 	numTriangles: gl.GLint,
 	numSubdivisions: usize,
@@ -231,6 +232,14 @@ pub const Planet = struct {
 		const zone = tracy.ZoneN(@src(), "Generate planet");
 		defer zone.End();
 
+		const atmosphereMesh = try IcosphereMesh.generate(allocator, numSubdivisions, false);
+		gl.bindVertexArray(atmosphereMesh.vao[0]);
+		gl.bindBuffer(gl.ARRAY_BUFFER, atmosphereMesh.vbo);
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+		gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // temperature (used for a bunch of things)
+		gl.enableVertexAttribArray(0);
+		gl.enableVertexAttribArray(1);
+
 		const mesh = try IcosphereMesh.generate(allocator, numSubdivisions, true);
 
 		// ArenaAllocator for all the simulation data points
@@ -260,6 +269,7 @@ pub const Planet = struct {
 
 		var planet = Planet {
 			.mesh = mesh,
+			.atmosphereMesh = atmosphereMesh,
 			.numTriangles = @intCast(gl.GLint, mesh.indices.len),
 			.numSubdivisions = numSubdivisions,
 			.seed = seed,
@@ -458,38 +468,55 @@ pub const Planet = struct {
 			job.call(computeAllNormals, .{ self, loop }) catch unreachable;
 		}
 
-		const rotationMatrix = za.Mat4.fromRotation(axialTilt, Vec3.right());
-		const kmPerWaterMass = self.getKmPerWaterMass();
-		//std.log.info("water: {d} m / kg", .{ kmPerWaterMass * 1000 });
+		{
+			const rotationMatrix = za.Mat4.fromRotation(axialTilt, Vec3.right());
+			const kmPerWaterMass = self.getKmPerWaterMass();
+			//std.log.info("water: {d} m / kg", .{ kmPerWaterMass * 1000 });
 
-		// This could be speeded up by using LOD? (allowing to transfer less data)
-		// NOTE: this has really bad cache locality
-		const STRIDE = 9;
-		for (self.vertices) |point, i| {
-			const waterElevation = self.waterMass[i] * kmPerWaterMass;
-			const totalElevation = self.elevation[i] + waterElevation;
-			const exaggeratedElev = (totalElevation - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius;
-			const scaledPoint = point.scale(exaggeratedElev);
-			const transformedPoint = mulByVec3(rotationMatrix, scaledPoint);
-			const normal = self.normals[i];
-			self.transformedPoints[i] = transformedPoint;
+			// This could be speeded up by using LOD? (allowing to transfer less data)
+			// NOTE: this has really bad cache locality
+			const STRIDE = 9;
+			for (self.vertices) |point, i| {
+				const waterElevation = self.waterMass[i] * kmPerWaterMass;
+				const totalElevation = self.elevation[i] + waterElevation;
+				const exaggeratedElev = (totalElevation - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius;
+				const scaledPoint = point.scale(exaggeratedElev);
+				const transformedPoint = mulByVec3(rotationMatrix, scaledPoint);
+				const normal = self.normals[i];
+				self.transformedPoints[i] = transformedPoint;
 
-			const bytePos = i * STRIDE;
-			const bufSlice = bufData[bytePos+0..bytePos+10];
-			bufSlice[0..3].* = transformedPoint.data;
-			bufSlice[3..6].* = normal.data;
-			bufData[bytePos+6] = switch (displayMode) {
-				.WaterVapor => self.waterVaporMass[i],
-				.WindMagnitude => self.airVelocity[i].x(),
-				.Rainfall => self.rainfall[i],
-				else => self.temperature[i]
-			};
-			bufData[bytePos+7] = if (displayMode == .WindMagnitude) self.airVelocity[i].y() else waterElevation;
-			bufData[bytePos+8] = self.vegetation[i];
+				const bytePos = i * STRIDE;
+				const bufSlice = bufData[bytePos+0..bytePos+10];
+				bufSlice[0..3].* = transformedPoint.data;
+				bufSlice[3..6].* = normal.data;
+				bufData[bytePos+6] = switch (displayMode) {
+					.WaterVapor => self.waterVaporMass[i],
+					.WindMagnitude => self.airVelocity[i].x(),
+					.Rainfall => self.rainfall[i],
+					else => self.temperature[i]
+				};
+				bufData[bytePos+7] = if (displayMode == .WindMagnitude) self.airVelocity[i].y() else waterElevation;
+				bufData[bytePos+8] = self.vegetation[i];
+			}
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, self.mesh.vbo);
+			gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
 		}
-		
-		gl.bindBuffer(gl.ARRAY_BUFFER, self.mesh.vbo);
-		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
+
+		{
+			const STRIDE = 4;
+			for (self.vertices) |point, i| {
+				const transformedPoint = point.scale(self.radius + 15 * HEIGHT_EXAGGERATION_FACTOR);
+
+				const bytePos = i * STRIDE;
+				const bufSlice = bufData[bytePos+0..bytePos+4];
+				bufSlice[0..3].* = transformedPoint.data;
+				bufSlice[   3]   = self.rainfall[i];
+			}
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, self.atmosphereMesh.vbo);
+			gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, STRIDE * self.atmosphereMesh.num_points * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
+		}
 	}
 
 	pub fn render(self: *Planet, loop: *EventLoop, displayMode: DisplayMode, axialTilt: f32) void {
@@ -499,6 +526,11 @@ pub const Planet = struct {
 			// TODO: use actual number of elements per octant
 			gl.drawElements(gl.TRIANGLES, self.mesh.num_elements[vaoIdx], gl.UNSIGNED_INT, null);
 		}
+	}
+
+	pub fn renderAtmosphere(self: *Planet) void {
+		gl.bindVertexArray(self.atmosphereMesh.vao[0]);
+		gl.drawElements(gl.TRIANGLES, @intCast(c_int, self.atmosphereMesh.indices.len), gl.UNSIGNED_INT, null);
 	}
 
 	pub const Direction = enum {

@@ -88,11 +88,11 @@ pub const Lifeform = struct {
 		self.reproductionCooldown = std.math.max(0, self.reproductionCooldown - dt);
 		self.satiety = std.math.max(0, self.satiety - dt * 0.001);
 
-		// TODO: access point.temperature[pointIdx] and planet.waterMass[pointIdx] only one time!
+		const pointTemperature = planet.temperature[pointIdx];
 
 		const age = options.gameTime - self.timeBorn;
-		const isInDeepWater = planet.waterMass[pointIdx] > 1 and planet.temperature[pointIdx] > 273.15;
-		const isFrying = planet.temperature[pointIdx] > 273.15 + 60.0;
+		const isInDeepWater = planet.waterMass[pointIdx] > 1 and pointTemperature > 273.15;
+		const isFrying = pointTemperature > 273.15 + 60.0;
 		const isStarving = self.satiety < 10;
 		const isTooOld = age > 10 * 86400;
 		var shouldDie: bool = isInDeepWater or isFrying or isStarving or isTooOld;
@@ -117,10 +117,10 @@ pub const Lifeform = struct {
 						// TODO: search for food
 						std.log.info("OH NO! THERE'S NO FOOD", .{});
 					}
-				} else if (planet.temperature[pointIdx] > 273.15 + 30.0) { // Above 30°C
+				} else if (pointTemperature > 273.15 + 30.0) { // Above 30°C
 					// Try to go to a colder point
 					var coldestPointIdx: usize = pointIdx;
-					var coldestTemperature: f32 = planet.temperature[pointIdx];
+					var coldestTemperature: f32 = pointTemperature;
 					for (planet.getNeighbours(pointIdx)) |neighbourIdx| {
 						const isInWater = planet.waterMass[neighbourIdx] > 0.1 and planet.temperature[neighbourIdx] > 273.15;
 						if (planet.temperature[neighbourIdx] + random.float(f32)*1 < coldestTemperature and !isInWater) {
@@ -129,10 +129,10 @@ pub const Lifeform = struct {
 						}
 					}
 					self.state = State.goToPoint(planet, coldestPointIdx);
-				} else if (planet.temperature[pointIdx] < 273.15 + 5.0) { // Below 5°C
+				} else if (pointTemperature < 273.15 + 5.0) { // Below 5°C
 					// Try to go to an hotter point
 					var hottestPointIdx: usize = pointIdx;
-					var hottestTemperature: f32 = planet.temperature[pointIdx];
+					var hottestTemperature: f32 = pointTemperature;
 					for (planet.getNeighbours(pointIdx)) |neighbourIdx| {
 						const isInWater = planet.waterMass[neighbourIdx] > 0.1 and planet.temperature[neighbourIdx] > 273.15;
 						if (planet.temperature[neighbourIdx] - random.float(f32)*1 > hottestTemperature and !isInWater) {

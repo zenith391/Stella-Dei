@@ -21,6 +21,7 @@ pub const Renderer = struct {
 	entityProgram: ShaderProgram,
 	skyboxProgram: ShaderProgram,
 	sunProgram: ShaderProgram,
+	cloudsProgram: ShaderProgram,
 	
 	/// Shader program used for Nuklear UI
 	nuklearProgram: ShaderProgram,
@@ -51,6 +52,7 @@ pub const Renderer = struct {
 		const skyboxProgram = try ShaderProgram.createFromName("skybox");
 		const sunProgram = try ShaderProgram.createFromName("sun");
 		const nuklearProgram = try ShaderProgram.createFromName("nuklear");
+		const cloudsProgram = try ShaderProgram.createFromName("clouds");
 
 		log.debug("  Generate Nuklear - OpenGL integration", .{});
 		// Generate the VAO, VBO and EBO that will be used for drawing Nuklear UI.
@@ -124,6 +126,7 @@ pub const Renderer = struct {
 			.entityProgram = entityProgram,
 			.skyboxProgram = skyboxProgram,
 			.sunProgram = sunProgram,
+			.cloudsProgram = cloudsProgram,
 			.nuklearProgram = nuklearProgram,
 			.nuklearVao = nkVao,
 			.nuklearVbo = nkVbo,

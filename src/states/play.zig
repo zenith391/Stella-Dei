@@ -386,6 +386,40 @@ pub const PlayState = struct {
 			//gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
 		}
 
+		// Then the clouds
+		{
+			const program = renderer.cloudsProgram;
+			program.use();
+			program.setUniformMat4("projMatrix",
+				Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
+			program.setUniformMat4("viewMatrix",
+				Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
+
+			const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(0, 0, 0), Vec3.new(1, 1, 1));
+			program.setUniformMat4("modelMatrix",
+				modelMatrix);
+
+			program.setUniformVec3("lightColor", Vec3.new(1.0, 1.0, 1.0));
+			program.setUniformVec3("lightDir", solarVector);
+			program.setUniformFloat("lightIntensity", self.solarConstant / 1500);
+			program.setUniformVec3("viewPos", self.cameraPos);
+			program.setUniformFloat("planetRadius", planet.radius);
+			program.setUniformFloat("kmPerWaterMass", planet.getKmPerWaterMass());
+
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);
+			program.setUniformInt("noiseCubemap", 0);
+
+			gl.enable(gl.CULL_FACE);
+			defer gl.disable(gl.CULL_FACE);
+			gl.frontFace(gl.CW);
+			defer gl.frontFace(gl.CCW);
+
+			//gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
+			planet.renderAtmosphere();
+			//gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
+		}
+
 		const entity = renderer.entityProgram;
 		entity.use();
 		entity.setUniformMat4("projMatrix",
@@ -475,7 +509,7 @@ pub const PlayState = struct {
 			const random = prng.random();
 
 			var i: usize = 0;
-			while (i < 100) : (i += 1) {
+			while (i < 10) : (i += 1) {
 				const point = planet.transformedPoints[random.intRangeLessThanBiased(usize, 0, planet.temperature.len)];
 				const lifeform = Lifeform.init(point, .Rabbit, self.gameTime);
 				planet.addLifeform(lifeform) catch unreachable;
@@ -662,7 +696,7 @@ pub const PlayState = struct {
 				if (nk.nk_button_label(ctx, "Deluge") != 0) {
 					self.debug_deluge = true;
 				}
-				if (nk.nk_button_label(ctx, "Spawn 100 rabbits") != 0) {
+				if (nk.nk_button_label(ctx, "Spawn 10 rabbits") != 0) {
 					self.debug_spawnRabbits = true;
 				}
 
