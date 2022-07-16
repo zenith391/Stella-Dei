@@ -6,7 +6,7 @@ Stella Dei is a sandbox game about creating planet and influencing it with your 
 
 > Careful. At some point you’re just playing god.
 
-In summary, it's a space game. In a space bar. Using a space bar (unfortunately we are at regret of telling you that it doesn't actually use a space bar)
+It's also carefully inspired by SimEarth.
 
 ---
 
