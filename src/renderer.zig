@@ -283,27 +283,22 @@ pub const Texture = struct {
 
 		// Manually only allow loading PNG files for faster compilation and lower executable size
 		//var image = try zigimg.Image.fromFile(allocator, &file);
-		var image = zigimg.Image.init(allocator);
 		var streamSource = std.io.StreamSource{ .file = file };
-		const imageInfo = try zigimg.png.PNG.formatInterface().readForImage(allocator, streamSource.reader(),
-			streamSource.seekableStream(), &image.pixels);
-		image.width = imageInfo.width;
-		image.height = imageInfo.height;
-
+		const image = try zigimg.png.PNG.formatInterface().readImage(allocator, &streamSource);
 		return image;
 	}
 
 	pub fn createFromPath(allocator: Allocator, path: []const u8) !Texture {
-		const image = try loadImage(allocator, path);
+		var image = try loadImage(allocator, path);
 		defer image.deinit();
-		const pixels = &image.pixels.?;
+		const pixels = &image.pixels;
 		var pixelFormat = PixelFormat.RGBA32;
 		const data = blk: {
 			if (pixels.* == .rgba32) {
-				const first = @ptrCast([*]u8, &image.pixels.?.rgba32[0]);
+				const first = @ptrCast([*]u8, &pixels.rgba32[0]);
 				break :blk first[0..image.width*image.height*4];
 			} else {
-				const first = @ptrCast([*]u8, &image.pixels.?.rgb24[0]);
+				const first = @ptrCast([*]u8, &pixels.rgb24[0]);
 				pixelFormat = .RGB24;
 				break :blk first[0..image.width*image.height*3];
 			}
@@ -368,9 +363,9 @@ pub const Texture = struct {
 
 	/// Assumes RGB24
 	pub fn loadCubemapFace(self: Texture, allocator: Allocator, face: CubemapFace, path: []const u8) !void {
-		const image = try loadImage(allocator, path);
+		var image = try loadImage(allocator, path);
 		defer image.deinit();
-		const first = @ptrCast([*]u8, &image.pixels.?.rgb24[0]);
+		const first = @ptrCast([*]u8, &image.pixels.rgb24[0]);
 		const pixels = first[0..image.width*image.height*3];
 
 		self.setCubemapFace(face, image.width, image.height, pixels);

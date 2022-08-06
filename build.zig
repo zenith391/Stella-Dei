@@ -30,7 +30,7 @@ const ConvertStep = struct {
     pub fn make(step: *std.build.Step) !void {
         const self = @fieldParentPtr(ConvertStep, "step", step);
 
-        var sourceDir = try std.fs.cwd().openDir(std.fs.path.dirname(self.root).?, .{ .iterate = true });
+        var sourceDir = try std.fs.cwd().openIterableDir(std.fs.path.dirname(self.root).?, .{});
         defer sourceDir.close();
 
         var cacheRoot = try std.fs.cwd().openDir(self.builder.cache_root, .{});
@@ -42,7 +42,7 @@ const ConvertStep = struct {
         var walker = try sourceDir.walk(self.builder.allocator);
         while (try walker.next()) |entry| {
             if (entry.kind == .File) {
-                var source = try sourceDir.openFile(entry.path, .{});
+                var source = try sourceDir.dir.openFile(entry.path, .{});
                 defer source.close();
 
                 const text = try source.readToEndAlloc(self.builder.allocator, std.math.maxInt(usize));
@@ -85,7 +85,7 @@ pub fn build(b: *std.build.Builder) void {
 
     const exe = b.addExecutableSource("stella-dei", convert.getSource());
     exe.strip = mode == .ReleaseFast or mode == .ReleaseSmall;
-    exe.subsystem = .Windows;
+    if (mode != .Debug) exe.subsystem = .Windows;
     exe.setTarget(target);
     exe.setBuildMode(mode);
     build_tracy.link(b, exe, if (use_tracy) ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/" else null);
