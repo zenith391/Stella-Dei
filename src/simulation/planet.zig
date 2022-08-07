@@ -620,6 +620,8 @@ pub const Planet = struct {
 		@setRuntimeSafety(false);
 
 		loop.yield();
+		tracy.FiberEnter("Simulate temperature");
+		defer tracy.FiberLeave();
 		const zone = tracy.ZoneN(@src(), "Temperature Simulation");
 		defer zone.End();
 		const newTemp = self.newTemperature;

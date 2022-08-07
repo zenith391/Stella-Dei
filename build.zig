@@ -68,6 +68,35 @@ const ConvertStep = struct {
     }
 };
 
+pub fn linkTracy(b: *std.build.Builder, step: *std.build.LibExeObjStep, opt_path: ?[]const u8) void {
+    const step_options = b.addOptions();
+    step.addOptions("build_options", step_options);
+    step_options.addOption(bool, "tracy_enabled", opt_path != null);
+
+    if (opt_path) |path| {
+        step.addIncludePath(path);
+        const tracy_client_source_path = std.fs.path.join(step.builder.allocator, &.{ path, "TracyClient.cpp" }) catch unreachable;
+        step.addCSourceFile(tracy_client_source_path, &[_][]const u8{
+            "-DTRACY_ENABLE",
+            "-DTRACY_FIBERS",
+            // MinGW doesn't have all the newfangled windows features,
+            // so we need to pretend to have an older windows version.
+            "-D_WIN32_WINNT=0x601",
+            "-fno-sanitize=undefined",
+        });
+
+        step.linkLibC();
+        step.linkSystemLibrary("c++");
+
+        if (step.target.isWindows()) {
+            step.linkSystemLibrary("Advapi32");
+            step.linkSystemLibrary("User32");
+            step.linkSystemLibrary("Ws2_32");
+            step.linkSystemLibrary("DbgHelp");
+        }
+    }
+}
+
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -88,7 +117,7 @@ pub fn build(b: *std.build.Builder) void {
     if (mode != .Debug) exe.subsystem = .Windows;
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    build_tracy.link(b, exe, if (use_tracy) "deps/tracy-0.8.2/" else null);
+    linkTracy(b, exe, if (use_tracy) "deps/tracy-0.8.2/" else null);
     deps.addAllTo(exe);
     glfw.link(b, exe, .{});
 

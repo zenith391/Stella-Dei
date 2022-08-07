@@ -363,7 +363,8 @@ inline fn main_wrap() !void {
 
 		const frameTime = fpsTimer.lap();
 		const fps = 1.0 / (@intToFloat(f32, frameTime) / std.time.ns_per_s);
-		std.log.debug("{d} fps", .{ fps });
+		_ = fps;
+		//std.log.debug("{d} fps", .{ fps });
 	}
 }
 
