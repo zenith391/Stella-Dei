@@ -124,7 +124,7 @@ pub fn Job(comptime ResultType: type) type {
 pub const EventLoop = struct {
 	allocator: Allocator,
 	taskQueue: TaskQueue,
-	numTasks: std.atomic.Atomic(u32) = std.atomic.Atomic(u32).init(0),
+	//numTasks: std.atomic.Atomic(u32) = std.atomic.Atomic(u32).init(0),
 	/// The number of 'events', when it hits 0 the run loop is stopped
 	events: usize = 0,
 	threads: []Thread,
@@ -151,16 +151,16 @@ pub const EventLoop = struct {
 	}
 
 	pub fn workerLoop(self: *EventLoop, threadId: usize) void {
-		var buf: [100]u8 = undefined;
-		tracy.InitThread();
-		tracy.SetThreadName(std.fmt.bufPrintZ(&buf, "Worker-{d}", .{ threadId }) catch unreachable);
+		_ = threadId;
+		//tracy.InitThread();
+		//tracy.SetThreadName(std.fmt.bufPrintZ(&buf, "Worker-{d}", .{ threadId }) catch unreachable);
 
 		while (self.events > 0) {
 			if (self.taskQueue.get()) |node| {
 				resume node.data.frame;
 			} else {
 				// wait until a task is available
-				std.Thread.Futex.wait(&self.numTasks, 0);
+				std.time.sleep(16 * std.time.ns_per_ms);
 			}
 		}
 	}
@@ -174,7 +174,6 @@ pub const EventLoop = struct {
 	pub fn endEvent(self: *EventLoop) void {
 		self.events -= 1;
 		if (self.events == 0) {
-			std.Thread.Futex.wake(&self.numTasks, std.math.maxInt(u32));
 			for (self.threads) |thread| {
 				thread.join();
 			}
@@ -198,7 +197,6 @@ pub const EventLoop = struct {
 				}
 			};
 			self.taskQueue.put(&node);
-			std.Thread.Futex.wake(&self.numTasks, 1);
 		}
 	}
 

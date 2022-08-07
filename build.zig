@@ -88,7 +88,7 @@ pub fn build(b: *std.build.Builder) void {
     if (mode != .Debug) exe.subsystem = .Windows;
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    build_tracy.link(b, exe, if (use_tracy) ".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/tracy-0.7.8/" else null);
+    build_tracy.link(b, exe, if (use_tracy) "deps/tracy-0.8.2/" else null);
     deps.addAllTo(exe);
     glfw.link(b, exe, .{});
 

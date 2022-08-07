@@ -453,6 +453,7 @@ pub const Planet = struct {
 
 		const zone = tracy.ZoneN(@src(), "Planet GPU Upload");
 		defer zone.End();
+		_ = loop;
 		
 		const bufData = self.bufData;
 		defer self.uploadNo += 1;
@@ -1131,7 +1132,7 @@ pub const Planet = struct {
 			std.log.info("new temp at 0: {d}", .{ self.newTemperature[0] });
 		} else {
 			var jobs: [32]@Frame(simulateTemperature) = undefined;
-			const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+			const parallelness = std.math.min(loop.getParallelCount() * 4, jobs.len);
 			const pointCount = self.vertices.len;
 			var i: usize = 0;
 			while (i < parallelness) : (i += 1) {

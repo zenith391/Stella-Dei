@@ -256,7 +256,15 @@ pub fn main() !void {
 	// Only manually catch errors (and show them as message boxes) on Windows
 	if (@import("builtin").target.os.tag == .windows) {
 		main_wrap() catch |err| {
-			fatalCrash(std.heap.page_allocator, "Error: {s}", .{ @errorName(err) });
+			var buffer: [16 * 1024]u8 = undefined;
+			var stream = std.io.fixedBufferStream(&buffer);
+			try stream.writer().print("Dang, we crashed! And it says {s} !\n", .{ @errorName(err) });
+			if (@errorReturnTrace()) |trace| {
+				try stream.writer().print("\r\n  You even got a stack trace!\r\n\r\n", .{});
+				try std.debug.writeStackTrace(trace.*, stream.writer(), std.heap.page_allocator,
+					try std.debug.getSelfDebugInfo(), std.debug.TTY.Config.no_color);
+			}
+			fatalCrash(std.heap.page_allocator, "{s}", .{ stream.getWritten() });
 		};
 	} else {
 		// Let Zig handle it (it'll log in the terminal, along with optional debug info)
@@ -271,7 +279,7 @@ inline fn main_wrap() !void {
 	// If Tracy is enabled, pass-through all allocations to it
 	var tracyAlloc = @import("tracy_allocator.zig").TracyAllocator.init(gpa.allocator());
 	const allocator = if (tracy.enabled) tracyAlloc.allocator() else gpa.allocator();
-	tracy.InitThread();
+	// tracy.InitThread();
 
 	try glfw.init(.{});
 	defer glfw.terminate();
@@ -304,6 +312,7 @@ inline fn main_wrap() !void {
 	window.setKeyCallback(keyCallback);
 
 	try glfw.makeContextCurrent(window);
+	try glfw.swapInterval(1);
 	std.log.debug("Load OpenGL functions", .{});
 	try gl.load({}, getProcAddress);
 
@@ -342,6 +351,8 @@ inline fn main_wrap() !void {
 	try updateLoopJob.call(updateLoop, .{ &loop, window });
 
 	std.log.debug("Done!", .{});
+
+	var fpsTimer = try std.time.Timer.start();
 	while (!window.shouldClose()) {
 		try glfw.makeContextCurrent(window);
 		render(window);
@@ -349,6 +360,10 @@ inline fn main_wrap() !void {
 		try window.swapBuffers();
 		try glfw.pollEvents();
 		tracy.FrameMark();
+
+		const frameTime = fpsTimer.lap();
+		const fps = 1.0 / (@intToFloat(f32, frameTime) / std.time.ns_per_s);
+		std.log.debug("{d} fps", .{ fps });
 	}
 }
 

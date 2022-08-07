@@ -52,10 +52,8 @@ const tracy_stub = struct {
         }
     };
 
-    pub inline fn InitThread() void {}
-    pub inline fn SetThreadName(name: [*:0]const u8) void {
-        _ = name;
-    }
+    pub inline fn FiberLeave() void {}
+    pub inline fn FiberEnter(_: [*:0]const u8) void {}
 
     pub inline fn Zone(comptime src: Src) ZoneCtx {
         _ = src;
@@ -324,11 +322,11 @@ const tracy_full = struct {
         }
     }
 
-    pub inline fn InitThread() void {
-        c.___tracy_init_thread();
+    pub inline fn FiberEnter(name: [*:0]const u8) void {
+        c.___tracy_fiber_enter(name);
     }
-    pub inline fn SetThreadName(name: [*:0]const u8) void {
-        c.___tracy_set_thread_name(name);
+    pub inline fn FiberLeave() void {
+        c.___tracy_fiber_leave();
     }
 
     pub inline fn Zone(comptime src: Src) ZoneCtx {
