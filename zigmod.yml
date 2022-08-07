@@ -16,6 +16,9 @@ dev_dependencies:
     - src: git https://github.com/hexops/mach-glfw
       name: glfw
       main: src/main.zig
+    - src: git https://github.com/fabioarnold/nanovg-zig
+      name: nanovg
+      main: src/nanovg.zig
 build_dependencies:
     - src: git https://github.com/hexops/mach-glfw
       name: build-glfw
