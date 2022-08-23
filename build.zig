@@ -117,6 +117,7 @@ pub fn build(b: *std.build.Builder) void {
     if (mode != .Debug) exe.subsystem = .Windows;
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    exe.use_stage1 = true;
     linkTracy(b, exe, if (use_tracy) "deps/tracy-0.8.2/" else null);
     deps.addAllTo(exe);
     glfw.link(b, exe, .{});

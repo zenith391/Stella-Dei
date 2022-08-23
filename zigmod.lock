@@ -1,7 +1,11 @@
 2
-git https://github.com/kooparse/zalgebra commit-3e49fb9959710807fe0621dbbceef1eed0fd2ab5
-git https://github.com/MasterQ32/zig-opengl commit-07268fa98f790b1477c786355cdc3153767338c7
+git https://github.com/kooparse/zalgebra commit-e42edd142eb4ade38802663debf19bd6252224c1
+git https://github.com/MasterQ32/zig-opengl commit-3c4dc6137b6ec2fb4d08daab1678b306c6e35a46
 git https://github.com/zigimg/zigimg commit-946db3f47194d7c07882032c13657e2b84a9c341
-git https://github.com/SpexGuy/Zig-Tracy commit-30db753bb2c053d1abe8eec1dbb1cdfabe489143
-git https://github.com/hexops/mach-glfw commit-1dc7601e37f5b53c2a23947519e8324de42256d6
-git https://github.com/hexops/mach-glfw commit-1dc7601e37f5b53c2a23947519e8324de42256d6
+git https://github.com/hexops/mach-glfw commit-c39b28f9b39053a16e91fe7cdf53c169d8730808
+git https://github.com/fabioarnold/nanovg-zig commit-5bd9f1564baead1453d1d6584a7ad09e21d63a50
+git https://github.com/kooparse/zalgebra commit-e42edd142eb4ade38802663debf19bd6252224c1
+git https://github.com/MasterQ32/zig-opengl commit-3c4dc6137b6ec2fb4d08daab1678b306c6e35a46
+git https://github.com/hexops/mach-glfw commit-c39b28f9b39053a16e91fe7cdf53c169d8730808
+git https://github.com/fabioarnold/nanovg-zig commit-5bd9f1564baead1453d1d6584a7ad09e21d63a50
+git https://github.com/hexops/mach-glfw commit-c39b28f9b39053a16e91fe7cdf53c169d8730808

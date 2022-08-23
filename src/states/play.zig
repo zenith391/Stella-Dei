@@ -410,14 +410,7 @@ pub const PlayState = struct {
 			gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);
 			program.setUniformInt("noiseCubemap", 0);
 
-			gl.enable(gl.CULL_FACE);
-			defer gl.disable(gl.CULL_FACE);
-			gl.frontFace(gl.CW);
-			defer gl.frontFace(gl.CCW);
-
-			//gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
-			planet.renderAtmosphere();
-			//gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
+			//planet.renderAtmosphere();
 		}
 
 		const entity = renderer.entityProgram;
