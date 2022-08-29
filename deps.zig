@@ -58,61 +58,61 @@ fn checkMinZig(current: std.SemanticVersion, exe: *std.build.LibExeObjStep) void
 pub const dirs = struct {
     pub const _root = "";
     pub const _93jjp4rc0htn = cache ++ "/../..";
-    pub const _g268etqsg80j = cache ++ "/git/github.com/kooparse/zalgebra";
-    pub const _y3u3k792dqu8 = cache ++ "/git/github.com/MasterQ32/zig-opengl";
+    pub const _ry8lll9fuc4y = cache ++ "/git/github.com/kooparse/zalgebra";
+    pub const _ystjmavfvf6v = cache ++ "/git/github.com/MasterQ32/zig-opengl";
     pub const _3hmo0glo2xj9 = cache ++ "/git/github.com/zigimg/zigimg";
-    pub const _uc95erhngrxy = cache ++ "/git/github.com/hexops/mach-glfw";
-    pub const _qn0vet6qmn6x = cache ++ "/git/github.com/fabioarnold/nanovg-zig";
-    pub const _cbar5tc9bby7 = cache ++ "/git/github.com/kooparse/zalgebra";
-    pub const _ry4uoqtow8fy = cache ++ "/git/github.com/MasterQ32/zig-opengl";
-    pub const _0z34c7dfsdmb = cache ++ "/git/github.com/hexops/mach-glfw";
-    pub const _aam4vhqogw35 = cache ++ "/git/github.com/fabioarnold/nanovg-zig";
-    pub const _1bmnb3xgwjt0 = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _7ft8dayafs70 = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _rvid0clm032e = cache ++ "/git/github.com/fabioarnold/nanovg-zig";
+    pub const _x5su0m0e7yxg = cache ++ "/git/github.com/kooparse/zalgebra";
+    pub const _2i2jr6xhwjml = cache ++ "/git/github.com/MasterQ32/zig-opengl";
+    pub const _e1xxnyj4bani = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _fmcf3oheu8gr = cache ++ "/git/github.com/fabioarnold/nanovg-zig";
+    pub const _4wijkno7k5j6 = cache ++ "/git/github.com/hexops/mach-glfw";
 };
 
 pub const package_data = struct {
     pub const _93jjp4rc0htn = Package{
         .directory = dirs._93jjp4rc0htn,
     };
-    pub const _g268etqsg80j = Package{
-        .directory = dirs._g268etqsg80j,
-        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._g268etqsg80j ++ "/src/main.zig" }, .dependencies = null },
+    pub const _ry8lll9fuc4y = Package{
+        .directory = dirs._ry8lll9fuc4y,
+        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._ry8lll9fuc4y ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _y3u3k792dqu8 = Package{
-        .directory = dirs._y3u3k792dqu8,
-        .pkg = Pkg{ .name = "gl", .source = .{ .path = dirs._y3u3k792dqu8 ++ "/exports/gl_3v3.zig" }, .dependencies = null },
+    pub const _ystjmavfvf6v = Package{
+        .directory = dirs._ystjmavfvf6v,
+        .pkg = Pkg{ .name = "gl", .source = .{ .path = dirs._ystjmavfvf6v ++ "/exports/gl_3v3.zig" }, .dependencies = null },
     };
     pub const _3hmo0glo2xj9 = Package{
         .directory = dirs._3hmo0glo2xj9,
         .pkg = Pkg{ .name = "zigimg", .source = .{ .path = dirs._3hmo0glo2xj9 ++ "/zigimg.zig" }, .dependencies = null },
     };
-    pub const _uc95erhngrxy = Package{
-        .directory = dirs._uc95erhngrxy,
-        .pkg = Pkg{ .name = "glfw", .source = .{ .path = dirs._uc95erhngrxy ++ "/src/main.zig" }, .dependencies = null },
+    pub const _7ft8dayafs70 = Package{
+        .directory = dirs._7ft8dayafs70,
+        .pkg = Pkg{ .name = "glfw", .source = .{ .path = dirs._7ft8dayafs70 ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _qn0vet6qmn6x = Package{
-        .directory = dirs._qn0vet6qmn6x,
-        .pkg = Pkg{ .name = "nanovg", .source = .{ .path = dirs._qn0vet6qmn6x ++ "/src/nanovg.zig" }, .dependencies = null },
+    pub const _rvid0clm032e = Package{
+        .directory = dirs._rvid0clm032e,
+        .pkg = Pkg{ .name = "nanovg", .source = .{ .path = dirs._rvid0clm032e ++ "/src/nanovg.zig" }, .dependencies = null },
     };
-    pub const _cbar5tc9bby7 = Package{
-        .directory = dirs._cbar5tc9bby7,
-        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._cbar5tc9bby7 ++ "/src/main.zig" }, .dependencies = null },
+    pub const _x5su0m0e7yxg = Package{
+        .directory = dirs._x5su0m0e7yxg,
+        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._x5su0m0e7yxg ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _ry4uoqtow8fy = Package{
-        .directory = dirs._ry4uoqtow8fy,
-        .pkg = Pkg{ .name = "gl", .source = .{ .path = dirs._ry4uoqtow8fy ++ "/exports/gl_3v3.zig" }, .dependencies = null },
+    pub const _2i2jr6xhwjml = Package{
+        .directory = dirs._2i2jr6xhwjml,
+        .pkg = Pkg{ .name = "gl", .source = .{ .path = dirs._2i2jr6xhwjml ++ "/exports/gl_3v3.zig" }, .dependencies = null },
     };
-    pub const _0z34c7dfsdmb = Package{
-        .directory = dirs._0z34c7dfsdmb,
-        .pkg = Pkg{ .name = "glfw", .source = .{ .path = dirs._0z34c7dfsdmb ++ "/src/main.zig" }, .dependencies = null },
+    pub const _e1xxnyj4bani = Package{
+        .directory = dirs._e1xxnyj4bani,
+        .pkg = Pkg{ .name = "glfw", .source = .{ .path = dirs._e1xxnyj4bani ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _aam4vhqogw35 = Package{
-        .directory = dirs._aam4vhqogw35,
-        .pkg = Pkg{ .name = "nanovg", .source = .{ .path = dirs._aam4vhqogw35 ++ "/src/nanovg.zig" }, .dependencies = null },
+    pub const _fmcf3oheu8gr = Package{
+        .directory = dirs._fmcf3oheu8gr,
+        .pkg = Pkg{ .name = "nanovg", .source = .{ .path = dirs._fmcf3oheu8gr ++ "/src/nanovg.zig" }, .dependencies = null },
     };
-    pub const _1bmnb3xgwjt0 = Package{
-        .directory = dirs._1bmnb3xgwjt0,
-        .pkg = Pkg{ .name = "build-glfw", .source = .{ .path = dirs._1bmnb3xgwjt0 ++ "/build.zig" }, .dependencies = null },
+    pub const _4wijkno7k5j6 = Package{
+        .directory = dirs._4wijkno7k5j6,
+        .pkg = Pkg{ .name = "build-glfw", .source = .{ .path = dirs._4wijkno7k5j6 ++ "/build.zig" }, .dependencies = null },
     };
     pub const _root = Package{
         .directory = dirs._root,
@@ -121,19 +121,19 @@ pub const package_data = struct {
 };
 
 pub const packages = &[_]Package{
-    package_data._g268etqsg80j,
-    package_data._y3u3k792dqu8,
+    package_data._ry8lll9fuc4y,
+    package_data._ystjmavfvf6v,
     package_data._3hmo0glo2xj9,
-    package_data._uc95erhngrxy,
-    package_data._qn0vet6qmn6x,
+    package_data._7ft8dayafs70,
+    package_data._rvid0clm032e,
 };
 
 pub const pkgs = struct {
-    pub const zalgebra = package_data._g268etqsg80j;
-    pub const gl = package_data._y3u3k792dqu8;
+    pub const zalgebra = package_data._ry8lll9fuc4y;
+    pub const gl = package_data._ystjmavfvf6v;
     pub const zigimg = package_data._3hmo0glo2xj9;
-    pub const glfw = package_data._uc95erhngrxy;
-    pub const nanovg = package_data._qn0vet6qmn6x;
+    pub const glfw = package_data._7ft8dayafs70;
+    pub const nanovg = package_data._rvid0clm032e;
 };
 
 pub const imports = struct {

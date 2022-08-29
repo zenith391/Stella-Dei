@@ -178,6 +178,8 @@ pub const IcosphereMesh = struct {
 					}
 				}
 				const indices = indicesList.toOwnedSlice();
+				defer allocator.free(indices);
+				
 				numElements[i] = @intCast(c_int, indices.len);
 
 				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, indices.len * @sizeOf(c_uint)), indices.ptr, gl.STATIC_DRAW);

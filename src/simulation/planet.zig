@@ -107,7 +107,6 @@ pub const Planet = struct {
 	allocator: std.mem.Allocator,
 	/// The *unmodified* vertices of the icosphere
 	vertices: []Vec3,
-	indices: []const gl.GLuint,
 	/// Slice changed during each upload() call, it contains the data
 	/// that will be stored in the VBO.
 	bufData: []f32,
@@ -201,7 +200,7 @@ pub const Planet = struct {
 		const zone = tracy.ZoneN(@src(), "Compute points neighbours");
 		defer zone.End();
 
-		const indices = planet.indices;
+		const indices = planet.mesh.indices;
 		const vertNeighbours = planet.verticesNeighbours;
 		var i: u32 = 0;
 		// Clear the vertex list:
@@ -278,7 +277,6 @@ pub const Planet = struct {
 			.allocator = allocator,
 			.vertices = vertices,
 			.verticesNeighbours = vertNeighbours,
-			.indices = mesh.indices,
 			.elevation = elevation,
 			.waterMass = waterElev,
 			.waterVaporMass = waterVaporMass,
@@ -313,7 +311,6 @@ pub const Planet = struct {
 			const random = prng.random();
 
 			const vert = mesh.vertices;
-			defer allocator.free(vert);
 			const kmPerWaterMass = planet.getKmPerWaterMass();
 			const seaLevel = radius + (random.float(f32) - 0.5) * 10; // between +5km and -5/km
 
@@ -1254,7 +1251,8 @@ pub const Planet = struct {
 		self.simulationArena.deinit();
 		
 		// Mesh lifetime is managed manually by planet, for efficiency
-		self.allocator.free(self.indices);
+		self.mesh.deinit(self.allocator);
+		self.atmosphereMesh.deinit(self.allocator);
 	}
 
 };
