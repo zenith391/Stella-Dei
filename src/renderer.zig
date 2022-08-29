@@ -4,6 +4,7 @@ const za     = @import("zalgebra");
 const zigimg = @import("zigimg");
 const nk     = @import("nuklear.zig");
 const tracy  = @import("vendor/tracy.zig");
+const nvg    = @import("nanovg");
 const Window = @import("glfw").Window;
 const log    = std.log.scoped(.renderer);
 
@@ -15,6 +16,7 @@ const Mat4 = za.Mat4;
 pub const Renderer = struct {
 	window: Window,
 	textureCache: TextureCache,
+	vg: nvg,
 
 	// Shader programs used during the game's lifetime
 	terrainProgram: ShaderProgram,
@@ -119,9 +121,15 @@ pub const Renderer = struct {
 		nk.nk_buffer_init(&idx, &nkAllocator.nk, 8192);
 		log.debug("  Done", .{});
 
+		const vg = try nvg.gl.init(allocator, .{
+			.antialias = true,
+			.debug = true,
+		});
+
 		return Renderer {
 			.window = window,
 			.textureCache = TextureCache.init(allocator),
+			.vg = vg,
 			.terrainProgram = terrainProgram,
 			.entityProgram = entityProgram,
 			.skyboxProgram = skyboxProgram,
@@ -255,6 +263,7 @@ pub const Renderer = struct {
 
 	pub fn deinit(self: *Renderer) void {
 		self.textureCache.deinit();
+		self.vg.deinit();
 
 		nk.nk_buffer_free(&self.nkCommands);
 		nk.nk_buffer_free(&self.nkVertices);

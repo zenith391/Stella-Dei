@@ -1,8 +1,8 @@
-const std   = @import("std");
-const gl    = @import("gl");
-const glfw  = @import("glfw");
-const za    = @import("zalgebra");
-const tracy = @import("vendor/tracy.zig");
+const std    = @import("std");
+pub const gl = @import("gl");
+const glfw   = @import("glfw");
+const za     = @import("zalgebra");
+const tracy  = @import("vendor/tracy.zig");
 
 const Renderer = @import("renderer.zig").Renderer;
 const Texture = @import("renderer.zig").Texture;

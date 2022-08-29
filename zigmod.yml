@@ -16,9 +16,20 @@ dev_dependencies:
     - src: git https://github.com/hexops/mach-glfw
       name: glfw
       main: src/main.zig
-    - src: git https://github.com/fabioarnold/nanovg-zig
+    - src: local nanovg
+      id: thisisnanovg
       name: nanovg
-      main: src/nanovg.zig
+      main: deps/nanovg/src/nanovg.zig
+      c_include_dirs:
+          - deps/nanovg/src
+      c_source_files:
+          - deps/nanovg/src/fontstash.c
+          - deps/nanovg/src/stb_image.c
+      c_source_flags:
+          - -DFONS_NO_STDIO
+          - -DSTBI_NO_STDIO
+          - -fno-stack-protector
+          - -fno-sanitize=undefined
 build_dependencies:
     - src: git https://github.com/hexops/mach-glfw
       name: build-glfw
