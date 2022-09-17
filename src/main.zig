@@ -34,6 +34,7 @@ pub const Game = struct {
 	renderer: *Renderer,
 	loop: *EventLoop,
 	allocator: std.mem.Allocator,
+	imgui_state: std.StringHashMap(@import("ui.zig").UiComponentState),
 	/// Job that will be deinit at the end. In the code this is only used for a
 	/// job's that's created to call Game.setState from a state, but then can't
 	/// be deinit immediately because otherwise you'd have a biting-its-tail problem
@@ -52,6 +53,7 @@ pub const Game = struct {
 			.renderer = ptrRenderer,
 			.loop = ptrLoop,
 			.allocator = allocator,
+			.imgui_state = std.StringHashMap(@import("ui.zig").UiComponentState).init(allocator),
 		};
 	}
 

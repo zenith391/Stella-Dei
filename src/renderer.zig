@@ -104,6 +104,10 @@ pub const Renderer = struct {
 			.antialias = true,
 			.debug = true,
 		});
+		
+		var file = try std.fs.cwd().openFile("assets/font/Inter.ttf", .{});
+		const fontData = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+		vg.fontFaceId(vg.createFontMem("sans-serif", fontData));
 
 		return Renderer {
 			.window = window,
