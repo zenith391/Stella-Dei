@@ -3,6 +3,7 @@ const gl = @import("gl");
 const za = @import("zalgebra");
 const glfw = @import("glfw");
 const nk = @import("../nuklear.zig");
+const ui = @import("../ui.zig");
 
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
@@ -219,6 +220,7 @@ pub const PlayState = struct {
 		Lifeform.initMeshes(game.allocator) catch unreachable;
 
 		const cursorPos = game.window.getCursorPos() catch unreachable;
+		std.valgrind.callgrind.startInstrumentation();
 		return PlayState {
 			.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos)),
 			.noiseCubemap = cubemap,
@@ -626,234 +628,235 @@ pub const PlayState = struct {
 		const size = renderer.framebufferSize;
 		const ctx = &renderer.nkContext;
 		nk.nk_style_default(ctx);
+		_ = self; _ = size;
 
-		if (nk.nk_begin(ctx, "Open Planet Control", .{ .x = 185, .y = 10, .w = 90, .h = 50 }, 
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_dynamic(ctx, 40, 1);
-			if (nk.nk_button_label(ctx, "Control") != 0) {
-				self.showPlanetControl = !self.showPlanetControl;
-			}
-		}
-		nk.nk_end(ctx);
+		// if (nk.nk_begin(ctx, "Open Planet Control", .{ .x = 185, .y = 10, .w = 90, .h = 50 }, 
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_dynamic(ctx, 40, 1);
+		// 	if (nk.nk_button_label(ctx, "Control") != 0) {
+		// 		self.showPlanetControl = !self.showPlanetControl;
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Mean Temperature", .{ .x = 285, .y = 20, .w = 200, .h = 30 }, 
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
-			const random = prng.random();
+		// if (nk.nk_begin(ctx, "Mean Temperature", .{ .x = 285, .y = 20, .w = 200, .h = 30 }, 
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+		// 	const random = prng.random();
 
-			if (!self.paused) {
-				var meanTemperature: f32 = 0;
-				var i: usize = 0;
-				while (i < 1000) : (i += 1) {
-					const pointIdx = random.intRangeLessThanBiased(usize, 0, self.planet.temperature.len);
-					meanTemperature += self.planet.temperature[pointIdx];
-				}
-				meanTemperature /= 1000;
-				self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
-			}
+		// 	if (!self.paused) {
+		// 		var meanTemperature: f32 = 0;
+		// 		var i: usize = 0;
+		// 		while (i < 1000) : (i += 1) {
+		// 			const pointIdx = random.intRangeLessThanBiased(usize, 0, self.planet.temperature.len);
+		// 			meanTemperature += self.planet.temperature[pointIdx];
+		// 		}
+		// 		meanTemperature /= 1000;
+		// 		self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
+		// 	}
 
-			nk.nk_layout_row_dynamic(ctx, 30, 1);
-			var buf: [500]u8 = undefined;
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Mean Temp. : {d:.1}°C", .{ self.meanTemperature - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
-		}
-		nk.nk_end(ctx);
+		// 	nk.nk_layout_row_dynamic(ctx, 30, 1);
+		// 	var buf: [500]u8 = undefined;
+		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Mean Temp. : {d:.1}°C", .{ self.meanTemperature - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
+		// }
+		// nk.nk_end(ctx);
 
-		if (self.showPlanetControl) {
-			if (nk.nk_begin(ctx, "Planet Control",.{ .x = 30, .y = 70, .w = 450, .h = 400 },
-			nk.NK_WINDOW_BORDER) != 0) {
-				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				nk.nk_property_float(ctx, "Axial Tilt (deg)", 0, &self.axialTilt, 360, 1, 0.1);
+		// if (self.showPlanetControl) {
+		// 	if (nk.nk_begin(ctx, "Planet Control",.{ .x = 30, .y = 70, .w = 450, .h = 400 },
+		// 	nk.NK_WINDOW_BORDER) != 0) {
+		// 		nk.nk_layout_row_dynamic(ctx, 50, 1);
+		// 		nk.nk_property_float(ctx, "Axial Tilt (deg)", 0, &self.axialTilt, 360, 1, 0.1);
 
-				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 100, 2);
+		// 		nk.nk_layout_row_dynamic(ctx, 50, 1);
+		// 		nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 100, 2);
 
-				// TODO: instead of changing surface conductivity,
-				// change the surface materials by using meteors and
-				// others
+		// 		// TODO: instead of changing surface conductivity,
+		// 		// change the surface materials by using meteors and
+		// 		// others
 				
-				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 1600000, 1000, 10);
+		// 		nk.nk_layout_row_dynamic(ctx, 50, 1);
+		// 		nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 1600000, 1000, 10);
 
-				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 10000, 5);
+		// 		nk.nk_layout_row_dynamic(ctx, 50, 1);
+		// 		nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 10000, 5);
 
-				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				var buf: [200]u8 = undefined;
-				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
-					nk.NK_TEXT_ALIGN_CENTERED);
+		// 		nk.nk_layout_row_dynamic(ctx, 50, 1);
+		// 		var buf: [200]u8 = undefined;
+		// 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
+		// 			nk.NK_TEXT_ALIGN_CENTERED);
 				
-				nk.nk_layout_row_dynamic(ctx, 50, 3);
-				if (nk.nk_button_label(ctx, "Clear all water") != 0) {
-					self.debug_clearWater = true;
-				}
-				if (nk.nk_button_label(ctx, "Deluge") != 0) {
-					self.debug_deluge = true;
-				}
-				if (nk.nk_button_label(ctx, "Spawn 10 rabbits") != 0) {
-					self.debug_spawnRabbits = true;
-				}
+		// 		nk.nk_layout_row_dynamic(ctx, 50, 3);
+		// 		if (nk.nk_button_label(ctx, "Clear all water") != 0) {
+		// 			self.debug_clearWater = true;
+		// 		}
+		// 		if (nk.nk_button_label(ctx, "Deluge") != 0) {
+		// 			self.debug_deluge = true;
+		// 		}
+		// 		if (nk.nk_button_label(ctx, "Spawn 10 rabbits") != 0) {
+		// 			self.debug_spawnRabbits = true;
+		// 		}
 
-				nk.nk_layout_row_dynamic(ctx, 50, 1);
-				if (nk.nk_button_label(ctx, "Save game") != 0) {
-					self.defer_saveGame = true;
-				}
-			}
-			nk.nk_end(ctx);
-		}
+		// 		nk.nk_layout_row_dynamic(ctx, 50, 1);
+		// 		if (nk.nk_button_label(ctx, "Save game") != 0) {
+		// 			self.defer_saveGame = true;
+		// 		}
+		// 	}
+		// 	nk.nk_end(ctx);
+		// }
 
-		const infoHeight: f32 = if (self.debug_showMoreInfo) 290 else 175;
-		if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - infoHeight - 30, .w = 300, .h = infoHeight },
-			0) != 0) {
-			var buf: [200]u8 = undefined;
-			const point = self.selectedPoint;
-			const planet = self.planet;
+		// const infoHeight: f32 = if (self.debug_showMoreInfo) 290 else 175;
+		// if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - infoHeight - 30, .w = 300, .h = infoHeight },
+		// 	0) != 0) {
+		// 	var buf: [200]u8 = undefined;
+		// 	const point = self.selectedPoint;
+		// 	const planet = self.planet;
 
-			if (self.debug_showMoreInfo) {
-				nk.nk_layout_row_dynamic(ctx, 30, 1);
-				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point #{d}", .{ point }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
-			} else {
-				nk.nk_layout_row_dynamic(ctx, 10, 1);
-			}
+		// 	if (self.debug_showMoreInfo) {
+		// 		nk.nk_layout_row_dynamic(ctx, 30, 1);
+		// 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point #{d}", .{ point }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
+		// 	} else {
+		// 		nk.nk_layout_row_dynamic(ctx, 10, 1);
+		// 	}
 
-			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 			
-			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Mass: {:.1} kg", .{ planet.waterMass[point] * 1_000_000_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Mass: {:.1} kg", .{ planet.waterMass[point] * 1_000_000_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Rainfall: {d:.3} cm / 24h", .{ planet.rainfall[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Rainfall: {d:.3} cm / 24h", .{ planet.rainfall[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			const RH = Planet.getRelativeHumidity(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Humidity: {d:.1}%", .{ RH * 100 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 	const RH = Planet.getRelativeHumidity(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]);
+		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Humidity: {d:.1}%", .{ RH * 100 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Speed (km/h): {d:.1}", .{ planet.airVelocity[point].length() * 3600 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Speed (km/h): {d:.1}", .{ planet.airVelocity[point].length() * 3600 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-			if (self.debug_showMoreInfo) {
-				nk.nk_layout_row_dynamic(ctx, 20, 1);
-				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point Area: {d}km²", .{ @floor(planet.getMeanPointArea() / 1_000_000) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 	if (self.debug_showMoreInfo) {
+		// 		nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point Area: {d}km²", .{ @floor(planet.getMeanPointArea() / 1_000_000) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-				// The units are given in centimeters, which is the equivalent amount of water that could be produced if all the water vapor in the column were to condense
-				// similar to https://earthobservatory.nasa.gov/global-maps/MYDAL2_M_SKY_WV
-				nk.nk_layout_row_dynamic(ctx, 20, 1);
-				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor: {d:.1} cm", .{ planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 		// The units are given in centimeters, which is the equivalent amount of water that could be produced if all the water vapor in the column were to condense
+		// 		// similar to https://earthobservatory.nasa.gov/global-maps/MYDAL2_M_SKY_WV
+		// 		nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor: {d:.1} cm", .{ planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-				nk.nk_layout_row_dynamic(ctx, 20, 1);
-				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 		nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-				nk.nk_layout_row_dynamic(ctx, 20, 1);
-				nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Pressure: {d:.2} bar", .{ planet.getAirPressureOfPoint(point) / 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-			}
-		}
-		nk.nk_end(ctx);
+		// 		nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Pressure: {d:.2} bar", .{ planet.getAirPressureOfPoint(point) / 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 
-		// Transparent window style
-		const windowColor = nk.nk_color { .r = 0, .g = 0, .b = 0, .a = 0 };
-		_ = nk.nk_style_push_color(ctx, &ctx.style.window.background, windowColor);
-		defer _ = nk.nk_style_pop_color(ctx);
-		_ = nk.nk_style_push_style_item(ctx, &ctx.style.window.fixed_background, nk.nk_style_item_color(windowColor));
-		defer _ = nk.nk_style_pop_style_item(ctx);
+		// // Transparent window style
+		// const windowColor = nk.nk_color { .r = 0, .g = 0, .b = 0, .a = 0 };
+		// _ = nk.nk_style_push_color(ctx, &ctx.style.window.background, windowColor);
+		// defer _ = nk.nk_style_pop_color(ctx);
+		// _ = nk.nk_style_push_style_item(ctx, &ctx.style.window.fixed_background, nk.nk_style_item_color(windowColor));
+		// defer _ = nk.nk_style_pop_style_item(ctx);
 
-		if (nk.nk_begin(ctx, "Game Pause", .{ .x = size.x() - 150, .y = 50, .w = 90, .h = 60 }, 
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_dynamic(ctx, 40, 2);
-			if (nk.nk_button_label(ctx, "||") != 0) {
-				self.paused = true;
-			}
-			if (nk.nk_button_symbol(ctx, nk.NK_SYMBOL_TRIANGLE_RIGHT) != 0) {
-				self.paused = false;
-			}
-		}
-		nk.nk_end(ctx);
+		// if (nk.nk_begin(ctx, "Game Pause", .{ .x = size.x() - 150, .y = 50, .w = 90, .h = 60 }, 
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_dynamic(ctx, 40, 2);
+		// 	if (nk.nk_button_label(ctx, "||") != 0) {
+		// 		self.paused = true;
+		// 	}
+		// 	if (nk.nk_button_symbol(ctx, nk.NK_SYMBOL_TRIANGLE_RIGHT) != 0) {
+		// 		self.paused = false;
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Game Speed", .{ .x = size.x() - 200, .y = 130, .w = 140, .h = 180 }, 
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_dynamic(ctx, 20, 1);
-			var buf: [200]u8 = undefined;
-			nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{}/s", .{ std.fmt.fmtDuration(@floatToInt(u64, self.timeScale) * std.time.ns_per_s) }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
+		// if (nk.nk_begin(ctx, "Game Speed", .{ .x = size.x() - 200, .y = 130, .w = 140, .h = 180 }, 
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
+		// 	var buf: [200]u8 = undefined;
+		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{}/s", .{ std.fmt.fmtDuration(@floatToInt(u64, self.timeScale) * std.time.ns_per_s) }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
 
-			nk.nk_layout_row_dynamic(ctx, 40, 2);
-			if (nk.nk_button_label(ctx, "-") != 0) {
-				self.timeScale = std.math.max(1.0, self.timeScale - 3600);
-			}
-			if (nk.nk_button_label(ctx, "+") != 0) {
-				if (self.timeScale < 190000) {
-					self.timeScale = std.math.min(200_000, self.timeScale + 3600);
-				}
-			}
-		}
-		nk.nk_end(ctx);
+		// 	nk.nk_layout_row_dynamic(ctx, 40, 2);
+		// 	if (nk.nk_button_label(ctx, "-") != 0) {
+		// 		self.timeScale = std.math.max(1.0, self.timeScale - 3600);
+		// 	}
+		// 	if (nk.nk_button_label(ctx, "+") != 0) {
+		// 		if (self.timeScale < 190000) {
+		// 			self.timeScale = std.math.min(200_000, self.timeScale + 3600);
+		// 		}
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "No Tool", .{ .x = 550, .y = 10, .w = 70, .h = 70 },
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_static(ctx, 60, 60, 1);
+		// if (nk.nk_begin(ctx, "No Tool", .{ .x = 550, .y = 10, .w = 70, .h = 70 },
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("ui/no-tool").toNkImage();
-			if (nk.nk_button_image(ctx, waterIcon) != 0) {
-				self.selectedTool = .None;
-			}
-		}
-		nk.nk_end(ctx);
+		// 	const waterIcon = renderer.textureCache.get("ui/no-tool").toNkImage();
+		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
+		// 		self.selectedTool = .None;
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Emit Water Tool", .{ .x = 625, .y = 10, .w = 70, .h = 70 },
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_static(ctx, 60, 60, 1);
+		// if (nk.nk_begin(ctx, "Emit Water Tool", .{ .x = 625, .y = 10, .w = 70, .h = 70 },
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("ui/emit-water").toNkImage();
-			if (nk.nk_button_image(ctx, waterIcon) != 0) {
-				self.selectedTool = .EmitWater;
-			}
-		}
-		nk.nk_end(ctx);
+		// 	const waterIcon = renderer.textureCache.get("ui/emit-water").toNkImage();
+		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
+		// 		self.selectedTool = .EmitWater;
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Drain Water Tool", .{ .x = 700, .y = 10, .w = 70, .h = 70 },
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_static(ctx, 60, 60, 1);
+		// if (nk.nk_begin(ctx, "Drain Water Tool", .{ .x = 700, .y = 10, .w = 70, .h = 70 },
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("ui/drain-water").toNkImage();
-			if (nk.nk_button_image(ctx, waterIcon) != 0) {
-				self.selectedTool = .DrainWater;
-			}
-		}
-		nk.nk_end(ctx);
+		// 	const waterIcon = renderer.textureCache.get("ui/drain-water").toNkImage();
+		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
+		// 		self.selectedTool = .DrainWater;
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Place Vegetation Tool", .{ .x = 775, .y = 10, .w = 70, .h = 70 },
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_static(ctx, 60, 60, 1);
+		// if (nk.nk_begin(ctx, "Place Vegetation Tool", .{ .x = 775, .y = 10, .w = 70, .h = 70 },
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("ui/place-vegetation").toNkImage();
-			if (nk.nk_button_image(ctx, waterIcon) != 0) {
-				self.selectedTool = .PlaceVegetation;
-			}
-		}
-		nk.nk_end(ctx);
+		// 	const waterIcon = renderer.textureCache.get("ui/place-vegetation").toNkImage();
+		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
+		// 		self.selectedTool = .PlaceVegetation;
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Raise Terrain Tool", .{ .x = 850, .y = 10, .w = 70, .h = 70 },
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_static(ctx, 60, 60, 1);
+		// if (nk.nk_begin(ctx, "Raise Terrain Tool", .{ .x = 850, .y = 10, .w = 70, .h = 70 },
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("ui/raise-terrain").toNkImage();
-			if (nk.nk_button_image(ctx, waterIcon) != 0) {
-				self.selectedTool = .RaiseTerrain;
-			}
-		}
-		nk.nk_end(ctx);
+		// 	const waterIcon = renderer.textureCache.get("ui/raise-terrain").toNkImage();
+		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
+		// 		self.selectedTool = .RaiseTerrain;
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 
-		if (nk.nk_begin(ctx, "Lower Terrain Tool", .{ .x = 925, .y = 10, .w = 70, .h = 70 },
-			nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_static(ctx, 60, 60, 1);
+		// if (nk.nk_begin(ctx, "Lower Terrain Tool", .{ .x = 925, .y = 10, .w = 70, .h = 70 },
+		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
 			
-			const waterIcon = renderer.textureCache.get("ui/lower-terrain").toNkImage();
-			if (nk.nk_button_image(ctx, waterIcon) != 0) {
-				self.selectedTool = .LowerTerrain;
-			}
-		}
-		nk.nk_end(ctx);
+		// 	const waterIcon = renderer.textureCache.get("ui/lower-terrain").toNkImage();
+		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
+		// 		self.selectedTool = .LowerTerrain;
+		// 	}
+		// }
+		// nk.nk_end(ctx);
 	}
 
 	pub fn saveGame(self: *PlayState) !void {

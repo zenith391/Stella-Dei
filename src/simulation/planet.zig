@@ -450,7 +450,6 @@ pub const Planet = struct {
 
 		const zone = tracy.ZoneN(@src(), "Planet GPU Upload");
 		defer zone.End();
-		_ = loop;
 		
 		const bufData = self.bufData;
 		defer self.uploadNo += 1;
@@ -789,7 +788,6 @@ pub const Planet = struct {
 		const meanDistance = std.math.sqrt(meanPointArea); // m
 		const meanDistanceKm = meanDistance / 1000; // km
 		const kmPerWaterMass = self.getKmPerWaterMass(); // km / 10⁹ kg
-		_ = meanDistance;
 		// {
 		// 	const diffusivity = 10.0;
 		// 	const a = dt * diffusivity / meanDistance;
@@ -908,7 +906,6 @@ pub const Planet = struct {
 					const pgf = dP / meanDistance * meanAtmVolume; // N
 					// F = ma, so a = F/m
 					const acceleration = @floatCast(f32, pgf / (mass * 1_000_000_000) / 1000 * dt); // km/s
-					_ = acceleration; _ = tangent;
 					self.airVelocity[i].data += tangent.scale(acceleration).data;
 				}
 			}
@@ -1178,6 +1175,15 @@ pub const Planet = struct {
 				std.mem.swap([]f32, &self.waterMass, &self.newWaterMass);
 				std.mem.swap([]f32, &self.waterVaporMass, &self.newWaterVaporMass);
 			}
+		} else {
+			// TODO: use a global water level
+			// this can work as high timescales like that should only be possible
+			// in the geologic timescale (when plate tectonics still happens)
+		}
+		
+		// Geologic simulation only happens when the time scale is more than 1 year per second
+		if (dt > 365 * std.time.ns_per_day) {
+
 		}
 
 		if (options.timeScale < 100000) {
@@ -1198,7 +1204,7 @@ pub const Planet = struct {
 			// TODO: switch down to much simplified and "globalized" life simulation
 		}
 
-		{
+		if (options.timeScale < 100000) {
 			// TODO: better
 			const zone = tracy.ZoneN(@src(), "Vegetation Simulation");
 			defer zone.End();

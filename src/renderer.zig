@@ -83,31 +83,10 @@ pub const Renderer = struct {
 
 		// Initialise NkAllocator which wraps a Zig allocator as a Nuklear allocator.
 		const nkAllocator = try NkAllocator.init(allocator);
-
-		// Generate an atlas texture for the font with huge oversample.
-		// TODO: use FreeType for font smoothing, to avoid wasting
-		// VRAM on upscaled fonts
-		log.debug("  Initialize font atlas", .{});
-		var fontAtlas: nk.nk_font_atlas = undefined;
-		nk.nk_font_atlas_init(&fontAtlas, &nkAllocator.nk);
-		nk.nk_font_atlas_begin(&fontAtlas);
-		var fontConfig = nk.nk_font_config(16.0);
-		fontConfig.oversample_h = 6;
-		fontConfig.oversample_v = 6;
-
-		const font: *nk.nk_font = nk.nk_font_atlas_add_default(&fontAtlas, 16.0, &fontConfig).?;
-
-		var imgWidth: c_int = undefined;
-		var imgHeight: c_int = undefined;
-		
-		const img = @ptrCast([*]const u8, nk.nk_font_atlas_bake(&fontAtlas, &imgWidth, &imgHeight, nk.NK_FONT_ATLAS_RGBA32).?);
-		const atlasTex = Texture.createFromData(@intCast(usize, imgWidth), @intCast(usize, imgHeight),
-			img[0..@intCast(usize, imgWidth*imgHeight)], .RGBA32);
-		nk.nk_font_atlas_end(&fontAtlas, nk.nk_handle_id(@intCast(c_int, atlasTex.texture)), 0);
 		
 		log.debug("  Initialize Nuklear", .{});
 		var nkCtx: nk.nk_context = undefined;
-		if (nk.nk_init(&nkCtx, &nkAllocator.nk, &font.handle) == 0) {
+		if (nk.nk_init(&nkCtx, &nkAllocator.nk, null) == 0) {
 			return error.NuklearError;
 		}
 
@@ -145,7 +124,7 @@ pub const Renderer = struct {
 			.nkVertices = verts,
 			.nkIndices = idx,
 			.nkAllocator = nkAllocator,
-			.nkFontAtlas = fontAtlas,
+			.nkFontAtlas = undefined,
 		};
 	}
 
@@ -156,109 +135,118 @@ pub const Renderer = struct {
 
 	/// This must be called before drawing with Nuklear.
 	pub fn startUI(self: *Renderer) void {
-		nk.nk_input_begin(&self.nkContext);
+		// nk.nk_input_begin(&self.nkContext);
 
-		// Update nuklear ui with data about latest cursor position and pressed buttons.
-		const cursorPos = self.window.getCursorPos() catch unreachable;
+		// // Update nuklear ui with data about latest cursor position and pressed buttons.
+		// const cursorPos = self.window.getCursorPos() catch unreachable;
 
-		nk.nk_input_motion(&self.nkContext,
-			@floatToInt(c_int, cursorPos.xpos), @floatToInt(c_int, cursorPos.ypos));
-		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_LEFT, @floatToInt(c_int, cursorPos.xpos),
-			@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.left) == .press) 1 else 0);
-		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_MIDDLE, @floatToInt(c_int, cursorPos.xpos),
-			@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.middle) == .press) 1 else 0);
-		nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_RIGHT, @floatToInt(c_int, cursorPos.xpos),
-			@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.right) == .press) 1 else 0);
-		nk.nk_input_scroll(&self.nkContext, self.tempScroll);
-		self.tempScroll = nk.struct_nk_vec2 { .x = 0, .y = 0 };
+		// nk.nk_input_motion(&self.nkContext,
+		// 	@floatToInt(c_int, cursorPos.xpos), @floatToInt(c_int, cursorPos.ypos));
+		// nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_LEFT, @floatToInt(c_int, cursorPos.xpos),
+		// 	@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.left) == .press) 1 else 0);
+		// nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_MIDDLE, @floatToInt(c_int, cursorPos.xpos),
+		// 	@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.middle) == .press) 1 else 0);
+		// nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_RIGHT, @floatToInt(c_int, cursorPos.xpos),
+		// 	@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.right) == .press) 1 else 0);
+		// nk.nk_input_scroll(&self.nkContext, self.tempScroll);
+		// self.tempScroll = nk.struct_nk_vec2 { .x = 0, .y = 0 };
 
-		nk.nk_input_end(&self.nkContext);
+		// nk.nk_input_end(&self.nkContext);
+		self.vg.beginFrame(
+			self.framebufferSize.x(),
+			self.framebufferSize.y(),
+			1.0 // TODO: get device pixel ratio
+		);
 	}
 
 	/// Must be called when you are done drawing with Nuklear. This function
 	/// handles actually rendering to the screen with OpenGL.
 	pub fn endUI(self: *Renderer) void {
-		const zone = tracy.ZoneN(@src(), "Draw Nuklear UI");
-		defer zone.End();
+		self.vg.endFrame();
+		gl.enable(gl.DEPTH_TEST);
 
-		const vertexLayout = [_]nk.nk_draw_vertex_layout_element {
-			.{ .attribute = nk.NK_VERTEX_POSITION, .format = nk.NK_FORMAT_FLOAT, .offset = 0 },
-			.{ .attribute = nk.NK_VERTEX_TEXCOORD, .format = nk.NK_FORMAT_FLOAT, .offset = 8 },
-			.{ .attribute = nk.NK_VERTEX_COLOR, .format = nk.NK_FORMAT_R32G32B32A32_FLOAT, .offset = 16 },
-			// end of vertex layout
-			.{ .attribute = nk.NK_VERTEX_ATTRIBUTE_COUNT, .format = nk.NK_FORMAT_COUNT, .offset = 0 },
-		};
 
-		const convertConfig = nk.nk_convert_config {
-			.global_alpha = 1.0,
-			.line_AA = nk.NK_ANTI_ALIASING_ON,
-			.shape_AA = nk.NK_ANTI_ALIASING_ON,
-			.vertex_layout = &vertexLayout,
-			.vertex_size = 8 * @sizeOf(f32),
-			.vertex_alignment = @alignOf(f32),
-			.circle_segment_count = 22,
-			.curve_segment_count = 22,
-			.arc_segment_count = 22,
-			.@"null" = .{
-				.texture = .{ .id = 0 },
-				.uv = .{ .x = 0, .y = 0 }
-			},
-		};
+		// const zone = tracy.ZoneN(@src(), "Draw Nuklear UI");
+		// defer zone.End();
 
-		// Nuklear converts all of it's draw commands into a list of vertices
-		// with the vertex layout we just gave.
-		if (nk.nk_convert(&self.nkContext, &self.nkCommands, &self.nkVertices, &self.nkIndices, &convertConfig) != 0) {
-			std.log.warn("nk_convert error", .{});
-		}
+		// const vertexLayout = [_]nk.nk_draw_vertex_layout_element {
+		// 	.{ .attribute = nk.NK_VERTEX_POSITION, .format = nk.NK_FORMAT_FLOAT, .offset = 0 },
+		// 	.{ .attribute = nk.NK_VERTEX_TEXCOORD, .format = nk.NK_FORMAT_FLOAT, .offset = 8 },
+		// 	.{ .attribute = nk.NK_VERTEX_COLOR, .format = nk.NK_FORMAT_R32G32B32A32_FLOAT, .offset = 16 },
+		// 	// end of vertex layout
+		// 	.{ .attribute = nk.NK_VERTEX_ATTRIBUTE_COUNT, .format = nk.NK_FORMAT_COUNT, .offset = 0 },
+		// };
 
-		// Temporarily change some OpenGL state for rendering
-		gl.disable(gl.DEPTH_TEST);
-		defer gl.enable(gl.DEPTH_TEST);
-		gl.enable(gl.SCISSOR_TEST);
-		defer gl.disable(gl.SCISSOR_TEST);
-		gl.enable(gl.BLEND);
-		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		// const convertConfig = nk.nk_convert_config {
+		// 	.global_alpha = 1.0,
+		// 	.line_AA = nk.NK_ANTI_ALIASING_ON,
+		// 	.shape_AA = nk.NK_ANTI_ALIASING_ON,
+		// 	.vertex_layout = &vertexLayout,
+		// 	.vertex_size = 8 * @sizeOf(f32),
+		// 	.vertex_alignment = @alignOf(f32),
+		// 	.circle_segment_count = 22,
+		// 	.curve_segment_count = 22,
+		// 	.arc_segment_count = 22,
+		// 	.@"null" = .{
+		// 		.texture = .{ .id = 0 },
+		// 		.uv = .{ .x = 0, .y = 0 }
+		// 	},
+		// };
 
-		self.nuklearProgram.use();
-		self.nuklearProgram.setUniformMat4("projMatrix",
-			Mat4.orthographic(0, self.framebufferSize.x(), self.framebufferSize.y(), 0, 0, 10));
+		// // Nuklear converts all of it's draw commands into a list of vertices
+		// // with the vertex layout we just gave.
+		// if (nk.nk_convert(&self.nkContext, &self.nkCommands, &self.nkVertices, &self.nkIndices, &convertConfig) != 0) {
+		// 	std.log.warn("nk_convert error", .{});
+		// }
 
-		// Update the Nuklear VBO and EBO with the new data
-		gl.bindVertexArray(self.nuklearVao);
-		gl.bindBuffer(gl.ARRAY_BUFFER, self.nuklearVbo);
-		gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkVertices)),
-			nk.nk_buffer_memory_const(&self.nkVertices), gl.STREAM_DRAW);
-		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.nuklearEbo);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkIndices)),
-			nk.nk_buffer_memory_const(&self.nkIndices), gl.STREAM_DRAW);
-		gl.activeTexture(gl.TEXTURE0);
-		self.nuklearProgram.setUniformInt("uTexture", 0);
+		// // Temporarily change some OpenGL state for rendering
+		// gl.disable(gl.DEPTH_TEST);
+		// defer gl.enable(gl.DEPTH_TEST);
+		// gl.enable(gl.SCISSOR_TEST);
+		// defer gl.disable(gl.SCISSOR_TEST);
+		// gl.enable(gl.BLEND);
+		// gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-		// Actually draw each elements
-		var command = nk.nk__draw_begin(&self.nkContext, &self.nkCommands);
-		var offset: usize = 0;
-		while (command) |cmd| {
-			if (cmd.*.elem_count > 0) {
-				self.nuklearProgram.setUniformInt("useTexture", if (cmd.*.texture.id != 0) 1 else 0); // not null texture
-				gl.bindTexture(gl.TEXTURE_2D, @intCast(gl.GLuint, cmd.*.texture.id));
-				const clip = cmd.*.clip_rect;
-				gl.scissor(
-					@floatToInt(gl.GLint, clip.x),
-					@floatToInt(gl.GLint, self.framebufferSize.y() - (clip.y + clip.h)),
-					@floatToInt(gl.GLint, clip.w),
-					@floatToInt(gl.GLint, clip.h),
-				);
-				gl.drawElements(gl.TRIANGLES, @intCast(gl.GLint, cmd.*.elem_count), gl.UNSIGNED_SHORT, 
-					@intToPtr(?*anyopaque, offset * 2));
-			}
-			offset += cmd.*.elem_count;
-			command = nk.nk__draw_next(cmd, &self.nkCommands, &self.nkContext);
-		}
+		// self.nuklearProgram.use();
+		// self.nuklearProgram.setUniformMat4("projMatrix",
+		// 	Mat4.orthographic(0, self.framebufferSize.x(), self.framebufferSize.y(), 0, 0, 10));
 
-		nk.nk_clear(&self.nkContext);
-		nk.nk_buffer_clear(&self.nkCommands);
-		nk.nk_buffer_clear(&self.nkVertices);
-		nk.nk_buffer_clear(&self.nkIndices);
+		// // Update the Nuklear VBO and EBO with the new data
+		// gl.bindVertexArray(self.nuklearVao);
+		// gl.bindBuffer(gl.ARRAY_BUFFER, self.nuklearVbo);
+		// gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkVertices)),
+		// 	nk.nk_buffer_memory_const(&self.nkVertices), gl.STREAM_DRAW);
+		// gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.nuklearEbo);
+		// gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkIndices)),
+		// 	nk.nk_buffer_memory_const(&self.nkIndices), gl.STREAM_DRAW);
+		// gl.activeTexture(gl.TEXTURE0);
+		// self.nuklearProgram.setUniformInt("uTexture", 0);
+
+		// // Actually draw each elements
+		// var command = nk.nk__draw_begin(&self.nkContext, &self.nkCommands);
+		// var offset: usize = 0;
+		// while (command) |cmd| {
+		// 	if (cmd.*.elem_count > 0) {
+		// 		self.nuklearProgram.setUniformInt("useTexture", if (cmd.*.texture.id != 0) 1 else 0); // not null texture
+		// 		gl.bindTexture(gl.TEXTURE_2D, @intCast(gl.GLuint, cmd.*.texture.id));
+		// 		const clip = cmd.*.clip_rect;
+		// 		gl.scissor(
+		// 			@floatToInt(gl.GLint, clip.x),
+		// 			@floatToInt(gl.GLint, self.framebufferSize.y() - (clip.y + clip.h)),
+		// 			@floatToInt(gl.GLint, clip.w),
+		// 			@floatToInt(gl.GLint, clip.h),
+		// 		);
+		// 		gl.drawElements(gl.TRIANGLES, @intCast(gl.GLint, cmd.*.elem_count), gl.UNSIGNED_SHORT, 
+		// 			@intToPtr(?*anyopaque, offset * 2));
+		// 	}
+		// 	offset += cmd.*.elem_count;
+		// 	command = nk.nk__draw_next(cmd, &self.nkCommands, &self.nkContext);
+		// }
+
+		// nk.nk_clear(&self.nkContext);
+		// nk.nk_buffer_clear(&self.nkCommands);
+		// nk.nk_buffer_clear(&self.nkVertices);
+		// nk.nk_buffer_clear(&self.nkIndices);
 	}
 
 	pub fn deinit(self: *Renderer) void {
@@ -268,7 +256,6 @@ pub const Renderer = struct {
 		nk.nk_buffer_free(&self.nkCommands);
 		nk.nk_buffer_free(&self.nkVertices);
 		nk.nk_buffer_free(&self.nkIndices);
-		nk.nk_font_atlas_clear(&self.nkFontAtlas);
 		nk.nk_free(&self.nkContext);
 		self.nkAllocator.deinit();
 	}

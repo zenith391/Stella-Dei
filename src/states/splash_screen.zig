@@ -41,22 +41,27 @@ pub const SplashScreenState = struct {
 
 		const imageWidth: f32 = 1134.0 / 2.0;
 		const imageHeight: f32 = 756.0 / 2.0;
-		const windowRect = nk.struct_nk_rect { .x = size.x() / 2 - imageWidth / 2, .y = size.y() / 2 - imageHeight / 2, .w = imageWidth, .h = imageHeight };
+		_ = self; 
+		const vg = renderer.vg;
 
-		const windowColor = nk.nk_color { .r = 0, .g = 0, .b = 0, .a = 0 };
-		renderer.nkContext.style.window.background = windowColor;
-		renderer.nkContext.style.window.fixed_background = nk.nk_style_item_color(windowColor);
+		const paint = vg.imagePattern(0, 0, imageWidth, imageHeight, 0, .{ .handle = @bitCast(i32, logo.texture) }, 1.0);
+		vg.rect(size.x() / 2 - imageWidth / 2, size.y() / 2 - imageHeight, imageWidth, imageHeight);
+		vg.fillPaint(paint);
+
+		// const windowColor = nk.nk_color { .r = 0, .g = 0, .b = 0, .a = 0 };
+		// renderer.nkContext.style.window.background = windowColor;
+		// renderer.nkContext.style.window.fixed_background = nk.nk_style_item_color(windowColor);
 		
-		if (nk.nk_begin(&renderer.nkContext, "Logo", windowRect, nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-			nk.nk_layout_row_static(&renderer.nkContext, imageHeight, @floatToInt(c_int, imageWidth), 1);
+		// if (nk.nk_begin(&renderer.nkContext, "Logo", windowRect, nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
+		// 	nk.nk_layout_row_static(&renderer.nkContext, imageHeight, @floatToInt(c_int, imageWidth), 1);
 
-			const elapsedTime = @intToFloat(f32, std.time.milliTimestamp() - self.start) / 1000;
-			const alpha = std.math.clamp((elapsedTime - 8) / 1, 0.0, 1.0);
-			const fadeOut = 1 - fadeIn(std.math.clamp((elapsedTime - 12) / 1, 0.0, 1.0));
-			const imageColor = nk.nk_color { .r = 255, .g = 255, .b = 255, .a = @floatToInt(u8, alpha * fadeOut * 255) };
-			nk.nk_image_color(&renderer.nkContext, logo.toNkImage(), imageColor);
-		}
-		nk.nk_end(&renderer.nkContext);
+		// 	const elapsedTime = @intToFloat(f32, std.time.milliTimestamp() - self.start) / 1000;
+		// 	const alpha = std.math.clamp((elapsedTime - 8) / 1, 0.0, 1.0);
+		// 	const fadeOut = 1 - fadeIn(std.math.clamp((elapsedTime - 12) / 1, 0.0, 1.0));
+		// 	const imageColor = nk.nk_color { .r = 255, .g = 255, .b = 255, .a = @floatToInt(u8, alpha * fadeOut * 255) };
+		// 	nk.nk_image_color(&renderer.nkContext, logo.toNkImage(), imageColor);
+		// }
+		// nk.nk_end(&renderer.nkContext);
 	}
 
 };

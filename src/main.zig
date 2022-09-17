@@ -109,7 +109,6 @@ fn mousePressed(window: glfw.Window, button: glfw.mouse_button.MouseButton) void
 
 fn mouseScroll(window: glfw.Window, xOffset: f64, yOffset: f64) void {
 	_ = window;
-	_ = xOffset;
 	game.renderer.onScroll(@floatCast(f32, xOffset), @floatCast(f32, yOffset));
 	inline for (std.meta.fields(GameState)) |field| {
 		// if it is the current game state
@@ -140,7 +139,6 @@ fn cursorPosCallback(window: glfw.Window, xpos: f64, ypos: f64) void {
 }
 
 fn keyCallback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
-	_ = window;
 	if (key == .F11 and action == .press) {
 		if (window.getMonitor() == null) {
 			const monitor = glfw.Monitor.getPrimary().?;
@@ -253,6 +251,7 @@ fn fatalCrash(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anyt
 }
 
 pub fn main() !void {
+	std.valgrind.callgrind.stopInstrumentation();
 	// Only manually catch errors (and show them as message boxes) on Windows
 	if (@import("builtin").target.os.tag == .windows) {
 		main_wrap() catch |err| {

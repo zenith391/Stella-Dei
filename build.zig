@@ -23,7 +23,7 @@ const ConvertStep = struct {
         return self;
     }
 
-    pub fn getSource(self: ConvertStep) std.build.FileSource {
+    pub fn getSource(self: *const ConvertStep) std.build.FileSource {
         return .{ .generated = &self.generated_file };
     }
 

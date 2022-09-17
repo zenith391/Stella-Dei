@@ -1,5 +1,5 @@
 const std = @import("std");
-const TaskQueue = std.atomic.Queue(Task);
+const TaskStack = std.atomic.Stack(Task);
 const Thread = std.Thread;
 const Allocator = std.mem.Allocator;
 const tracy = @import("vendor/tracy.zig");
@@ -123,7 +123,7 @@ pub fn Job(comptime ResultType: type) type {
 
 pub const EventLoop = struct {
 	allocator: Allocator,
-	taskQueue: TaskQueue,
+	taskStack: TaskStack,
 	//numTasks: std.atomic.Atomic(u32) = std.atomic.Atomic(u32).init(0),
 	/// The number of 'events', when it hits 0 the run loop is stopped
 	events: usize = 0,
@@ -132,7 +132,7 @@ pub const EventLoop = struct {
 	pub fn init() EventLoop {
 		return EventLoop {
 			.allocator = undefined,
-			.taskQueue = TaskQueue.init(),
+			.taskStack = TaskStack.init(),
 			.threads = undefined,
 		};
 	}
@@ -156,7 +156,7 @@ pub const EventLoop = struct {
 		//tracy.SetThreadName(std.fmt.bufPrintZ(&buf, "Worker-{d}", .{ threadId }) catch unreachable);
 
 		while (self.events > 0) {
-			if (self.taskQueue.get()) |node| {
+			if (self.taskStack.pop()) |node| {
 				resume node.data.frame;
 			} else {
 				// wait until a task is available
@@ -189,14 +189,13 @@ pub const EventLoop = struct {
 
 	pub fn yield(self: *EventLoop) void {
 		suspend {
-			var node = TaskQueue.Node {
-				.prev = undefined,
+			var node = TaskStack.Node {
 				.next = undefined,
 				.data = .{
 					.frame = @frame(),
 				}
 			};
-			self.taskQueue.put(&node);
+			self.taskStack.push(&node);
 		}
 	}
 
