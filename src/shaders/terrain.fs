@@ -15,6 +15,7 @@ in vec3 worldNormal;
 in vec3 worldPosition;
 in float interpData;
 in float waterElevation;
+in float totalElevation;
 in float vegetation;
 in float outSelected;
 in vec3 tangentViewPos;
@@ -88,12 +89,17 @@ void main() {
 		if (interpData < 280.15) {
 			waterTreshold = 0.0002 + (noiseValue() * 2 - 1) * 0.0001;
 		}
-		if (waterElevation >= waterTreshold) {
+		
+		float distToCenter = length(worldPosition) - waterElevation * 10;
+		// waterElevation = elevation + water (km)
+		// partialWaterElevation = water (km)
+		float partialWaterElevation = totalElevation - distToCenter;
+		if (partialWaterElevation >= waterTreshold) {
 			float depthMultiplier = 0.2;
 			float alphaMultiplier = 1.0;
 
-			float opticalDepth = 1 - exp(-waterElevation * depthMultiplier);
-			float alpha = 1 - exp(-waterElevation * alphaMultiplier);
+			float opticalDepth = 1 - exp(-partialWaterElevation * depthMultiplier);
+			float alpha = 1 - exp(-partialWaterElevation * alphaMultiplier);
 
 			vec3 waterColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(opticalDepth, 1)); // ocean blue
 			objectColor = mix(objectColor, waterColor, alpha);
@@ -101,7 +107,7 @@ void main() {
 			float iceLevel = min(1, exp((-interpData + 272.15) / 3));
 			objectColor = mix(objectColor, vec3(1.0f, 1.0f, 1.0f), iceLevel);
 			if (interpData > 273.15) {
-				specularPower = mix(16, 256, min(waterElevation*1*(1-iceLevel), 1));
+				specularPower = mix(16, 256, min(partialWaterElevation*1*(1-iceLevel), 1));
 				specularStrength = 0.5;
 			}
 		}

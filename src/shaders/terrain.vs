@@ -10,11 +10,13 @@ uniform mat4 viewMatrix;
 uniform mat4 modelMatrix;
 uniform int selectedVertex;
 uniform vec3 lightDir;
+uniform float planetRadius;
 
 out vec3 worldPosition;
 out vec3 worldNormal;
 out float interpData;
 out float waterElevation;
+out float totalElevation;
 out float vegetation;
 out float outSelected;
 
@@ -29,6 +31,7 @@ void main() {
 	interpData = extraData;
 	vegetation = aVegetation;
 	waterElevation = aWaterElevation;
+	totalElevation = (length(worldPosition) - planetRadius) / 10 + planetRadius;
 
 	//vec3 T = normalize(cross(worldNormal, vec3(0.0, 0.0, -1.0)));
 	//vec3 B = normalize(cross(worldNormal, T));
