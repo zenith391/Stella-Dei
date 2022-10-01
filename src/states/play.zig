@@ -624,11 +624,11 @@ pub const PlayState = struct {
 		self.selectedPoint = closestPoint;
 	}
 
-	pub fn renderUI(self: *PlayState, _: *Game, renderer: *Renderer) void {
+	pub fn renderUI(self: *PlayState, game: *Game, renderer: *Renderer) void {
 		const size = renderer.framebufferSize;
 		const ctx = &renderer.nkContext;
+		const vg = renderer.vg;
 		nk.nk_style_default(ctx);
-		_ = self; _ = size;
 
 		// if (nk.nk_begin(ctx, "Open Planet Control", .{ .x = 185, .y = 10, .w = 90, .h = 50 }, 
 		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
@@ -638,28 +638,39 @@ pub const PlayState = struct {
 		// 	}
 		// }
 		// nk.nk_end(ctx);
+		
+		{
+			var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+			const random = prng.random();
+			if (!self.paused) {
+				var meanTemperature: f32 = 0;
+				var i: usize = 0;
+				while (i < 1000) : (i += 1) {
+					const pointIdx = random.intRangeLessThanBiased(usize, 0, self.planet.temperature.len);
+					meanTemperature += self.planet.temperature[pointIdx];
+				}
+				meanTemperature /= 1000;
+				self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
+			}
+			vg.textAlign(.{ .horizontal = .left, .vertical = .bottom });
+			ui.label(vg, game, "Mean Temp. : {d:.1}°C", .{ self.meanTemperature - 273.15 }, 50, size.y());
+		}
 
-		// if (nk.nk_begin(ctx, "Mean Temperature", .{ .x = 285, .y = 20, .w = 200, .h = 30 }, 
-		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-		// 	var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
-		// 	const random = prng.random();
+		{
+			vg.textAlign(.{ .horizontal = .center, .vertical = .top });
+			ui.label(vg, game, "Solar Constant", .{}, 110, 40);
+			ui.label(vg, game, "{d} W/m²", .{ self.solarConstant }, 110, 70);
+			if (ui.button(vg, game, "solar-constant-minus", 20, 70, 20, 20, "-")) {
+				self.solarConstant = std.math.max(0, self.solarConstant - 100);
+			}
+			if (ui.button(vg, game, "solar-constant-plus", 180, 70, 20, 20, "+")) {
+				self.solarConstant = std.math.min(self.solarConstant + 100, 5000);
+			}
 
-		// 	if (!self.paused) {
-		// 		var meanTemperature: f32 = 0;
-		// 		var i: usize = 0;
-		// 		while (i < 1000) : (i += 1) {
-		// 			const pointIdx = random.intRangeLessThanBiased(usize, 0, self.planet.temperature.len);
-		// 			meanTemperature += self.planet.temperature[pointIdx];
-		// 		}
-		// 		meanTemperature /= 1000;
-		// 		self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
-		// 	}
-
-		// 	nk.nk_layout_row_dynamic(ctx, 30, 1);
-		// 	var buf: [500]u8 = undefined;
-		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Mean Temp. : {d:.1}°C", .{ self.meanTemperature - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
-		// }
-		// nk.nk_end(ctx);
+			if (ui.button(vg, game, "clear-water", size.x() - 200, 70, 170, 40, "Clear all water")) {
+				self.debug_clearWater = true;
+			}
+		}
 
 		// if (self.showPlanetControl) {
 		// 	if (nk.nk_begin(ctx, "Planet Control",.{ .x = 30, .y = 70, .w = 450, .h = 400 },

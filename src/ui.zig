@@ -8,7 +8,8 @@ const colors = struct {
 
 pub const UiComponentState = union(enum) {
 	Button: struct {
-		color: nvg.Color, 
+		color: nvg.Color,
+		pressed: bool = false,
 	}
 };
 
@@ -37,5 +38,25 @@ pub fn button(vg: nvg, game: *Game, name: []const u8, x: f32, y: f32, w: f32, h:
 	vg.fontBlur(if (hovered) 0 else 0.5);
 	_ = vg.text(x + w / 2, y + h / 2, text);
 
-	return hovered and pressed;
+	if (hovered) {
+		if (state.Button.pressed and pressed == false) {
+			state.Button.pressed = false;
+			return true;
+		} else {
+			state.Button.pressed = pressed;
+		}
+	}
+	return false;
+}
+
+pub fn label(vg: nvg, game: *Game, comptime fmt: []const u8, args: anytype, x: f32, y: f32) void {
+	_ = game;
+	var buf: [500]u8 = undefined;
+	const text = std.fmt.bufPrint(&buf, fmt, args) catch unreachable;
+
+	vg.fontSize(20.0);
+	vg.fontFace("sans-serif");
+	vg.fillColor(nvg.rgb(255, 255, 255));
+	vg.fontBlur(0);
+	_ = vg.text(x, y, text);
 }
