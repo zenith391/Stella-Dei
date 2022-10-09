@@ -3,7 +3,6 @@ const gl = @import("gl");
 const za = @import("zalgebra");
 const glfw = @import("glfw");
 const nvg = @import("nanovg");
-const nk = @import("../nuklear.zig");
 const ui = @import("../ui.zig");
 
 const Game = @import("../main.zig").Game;
@@ -650,9 +649,7 @@ pub const PlayState = struct {
 
 	pub fn renderUI(self: *PlayState, game: *Game, renderer: *Renderer) void {
 		const size = renderer.framebufferSize;
-		const ctx = &renderer.nkContext;
 		const vg = renderer.vg;
-		nk.nk_style_default(ctx);
 
 		// if (nk.nk_begin(ctx, "Open Planet Control", .{ .x = 185, .y = 10, .w = 90, .h = 50 }, 
 		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {

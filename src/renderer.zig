@@ -2,7 +2,6 @@ const std    = @import("std");
 const gl     = @import("gl");
 const za     = @import("zalgebra");
 const zigimg = @import("zigimg");
-const nk     = @import("nuklear.zig");
 const tracy  = @import("vendor/tracy.zig");
 const nvg    = @import("nanovg");
 const Window = @import("glfw").Window;
@@ -25,25 +24,8 @@ pub const Renderer = struct {
 	skyboxProgram: ShaderProgram,
 	sunProgram: ShaderProgram,
 	cloudsProgram: ShaderProgram,
-	
-	/// Shader program used for Nuklear UI
-	nuklearProgram: ShaderProgram,
-
-	// Various OpenGL indices
-	nuklearVao: gl.GLuint,
-	nuklearVbo: gl.GLuint,
-	nuklearEbo: gl.GLuint,
 
 	framebufferSize: Vec2,
-
-	// Graphics state for Nuklear
-	nkContext: nk.nk_context,
-	nkCommands: nk.nk_buffer,
-	nkVertices: nk.nk_buffer,
-	nkIndices: nk.nk_buffer,
-	nkAllocator: *NkAllocator,
-	nkFontAtlas: nk.nk_font_atlas,
-	tempScroll: nk.struct_nk_vec2 = nk.struct_nk_vec2 { .x = 0, .y = 0 },
 
 	pub fn init(allocator: Allocator, window: Window) !Renderer {
 		const zone = tracy.ZoneN(@src(), "Init renderer");
@@ -54,52 +36,12 @@ pub const Renderer = struct {
 		const entityProgram = try ShaderProgram.createFromName("entity");
 		const skyboxProgram = try ShaderProgram.createFromName("skybox");
 		const sunProgram = try ShaderProgram.createFromName("sun");
-		const nuklearProgram = try ShaderProgram.createFromName("nuklear");
 		const cloudsProgram = try ShaderProgram.createFromName("clouds");
 
-		log.debug("  Generate Nuklear - OpenGL integration", .{});
-		// Generate the VAO, VBO and EBO that will be used for drawing Nuklear UI.
-		var nkVao: gl.GLuint = undefined;
-		gl.genVertexArrays(1, &nkVao);
-		var nkVbo: gl.GLuint = undefined;
-		gl.genBuffers(1, &nkVbo);
-		var nkEbo: gl.GLuint = undefined;
-		gl.genBuffers(1, &nkEbo);
-
-		gl.bindVertexArray(nkVao);
-		gl.bindBuffer(gl.ARRAY_BUFFER, nkVbo);
-		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, nkVbo);
-		gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32)));
-		gl.vertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 2 * @sizeOf(f32)));
-		gl.vertexAttribPointer(2, 4, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 4 * @sizeOf(f32)));
-		gl.enableVertexAttribArray(0);
-		gl.enableVertexAttribArray(1);
-		gl.enableVertexAttribArray(2);
-
-		// TODO: disable depth test in 2D (it causes blending problems)
 		gl.enable(gl.DEPTH_TEST);
 		gl.enable(gl.BLEND);
 		gl.enable(gl.TEXTURE_CUBE_MAP_SEAMLESS);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-		// Initialise NkAllocator which wraps a Zig allocator as a Nuklear allocator.
-		const nkAllocator = try NkAllocator.init(allocator);
-		
-		log.debug("  Initialize Nuklear", .{});
-		var nkCtx: nk.nk_context = undefined;
-		if (nk.nk_init(&nkCtx, &nkAllocator.nk, null) == 0) {
-			return error.NuklearError;
-		}
-
-		log.debug("  Allocate Nuklear commands buffers", .{});
-		// At last, initialise the buffers that Nuklear requires for drawing.
-		var cmds: nk.nk_buffer = undefined;
-		var verts: nk.nk_buffer = undefined;
-		var idx: nk.nk_buffer = undefined;
-		nk.nk_buffer_init(&cmds, &nkAllocator.nk, 8192);
-		nk.nk_buffer_init(&verts, &nkAllocator.nk, 8192);
-		nk.nk_buffer_init(&idx, &nkAllocator.nk, 8192);
-		log.debug("  Done", .{});
 
 		const vg = try nvg.gl.init(allocator, .{
 			.antialias = true,
@@ -123,17 +65,7 @@ pub const Renderer = struct {
 			.skyboxProgram = skyboxProgram,
 			.sunProgram = sunProgram,
 			.cloudsProgram = cloudsProgram,
-			.nuklearProgram = nuklearProgram,
-			.nuklearVao = nkVao,
-			.nuklearVbo = nkVbo,
-			.nuklearEbo = nkEbo,
 			.framebufferSize = undefined,
-			.nkContext = nkCtx,
-			.nkCommands = cmds,
-			.nkVertices = verts,
-			.nkIndices = idx,
-			.nkAllocator = nkAllocator,
-			.nkFontAtlas = undefined,
 		};
 	}
 
@@ -151,11 +83,6 @@ pub const Renderer = struct {
 		self.cloudsProgram = cloudsProgram;
 
 		log.debug("Reloaded shaders.", .{});
-	}
-
-	pub fn onScroll(self: *Renderer, xOffset: f32, yOffset: f32) void {
-		self.tempScroll.x += xOffset;
-		self.tempScroll.y += yOffset;
 	}
 
 	/// This must be called before drawing with NanoVG.
@@ -178,12 +105,6 @@ pub const Renderer = struct {
 	pub fn deinit(self: *Renderer) void {
 		self.textureCache.deinit();
 		self.vg.deinit();
-
-		nk.nk_buffer_free(&self.nkCommands);
-		nk.nk_buffer_free(&self.nkVertices);
-		nk.nk_buffer_free(&self.nkIndices);
-		nk.nk_free(&self.nkContext);
-		self.nkAllocator.deinit();
 	}
 };
 
@@ -293,13 +214,7 @@ pub const Texture = struct {
 		self.setCubemapFace(face, image.width, image.height, pixels);
 	}
 
-	pub fn toNkImage(self: Texture) nk.struct_nk_image {
-		return .{
-			.handle = .{ .id = @intCast(c_int, self.texture) },
-			.w = 0, .h = 0,
-			.region = .{ 0, 0, 0, 0 }
-		};
-	}
+	// TODO: toVgImage function for using textures in NanoVG
 
 };
 
@@ -492,52 +407,6 @@ const ShaderProgram = struct {
 
 	pub fn use(self: ShaderProgram) void {
 		gl.useProgram(self.program);
-	}
-
-};
-
-/// Utility struct to wrap a std.mem.Allocator as a nk_allocator
-const NkAllocator = struct {
-	nk: nk.nk_allocator,
-	/// As Nuklear doesn't keep track of allocation sizes, we keep the size of each
-	/// allocation associated to its pointer.
-	allocationSizes: std.AutoHashMap(*anyopaque, usize),
-
-	fn nkAlloc(userdata: nk.nk_handle, old: ?*anyopaque, nsize: nk.nk_size) callconv(.C) ?*anyopaque {
-		const self = @ptrCast(*NkAllocator, @alignCast(@alignOf(NkAllocator), userdata.ptr));
-		const allocator = self.allocationSizes.allocator;
-		_ = old; // old isn't used to realloc as old memory is still expected to work
-		const ptr = (allocator.alloc(u8, nsize) catch return null).ptr;
-		self.allocationSizes.put(ptr, nsize) catch return null;
-		return ptr;
-	}
-
-	fn nkFree(userdata: nk.nk_handle, old: ?*anyopaque) callconv(.C) void {
-		const self = @ptrCast(*NkAllocator, @alignCast(@alignOf(NkAllocator), userdata.ptr)).*;
-		const allocator = self.allocationSizes.allocator;
-		if (old) |old_buf| {
-			const size = self.allocationSizes.get(old_buf).?;
-			allocator.free(@as([]u8, @ptrCast([*]u8, old)[0..size]));
-		}
-	}
-
-	pub fn init(allocator: Allocator) !*NkAllocator {
-		const obj = try allocator.create(NkAllocator);
-		obj.* = NkAllocator {
-			.nk = nk.nk_allocator {
-				.userdata = .{ .ptr = obj },
-				.alloc = nkAlloc,
-				.free = nkFree,
-			},
-			.allocationSizes = std.AutoHashMap(*anyopaque, usize).init(allocator)
-		};
-		return obj;
-	}
-
-	pub fn deinit(self: *NkAllocator) void {
-		const allocator = self.allocationSizes.allocator;
-		self.allocationSizes.deinit();
-		allocator.destroy(self);
 	}
 
 };

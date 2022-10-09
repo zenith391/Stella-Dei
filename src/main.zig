@@ -112,7 +112,7 @@ fn mousePressed(window: glfw.Window, button: glfw.mouse_button.MouseButton) void
 
 fn mouseScroll(window: glfw.Window, xOffset: f64, yOffset: f64) void {
 	_ = window;
-	game.renderer.onScroll(@floatCast(f32, xOffset), @floatCast(f32, yOffset));
+	_ = xOffset;
 	inline for (std.meta.fields(GameState)) |field| {
 		// if it is the current game state
 		if (std.mem.eql(u8, @tagName(std.meta.activeTag(game.state)), field.name)) {
