@@ -371,7 +371,7 @@ pub const PlayState = struct {
 			program.setUniformVec3("viewPos", self.cameraPos);
 			program.setUniformFloat("planetRadius", planet.radius);
 			program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display mode
-			program.setUniformInt("selectedVertex", @intCast(c_int, self.selectedPoint));
+			program.setUniformVec3("selectedVertexPos", planet.transformedPoints[self.selectedPoint]);
 			program.setUniformFloat("kmPerWaterMass", planet.getKmPerWaterMass());
 
 			gl.activeTexture(gl.TEXTURE0);

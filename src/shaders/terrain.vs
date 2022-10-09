@@ -8,7 +8,6 @@ layout (location = 4) in float aVegetation;
 uniform mat4 projMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 modelMatrix;
-uniform int selectedVertex;
 uniform vec3 lightDir;
 uniform float planetRadius;
 
@@ -17,14 +16,12 @@ out vec3 worldNormal;
 out float interpData;
 out float waterElevation;
 out float vegetation;
-out float outSelected;
 
 out vec3 tangentViewPos;
 out vec3 tangentFragPos;
 
 void main() {
 	gl_Position = projMatrix * viewMatrix * modelMatrix * vec4(aPos, 1);
-	outSelected = float(selectedVertex == gl_VertexID);
 	worldNormal = mat3(modelMatrix) * aNormal;
 	worldPosition = vec3(modelMatrix * vec4(aPos, 1.0));
 	interpData = extraData;

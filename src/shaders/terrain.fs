@@ -10,6 +10,7 @@ uniform float kmPerWaterMass;
 uniform samplerCube noiseCubemap;
 uniform sampler2D terrainNormalMap;
 uniform sampler2D waterNormalMap;
+uniform vec3 selectedVertexPos;
 
 in vec3 worldNormal;
 in vec3 worldPosition;
@@ -91,7 +92,7 @@ void main() {
 		
 		// totalElevation = elevation + water (km)
 		// partialWaterElevation = water (km)
-		float partialWaterElevation = waterElevation;
+		float partialWaterElevation = waterElevation * 10;
 		if (partialWaterElevation >= waterTreshold) {
 			float depthMultiplier = 0.2;
 			float alphaMultiplier = 1.0;
@@ -116,8 +117,10 @@ void main() {
 		vec3 specular = specularStrength * spec * lightColor * lightIntensity;
 
 		vec3 result = (ambient + diffuse + specular) * objectColor;
-		if (outSelected > 0) {
-			result = mix(result, vec3(0.1f, 0.1f, 0.9f), 1 - exp(-outSelected));
+		float selected = 1 - length(worldPosition - selectedVertexPos) / 100;
+		if (selected > 0) {
+			float selectedE = 1 - (1 - selected) * (1 - selected);
+			result = mix(result, vec3(0.1f, 0.1f, 0.9f), selectedE);
 		}
 		
 		float gamma = 1.0; // 2.2
