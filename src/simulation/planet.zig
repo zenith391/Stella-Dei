@@ -2,6 +2,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 const gl = @import("gl");
 const za = @import("zalgebra");
+const zigimg = @import("zigimg");
 const tracy = @import("../vendor/tracy.zig");
 const cl = @cImport({
 	@cDefine("CL_TARGET_OPENCL_VERSION", "110");
@@ -226,8 +227,11 @@ pub const Planet = struct {
 		}
 	}
 
-	/// Note: the data is allocated using the event loop's allocator
-	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize, radius: f32, seed: u64) !Planet {
+	const GenerationOptions = struct {
+		generate_terrain: bool = true,
+	};
+
+	pub fn generate(allocator: std.mem.Allocator, numSubdivisions: usize, radius: f32, seed: u64, options: GenerationOptions) !Planet {
 		const zone = tracy.ZoneN(@src(), "Generate planet");
 		defer zone.End();
 
@@ -306,7 +310,26 @@ pub const Planet = struct {
 			planet.clContext = null;
 		}
 
+		// Zero-out data
 		{
+			std.mem.set(f32, waterVaporMass, 0);
+			std.mem.set(f32, rainfall, 0);
+			std.mem.set(Vec2, airVelocity, Vec2.zero());
+			std.mem.set(f32, elevation, radius);
+			std.mem.set(f32, waterElev, 0);
+			std.mem.set(f32, vegetation, 0);
+			std.mem.set(f32, temperature, 273.15 + 22.0);
+
+			const NITROGEN_PERCENT = 78.084 / 100.0;
+			const OXYGEN_PERCENT = 20.946 / 100.0;
+			const CARBON_DIOXIDE_PERCENT = 0.6 / 100.0; // estimated value from Earth prebiotic era
+			const ATMOSPHERE_MASS = 5.15 * std.math.pow(f64, 10, 18 - 9);
+			planet.averageNitrogenMass = @floatCast(f32, NITROGEN_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
+			planet.averageOxygenMass = @floatCast(f32, OXYGEN_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
+			planet.averageCarbonDioxideMass = @floatCast(f32, CARBON_DIOXIDE_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
+		}
+
+		if (options.generate_terrain) {
 			var prng = std.rand.DefaultPrng.init(seed);
 			const random = prng.random();
 
@@ -320,8 +343,7 @@ pub const Planet = struct {
 			perlin.setSeed(random.int(u64));
 			var i: usize = 0;
 			while (i < vert.len) : (i += 3) {
-				var point = Vec3.fromSlice(vert[i..]);
-				point = point.norm();
+				const point = Vec3.fromSlice(vert[i..]).norm();
 				const value = radius + perlin.noise(point.x() * 3 + 5, point.y() * 3 + 5, point.z() * 3 + 5) * std.math.min(radius / 2, 15);
 
 				elevation[i / 3] = value;
@@ -335,18 +357,13 @@ pub const Planet = struct {
 				const transformedPoint = point.scale(totalElevation);
 				planet.transformedPoints[i / 3] = transformedPoint;
 			}
-
-			std.mem.set(f32, waterVaporMass, 0);
-			std.mem.set(f32, rainfall, 0);
-			std.mem.set(Vec2, airVelocity, Vec2.zero());
-
-			const NITROGEN_PERCENT = 78.084 / 100.0;
-			const OXYGEN_PERCENT = 20.946 / 100.0;
-			const CARBON_DIOXIDE_PERCENT = 0.6 / 100.0; // estimated value from Earth prebiotic era
-			const ATMOSPHERE_MASS = 5.15 * std.math.pow(f64, 10, 18 - 9);
-			planet.averageNitrogenMass = @floatCast(f32, NITROGEN_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
-			planet.averageOxygenMass = @floatCast(f32, OXYGEN_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
-			planet.averageCarbonDioxideMass = @floatCast(f32, CARBON_DIOXIDE_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
+		} else {
+			var i: usize = 0;
+			const vert = mesh.vertices;
+			while (i < vert.len) : (i += 3) {
+				const point = Vec3.fromSlice(vert[i..]).norm();
+				vertices[i / 3] = point;
+			}
 		}
 		zone3.End();
 
@@ -372,6 +389,38 @@ pub const Planet = struct {
 		std.log.info("The mean area per point of the ico-sphere is {d} km²\n", .{ meanPointArea });
 
 		return planet;
+	}
+
+	pub fn loadFromImage(self: Planet, allocator: std.mem.Allocator, file: *std.fs.File) !void {
+		var image = try zigimg.Image.fromFile(allocator, file);
+		defer image.deinit();
+
+		if (image.pixelFormat() != .rgba32) {
+			std.log.err("Can only load images with rgba32 format!", .{});
+			return error.InvalidPixelFormat;
+		}
+
+		// The process:
+		// - take every point of the icosphere
+		// - convert it latitude and longitude coordinates
+		// - do equirectangular projection in order to convert to image coordinates
+		// - use resulting value as height (TODO: do average of neighbour cells too?)
+
+		const standardParallel: f32 = std.math.degreesToRadians(f32, 0);
+		const kmPerWaterMass = self.getKmPerWaterMass();
+
+		for (self.vertices) |*vert, idx| {
+			const longitude = std.math.atan2(f32, vert.y(), vert.x());
+			const latitude = std.math.acos(vert.z()) * 2;
+			const imageX = @floatToInt(usize,
+				@intToFloat(f32, image.width) / (std.math.pi*2.0) * (longitude + std.math.pi) * std.math.cos(standardParallel));
+			const imageY = std.math.min(@floatToInt(usize,
+				@intToFloat(f32, image.height) / (std.math.pi*2.0) * (latitude)), image.height - 1);
+
+			const pixel = image.pixels.rgba32[imageY * image.width + imageX];
+			self.elevation[idx] = self.radius + @intToFloat(f32, pixel.r) * 0.1 - 8;
+			self.waterMass[idx] = std.math.max(0, (self.radius + 5) - self.elevation[idx]) / kmPerWaterMass;
+		}
 	}
 
 	const HEIGHT_EXAGGERATION_FACTOR = 10;

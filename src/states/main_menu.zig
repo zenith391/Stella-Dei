@@ -27,7 +27,17 @@ pub const MainMenuState = struct {
 
 		var randomPrng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
 		const seed = randomPrng.random().int(u64);
-		const planet = Planet.generate(game.allocator, 7, 5000, seed) catch unreachable;
+
+		var earthFile: ?std.fs.File = null;
+		if (std.fs.cwd().openFile("assets/big-earth.png", .{})) |file| {
+			earthFile = file;
+		} else |err| err catch {}; // ignore error
+
+		var planet = Planet.generate(game.allocator, 7, 5000, seed, .{ .generate_terrain = earthFile == null }) catch unreachable;
+		if (earthFile) |*file| {
+			defer file.close();
+			planet.loadFromImage(game.allocator, file) catch {};
+		}
 
 		return MainMenuState {
 			.planet = planet
