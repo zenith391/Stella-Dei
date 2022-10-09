@@ -17,6 +17,7 @@ pub const Renderer = struct {
 	window: Window,
 	textureCache: TextureCache,
 	vg: nvg,
+	vg_vao: gl.GLuint,
 
 	// Shader programs used during the game's lifetime
 	terrainProgram: ShaderProgram,
@@ -104,6 +105,9 @@ pub const Renderer = struct {
 			.antialias = true,
 			.debug = true,
 		});
+		// generate a VAO for nanovg because it doesn't generate itself for some reason
+		var vg_vao: gl.GLuint = 0;
+		gl.genVertexArrays(1, &vg_vao);
 		
 		var file = try std.fs.cwd().openFile("assets/font/Inter.ttf", .{});
 		const fontData = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
@@ -113,6 +117,7 @@ pub const Renderer = struct {
 			.window = window,
 			.textureCache = TextureCache.init(allocator),
 			.vg = vg,
+			.vg_vao = vg_vao,
 			.terrainProgram = terrainProgram,
 			.entityProgram = entityProgram,
 			.skyboxProgram = skyboxProgram,
@@ -153,25 +158,9 @@ pub const Renderer = struct {
 		self.tempScroll.y += yOffset;
 	}
 
-	/// This must be called before drawing with Nuklear.
+	/// This must be called before drawing with NanoVG.
 	pub fn startUI(self: *Renderer) void {
-		// nk.nk_input_begin(&self.nkContext);
-
-		// // Update nuklear ui with data about latest cursor position and pressed buttons.
-		// const cursorPos = self.window.getCursorPos() catch unreachable;
-
-		// nk.nk_input_motion(&self.nkContext,
-		// 	@floatToInt(c_int, cursorPos.xpos), @floatToInt(c_int, cursorPos.ypos));
-		// nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_LEFT, @floatToInt(c_int, cursorPos.xpos),
-		// 	@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.left) == .press) 1 else 0);
-		// nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_MIDDLE, @floatToInt(c_int, cursorPos.xpos),
-		// 	@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.middle) == .press) 1 else 0);
-		// nk.nk_input_button(&self.nkContext, nk.NK_BUTTON_RIGHT, @floatToInt(c_int, cursorPos.xpos),
-		// 	@floatToInt(c_int, cursorPos.ypos), if (self.window.getMouseButton(.right) == .press) 1 else 0);
-		// nk.nk_input_scroll(&self.nkContext, self.tempScroll);
-		// self.tempScroll = nk.struct_nk_vec2 { .x = 0, .y = 0 };
-
-		// nk.nk_input_end(&self.nkContext);
+		gl.bindVertexArray(self.vg_vao);
 		self.vg.beginFrame(
 			self.framebufferSize.x(),
 			self.framebufferSize.y(),
@@ -179,94 +168,11 @@ pub const Renderer = struct {
 		);
 	}
 
-	/// Must be called when you are done drawing with Nuklear. This function
+	/// Must be called when you are done drawing with NanoVG. This function
 	/// handles actually rendering to the screen with OpenGL.
 	pub fn endUI(self: *Renderer) void {
 		self.vg.endFrame();
 		gl.enable(gl.DEPTH_TEST);
-
-
-		// const zone = tracy.ZoneN(@src(), "Draw Nuklear UI");
-		// defer zone.End();
-
-		// const vertexLayout = [_]nk.nk_draw_vertex_layout_element {
-		// 	.{ .attribute = nk.NK_VERTEX_POSITION, .format = nk.NK_FORMAT_FLOAT, .offset = 0 },
-		// 	.{ .attribute = nk.NK_VERTEX_TEXCOORD, .format = nk.NK_FORMAT_FLOAT, .offset = 8 },
-		// 	.{ .attribute = nk.NK_VERTEX_COLOR, .format = nk.NK_FORMAT_R32G32B32A32_FLOAT, .offset = 16 },
-		// 	// end of vertex layout
-		// 	.{ .attribute = nk.NK_VERTEX_ATTRIBUTE_COUNT, .format = nk.NK_FORMAT_COUNT, .offset = 0 },
-		// };
-
-		// const convertConfig = nk.nk_convert_config {
-		// 	.global_alpha = 1.0,
-		// 	.line_AA = nk.NK_ANTI_ALIASING_ON,
-		// 	.shape_AA = nk.NK_ANTI_ALIASING_ON,
-		// 	.vertex_layout = &vertexLayout,
-		// 	.vertex_size = 8 * @sizeOf(f32),
-		// 	.vertex_alignment = @alignOf(f32),
-		// 	.circle_segment_count = 22,
-		// 	.curve_segment_count = 22,
-		// 	.arc_segment_count = 22,
-		// 	.@"null" = .{
-		// 		.texture = .{ .id = 0 },
-		// 		.uv = .{ .x = 0, .y = 0 }
-		// 	},
-		// };
-
-		// // Nuklear converts all of it's draw commands into a list of vertices
-		// // with the vertex layout we just gave.
-		// if (nk.nk_convert(&self.nkContext, &self.nkCommands, &self.nkVertices, &self.nkIndices, &convertConfig) != 0) {
-		// 	std.log.warn("nk_convert error", .{});
-		// }
-
-		// // Temporarily change some OpenGL state for rendering
-		// gl.disable(gl.DEPTH_TEST);
-		// defer gl.enable(gl.DEPTH_TEST);
-		// gl.enable(gl.SCISSOR_TEST);
-		// defer gl.disable(gl.SCISSOR_TEST);
-		// gl.enable(gl.BLEND);
-		// gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-		// self.nuklearProgram.use();
-		// self.nuklearProgram.setUniformMat4("projMatrix",
-		// 	Mat4.orthographic(0, self.framebufferSize.x(), self.framebufferSize.y(), 0, 0, 10));
-
-		// // Update the Nuklear VBO and EBO with the new data
-		// gl.bindVertexArray(self.nuklearVao);
-		// gl.bindBuffer(gl.ARRAY_BUFFER, self.nuklearVbo);
-		// gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkVertices)),
-		// 	nk.nk_buffer_memory_const(&self.nkVertices), gl.STREAM_DRAW);
-		// gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.nuklearEbo);
-		// gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, nk.nk_buffer_total(&self.nkIndices)),
-		// 	nk.nk_buffer_memory_const(&self.nkIndices), gl.STREAM_DRAW);
-		// gl.activeTexture(gl.TEXTURE0);
-		// self.nuklearProgram.setUniformInt("uTexture", 0);
-
-		// // Actually draw each elements
-		// var command = nk.nk__draw_begin(&self.nkContext, &self.nkCommands);
-		// var offset: usize = 0;
-		// while (command) |cmd| {
-		// 	if (cmd.*.elem_count > 0) {
-		// 		self.nuklearProgram.setUniformInt("useTexture", if (cmd.*.texture.id != 0) 1 else 0); // not null texture
-		// 		gl.bindTexture(gl.TEXTURE_2D, @intCast(gl.GLuint, cmd.*.texture.id));
-		// 		const clip = cmd.*.clip_rect;
-		// 		gl.scissor(
-		// 			@floatToInt(gl.GLint, clip.x),
-		// 			@floatToInt(gl.GLint, self.framebufferSize.y() - (clip.y + clip.h)),
-		// 			@floatToInt(gl.GLint, clip.w),
-		// 			@floatToInt(gl.GLint, clip.h),
-		// 		);
-		// 		gl.drawElements(gl.TRIANGLES, @intCast(gl.GLint, cmd.*.elem_count), gl.UNSIGNED_SHORT, 
-		// 			@intToPtr(?*anyopaque, offset * 2));
-		// 	}
-		// 	offset += cmd.*.elem_count;
-		// 	command = nk.nk__draw_next(cmd, &self.nkCommands, &self.nkContext);
-		// }
-
-		// nk.nk_clear(&self.nkContext);
-		// nk.nk_buffer_clear(&self.nkCommands);
-		// nk.nk_buffer_clear(&self.nkVertices);
-		// nk.nk_buffer_clear(&self.nkIndices);
 	}
 
 	pub fn deinit(self: *Renderer) void {

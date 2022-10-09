@@ -420,6 +420,7 @@ pub const Planet = struct {
 			const pixel = image.pixels.rgba32[imageY * image.width + imageX];
 			self.elevation[idx] = self.radius + @intToFloat(f32, pixel.r) * 0.1 - 9.5;
 			self.waterMass[idx] = std.math.max(0, (self.radius + 5) - self.elevation[idx]) / kmPerWaterMass;
+			self.vegetation[idx] = if (self.waterMass[idx] == 0.0 and self.elevation[idx] - self.radius < 10.0) 1.0 else 0.0;
 		}
 	}
 
