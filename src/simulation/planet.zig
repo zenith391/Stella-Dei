@@ -520,7 +520,6 @@ pub const Planet = struct {
 		self.upload(loop, displayMode, axialTilt);
 		for (self.mesh.vao) |vao, vaoIdx| {
 			gl.bindVertexArray(vao);
-			// TODO: use actual number of elements per octant
 			gl.drawElements(gl.TRIANGLES, self.mesh.num_elements[vaoIdx], gl.UNSIGNED_INT, null);
 		}
 	}
@@ -1013,7 +1012,7 @@ pub const Planet = struct {
 	/// Returns the mass of all the air above the given point's area, in 10⁹ kg
 	pub inline fn getAirMass(self: Planet, idx: usize) f32 {
 		// + 1 is because there will never be 0 kg of air (and if it's the case it breaks a bunch of computations)
-		return self.waterVaporMass[idx] + self.averageNitrogenMass + self.averageOxygenMass + self.averageCarbonDioxideMass + 1; // + TODO other gases
+		return self.waterVaporMass[idx] + self.averageNitrogenMass + self.averageOxygenMass + self.averageCarbonDioxideMass + 1;
 	}
 
 	pub inline fn getAirPressure(self: Planet, substanceDivider: f64, temperature: f32, vaporMass: f64) f64 {
@@ -1029,10 +1028,11 @@ pub const Planet = struct {
 	/// The fact that it is off for below 0°C isn't important as we're doing
 	/// quite big approximations anyways
 	fn getEquilibriumVaporPressure_Unoptimized(temperature: f32) f32 {
-		// TODO: precompute boiling point and then do a lerp between precomputed values
 		return 0.61078 * @exp(17.27 * (temperature-273.15) / (temperature + 237.3 - 273.15)) * 1000;
 	}
 
+  /// We precompute the values from getEquilibriumVaporPressure so that calling the function
+  /// is faster.
 	const equilibriumVaporPressures = blk: {
 		const from = 0.0;
 		const to = 1000.0;

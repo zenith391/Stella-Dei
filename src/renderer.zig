@@ -132,6 +132,22 @@ pub const Renderer = struct {
 		};
 	}
 
+	pub fn reloadShaders(self: *Renderer) !void {
+		const terrainProgram = try ShaderProgram.loadFromPath("src/shaders/terrain");
+		const entityProgram = try ShaderProgram.loadFromPath("src/shaders/entity");
+		const skyboxProgram = try ShaderProgram.loadFromPath("src/shaders/skybox");
+		const sunProgram = try ShaderProgram.loadFromPath("src/shaders/sun");
+		const cloudsProgram = try ShaderProgram.loadFromPath("src/shaders/clouds");
+
+		self.terrainProgram = terrainProgram;
+		self.entityProgram = entityProgram;
+		self.skyboxProgram = skyboxProgram;
+		self.sunProgram = sunProgram;
+		self.cloudsProgram = cloudsProgram;
+
+		log.debug("Reloaded shaders.", .{});
+	}
+
 	pub fn onScroll(self: *Renderer, xOffset: f32, yOffset: f32) void {
 		self.tempScroll.x += xOffset;
 		self.tempScroll.y += yOffset;
@@ -498,6 +514,41 @@ const ShaderProgram = struct {
 
 		return program;
 	}
+
+  pub fn loadFromPath(comptime path: []const u8) !ShaderProgram {
+	var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+	defer arena.deinit();
+	const allocator = arena.allocator();
+
+	const vertexShader = Shader.create(gl.VERTEX_SHADER);
+		defer vertexShader.deinit();
+
+	const vertexFile = try std.fs.cwd().openFile(path ++ ".vs", .{});
+	defer vertexFile.close();
+
+		vertexShader.setSource(try allocator.dupeZ(
+	  u8, try vertexFile.readToEndAlloc(allocator, std.math.maxInt(usize))
+	));
+		try vertexShader.compile();
+
+		const fragmentShader = Shader.create(gl.FRAGMENT_SHADER);
+		defer fragmentShader.deinit();
+
+	const fragmentFile = try std.fs.cwd().openFile(path ++ ".fs", .{});
+	defer fragmentFile.close();
+
+	fragmentShader.setSource(try allocator.dupeZ(
+	  u8, try fragmentFile.readToEndAlloc(allocator, std.math.maxInt(usize))
+	));
+		try fragmentShader.compile();
+
+		var program = ShaderProgram.create();
+		program.attach(fragmentShader);
+		program.attach(vertexShader);
+		try program.link();
+
+		return program;
+  }
 
 	pub fn setUniformVec2(self: ShaderProgram, uniform: [:0]const u8, vec: Vec2) void {
 		const location = gl.getUniformLocation(self.program, uniform);

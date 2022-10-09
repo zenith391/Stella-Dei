@@ -2,6 +2,7 @@ const std = @import("std");
 const gl = @import("gl");
 const za = @import("zalgebra");
 const glfw = @import("glfw");
+const nvg = @import("nanovg");
 const nk = @import("../nuklear.zig");
 const ui = @import("../ui.zig");
 
@@ -10,6 +11,7 @@ const Renderer = @import("../renderer.zig").Renderer;
 const Texture = @import("../renderer.zig").Texture;
 const MouseButton = glfw.mouse_button.MouseButton;
 const SoundTrack = @import("../audio.zig").SoundTrack;
+const MainMenuState = @import("main_menu.zig").MainMenuState;
 
 const Lifeform = @import("../simulation/life.zig").Lifeform;
 const Planet = @import("../simulation/planet.zig").Planet;
@@ -104,6 +106,7 @@ pub const SunMesh = struct {
 	pub fn deinit(allocator: std.mem.Allocator) void {
 		if (sun_mesh) |mesh| {
 			mesh.deinit(allocator);
+			sun_mesh = null;
 		}
 	}
 };
@@ -166,6 +169,7 @@ pub const PlayState = struct {
 	debug_spawnRabbits: bool = false,
 	/// Save the game on the next call to update()
 	defer_saveGame: bool = false,
+	showEscapeMenu: bool = false,
 
 	selectedTool: GameTool = .None,
 	meanTemperature: f32 = 0.0,
@@ -236,7 +240,7 @@ pub const PlayState = struct {
 		const size = renderer.framebufferSize;
 
 		// Move the camera when dragging the mouse
-		if (window.getMouseButton(.right) == .press) {
+		if (window.getMouseButton(.right) == .press and !self.showEscapeMenu) {
 			const glfwCursorPos = game.window.getCursorPos() catch unreachable;
 			const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
 			const delta = cursorPos.sub(self.dragStart).scale(1 / 100.0);
@@ -439,6 +443,8 @@ pub const PlayState = struct {
 	// As updated slices (temperature and water elevation) are updated by a
 	// swap. This is atomic.
 	pub fn update(self: *PlayState, game: *Game, dt: f32) void {
+		if (self.showEscapeMenu) return;
+
 		const planet = &self.planet;
 
 		var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime * 2*std.math.pi, 2*std.math.pi));
@@ -549,6 +555,11 @@ pub const PlayState = struct {
 		_ = scancode;
 		_ = mods;
 		if (action == .press) {
+			if (key == .escape) {
+				self.showEscapeMenu = !self.showEscapeMenu;
+			}
+
+			if (self.showEscapeMenu) return;
 			if (key == .F3) {
 				self.debug_showMoreInfo = !self.debug_showMoreInfo;
 			}
@@ -562,6 +573,8 @@ pub const PlayState = struct {
 	}
 
 	pub fn mousePressed(self: *PlayState, game: *Game, button: MouseButton) void {
+		if (self.showEscapeMenu) return;
+
 		if (self.selectedTool == .PlaceLife and button == .left) {
 			const planet = &self.planet;
 			const point = self.selectedPoint;
@@ -579,6 +592,8 @@ pub const PlayState = struct {
 	}
 
 	pub fn mouseScroll(self: *PlayState, _: *Game, yOffset: f64) void {
+		if (self.showEscapeMenu) return;
+
 		const zFar = self.planet.radius * 5;
 		const zNear = zFar / 10000;
 
@@ -590,6 +605,8 @@ pub const PlayState = struct {
 	}
 
 	pub fn mouseMoved(self: *PlayState, game: *Game, x: f32, y: f32) void {
+		if (self.showEscapeMenu) return;
+
 		const windowSize = game.window.getFramebufferSize() catch unreachable;
 		// Transform screen coordinates to Normalized Device Space coordinates
 		const ndsX = 2 * x / @intToFloat(f32, windowSize.width) - 1;
@@ -669,6 +686,33 @@ pub const PlayState = struct {
 
 			if (ui.button(vg, game, "clear-water", size.x() - 200, 70, 170, 40, "Clear all water")) {
 				self.debug_clearWater = true;
+			}
+			if (ui.button(vg, game, "reload-shaders", size.x() - 200, 140, 170, 40, "Reload shaders")) {
+				renderer.reloadShaders() catch unreachable;
+			}
+		}
+
+		if (self.showEscapeMenu) {
+			vg.beginPath();
+			vg.fillColor(nvg.rgbaf(0, 0, 0, 0.4));
+			vg.rect(0, 0, size.x(), size.y());
+			vg.fill();
+
+			const panelWidth = 200;
+			const panelHeight = 300;
+			const panelX = size.x() / 2 - panelWidth / 2;
+			const panelY = size.y() / 2 - panelHeight / 2;
+
+			vg.beginPath();
+			vg.fillColor(nvg.rgbf(0.8, 0.8, 0.8));
+			vg.rect(panelX, panelY, panelWidth, panelHeight);
+			vg.fill();
+
+			if (ui.button(vg, game, "save-game", panelX + panelWidth/2 - 170/2, panelY + 10, 170, 40, "Save")) {
+				self.defer_saveGame = true;
+			}
+			if (ui.button(vg, game, "exit-game", panelX + panelWidth/2 - 170/2, panelY + 80, 170, 40, "Exit")) {
+				game.setState(MainMenuState);
 			}
 		}
 

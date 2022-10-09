@@ -15,7 +15,6 @@ in vec3 worldNormal;
 in vec3 worldPosition;
 in float interpData;
 in float waterElevation;
-in float totalElevation;
 in float vegetation;
 in float outSelected;
 in vec3 tangentViewPos;
@@ -90,10 +89,9 @@ void main() {
 			waterTreshold = 0.0002 + (noiseValue() * 2 - 1) * 0.0001;
 		}
 		
-		float distToCenter = length(worldPosition) - waterElevation * 10;
-		// waterElevation = elevation + water (km)
+		// totalElevation = elevation + water (km)
 		// partialWaterElevation = water (km)
-		float partialWaterElevation = totalElevation - distToCenter;
+		float partialWaterElevation = waterElevation;
 		if (partialWaterElevation >= waterTreshold) {
 			float depthMultiplier = 0.2;
 			float alphaMultiplier = 1.0;

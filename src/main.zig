@@ -89,6 +89,7 @@ pub const Game = struct {
 		}
 		self.deinitState();
 		self.audio.deinit();
+		self.imgui_state.deinit();
 	}
 };
 
