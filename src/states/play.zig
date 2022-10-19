@@ -214,9 +214,9 @@ pub const PlayState = struct {
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u64);
-		const planet = Planet.generate(game.allocator, 6, planetRadius, seed, .{}) catch unreachable;
+		const planet = Planet.generate(game.allocator, 7, planetRadius, seed, .{}) catch unreachable;
 
-		if (true) {
+		if (false) {
 			// Load Earth
 			var file = std.fs.cwd().openFile("assets/big-earth.png", .{}) catch unreachable;
 			defer file.close();
@@ -575,6 +575,9 @@ pub const PlayState = struct {
 					@mod(@enumToInt(self.displayMode) + 1, numEnumFields)
 				);
 			}
+			if (key == .space) {
+				self.paused = !self.paused;
+			}
 		}
 	}
 
@@ -717,6 +720,18 @@ pub const PlayState = struct {
 			}
 			if (ui.button(vg, game, "exit-game", panelX + panelWidth/2 - 170/2, panelY + 80, 170, 40, "Exit")) {
 				game.setState(MainMenuState);
+			}
+		}
+
+		const renderHud = !self.showEscapeMenu;
+		if (renderHud) {
+			const panelWidth = 200;
+			const panelHeight = 60;
+			const panelX = size.x() / 2 - panelWidth / 2;
+			const panelY = size.y() - panelHeight - 10;
+
+			if (ui.button(vg, game, "emit-water", panelX + 10, panelY + 10, 170, 40, "Emit Water Tool")) {
+				self.selectedTool = .EmitWater;
 			}
 		}
 

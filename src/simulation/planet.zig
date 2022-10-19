@@ -22,6 +22,13 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Allocator = std.mem.Allocator;
 
+const VECTOR_SIZE = 4; // TODO(stage2): std.simd.suggestVectorSize(f32);
+const VECTOR_ALIGN = @alignOf(SimdVector);
+const SimdVector = @Vector(VECTOR_SIZE, f32);
+const IndexVector = @Vector(VECTOR_SIZE, usize);
+const VECTOR_ZERO = @splat(VECTOR_SIZE, @as(f32, 0.0));
+const VECTOR_ONE = @splat(VECTOR_SIZE, @as(f32, 1.0));
+
 pub const CLContext = if (!USE_OPENCL) struct {} else struct {
 	device: cl.cl_device_id,
 	queue: cl.cl_command_queue,
@@ -253,16 +260,16 @@ pub const Planet = struct {
 		const numPoints      = mesh.num_points;
 		const vertices       = try simAlloc.alloc(Vec3,   numPoints);
 		const vertNeighbours = try simAlloc.alloc([6]u32, numPoints);
-		const elevation      = try simAlloc.alloc(f32,    numPoints);
-		const waterElev      = try simAlloc.alloc(f32,    numPoints);
+		const elevation      = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
+		const waterElev      = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
 		const airVelocity    = try simAlloc.alloc(Vec2,   numPoints);
-		const waterVaporMass = try simAlloc.alloc(f32,    numPoints);
+		const waterVaporMass = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
 		const rainfall       = try simAlloc.alloc(f32,    numPoints);
-		const temperature    = try simAlloc.alloc(f32,    numPoints);
-		const vegetation     = try simAlloc.alloc(f32,    numPoints);
-		const newTemp        = try simAlloc.alloc(f32,    numPoints);
-		const newWaterElev   = try simAlloc.alloc(f32,    numPoints);
-		const newVaporMass   = try simAlloc.alloc(f32,    numPoints);
+		const temperature    = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
+		const vegetation     = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
+		const newTemp        = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
+		const newWaterElev   = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
+		const newVaporMass   = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
 		const heatCapacCache = try simAlloc.alloc(f32,    numPoints);
 
 		const lifeforms = try std.ArrayListUnmanaged(Lifeform).initCapacity(simAlloc, 0);
@@ -600,6 +607,19 @@ pub const Planet = struct {
 		return self.verticesNeighbours[idx][directionInt];
 	}
 
+	pub inline fn getNeighbourSimd(self: Planet, indexes: IndexVector, direction: Direction) IndexVector {
+		const directionInt = @enumToInt(direction);
+		var neighbours: IndexVector = undefined;
+		// XXX: do something more parallel?
+		{
+			var i: usize = 0;
+			while (i < VECTOR_SIZE) : (i += 1) {
+				neighbours[i] = self.verticesNeighbours[indexes[i]][directionInt];
+			}
+		}
+		return neighbours;
+	}
+
 	pub inline fn getNeighbours(self: Planet, idx: usize) [6]usize {
 		return [6]usize {
 			self.getNeighbour(idx, .ForwardLeft),
@@ -824,7 +844,19 @@ pub const Planet = struct {
 		}
 		_ = cl.clFinish(ctx.queue);
 	}
+
+	inline fn loadSimdVector(slice: []const f32, i: usize) *const SimdVector {
+		return @ptrCast(*const SimdVector, @alignCast(VECTOR_ALIGN, &slice[i]));
+	}
+
+	inline fn saveSimdVector(slice: []f32, i: usize, vector: SimdVector) void {
+		@ptrCast(*SimdVector, @alignCast(VECTOR_ALIGN, &slice[i])).* = vector;
+	}
 	
+	// Before SIMD:
+	//   ReleaseFast: 11000µs à 17000µs
+	// After SIMD:
+	//   ReleaseFast: 3000µs to 8000µs
 	fn simulateWater(self: *Planet, loop: *EventLoop, options: SimulationOptions, numIterations: usize, start: usize, end: usize) void {
 		loop.yield();
 		const zone = tracy.ZoneN(@src(), "Water Simulation");
@@ -837,84 +869,67 @@ pub const Planet = struct {
 		const meanDistance = std.math.sqrt(meanPointArea); // m
 		const meanDistanceKm = meanDistance / 1000; // km
 		const kmPerWaterMass = self.getKmPerWaterMass(); // km / 10⁹ kg
-		// {
-		// 	const diffusivity = 10.0;
-		// 	const a = dt * diffusivity / meanDistance;
-		// 	_ = numIterations;
-
-		// 	var k: usize = 0;
-		// 	while (k < 20) : (k += 1) {
-		// 		var i: usize = start;
-		// 		while (i < end) : (i += 1) {
-		// 			var mass = self.waterMass[i];// + self.elevation[i] / kmPerWaterMass;
-		// 			var numShared: f32 = 0;
-		// 			const selfElevation = self.elevation[i]
-		// 				+ self.waterMass[i] * kmPerWaterMass;
-		// 			for (self.getNeighbours(i)) |neighbourIdx| {
-		// 				const neighbourElevation = self.elevation[neighbourIdx]
-		// 					+ newMass[neighbourIdx] * kmPerWaterMass;
-		// 					_ = neighbourElevation; _ = selfElevation;
-		// 				//if (neighbourElevation > selfElevation) {
-		// 					mass += a * newMass[neighbourIdx];// + self.elevation[neighbourIdx] / kmPerWaterMass);
-		// 					numShared += 1;
-		// 				//}
-		// 			}
-		// 			mass = mass / (1 + numShared * a);
-		// 			newMass[i] = mass;// - self.elevation[i] / kmPerWaterMass;
-		// 		}
-		// 	}
-		// }
 
 		const shareFactor = 0.00002 * dt / (6 * @intToFloat(f32, numIterations));
 		const substanceDivider: f64 = self.getSubstanceDivider();
 		const meanAtmVolume: f64 = self.getMeanPointArea() * 12_000; // m³
+		//_ = Vector;
 		
+		const startTime = std.time.nanoTimestamp();
 		// Do some liquid simulation
 		var i: usize = start;
-		while (i < end) : (i += 1) {
+		while (i < end - VECTOR_SIZE + 1) : (i += VECTOR_SIZE) {
 			// only fluid if it's not ice
-			const temp = self.temperature[i];
-			if (temp > 273.15 or true) {
-				var mass = self.newWaterMass[i];
-				// boiling
-				// TODO: more accurate
-				if (temp > 373.15) {
-					const diff = std.math.min(100_000_000, mass);
-					mass = mass - diff;
-					self.newWaterVaporMass[i] += diff;
-				} else {
-					// evaporation
-					// TODO: more accurate (make it depend on temperature and mass / surface area)
-					const RH = Planet.getRelativeHumidity(substanceDivider, temp, self.waterVaporMass[i]);
-					// evaporation only happens when the air isn't saturated
-					if (RH < 1) {
-						const diff = std.math.min(0.01 * dt, mass) * @as(f32, if (temp > 273.15) 1.0 else 0.0);
-						mass = mass - diff;
-						self.newWaterVaporMass[i] += diff;
-					}
+			const indices = blk: {
+				var vector: IndexVector = undefined;
+				comptime var j: usize = 0;
+				inline while (j < VECTOR_SIZE) : (j += 1) {
+					vector[j] = i + j;
 				}
+				break :blk vector;
+			};
+			const temp = loadSimdVector(self.temperature, i).*;
+			const elevation = loadSimdVector(self.elevation, i).*;
+			const mass = loadSimdVector(self.newWaterMass, i).*;
+			const vaporMass = loadSimdVector(self.newWaterVaporMass, i).*;
+			_ = newMass;
 
-				const totalHeight = self.elevation[i] + mass * kmPerWaterMass;
-				var shared = mass * shareFactor;
-				// -1 is to account for rounding errors
-				if (shared > mass/7) {
-					// TODO: increase step size
-					shared = std.math.max(0, mass/7);
-				}
+			//const doApply = temp > @splat(VECTOR_SIZE, 273.15);
 
-				var sharedMass: f32 = 0;
-				std.debug.assert(self.waterMass[i] >= 0);
-				sharedMass += self.sendWater(self.getNeighbour(i, .ForwardLeft), shared, totalHeight, kmPerWaterMass);
-				sharedMass += self.sendWater(self.getNeighbour(i, .ForwardRight), shared, totalHeight, kmPerWaterMass);
-				sharedMass += self.sendWater(self.getNeighbour(i, .BackwardLeft), shared, totalHeight, kmPerWaterMass);
-				sharedMass += self.sendWater(self.getNeighbour(i, .BackwardRight), shared, totalHeight, kmPerWaterMass);
-				sharedMass += self.sendWater(self.getNeighbour(i, .Left), shared, totalHeight, kmPerWaterMass);
-				sharedMass += self.sendWater(self.getNeighbour(i, .Right), shared, totalHeight, kmPerWaterMass);
-				newMass[i] = mass - sharedMass;
-				if (newMass[i] < 0) std.log.info("{d} - {d}, 6 * shared = {d}", .{ mass, sharedMass, shared * 6 });
-				std.debug.assert(newMass[i] >= 0);
+			// Mass to remove from the current cell because it has been shared to others or evaporated
+			var massToRemove = @splat(VECTOR_SIZE, @as(f32, 0.0));
+			{
+				const RH = Planet.getRelativeHumidities(substanceDivider, temp, vaporMass);
+				// evaporation only happens when the air isn't saturated and when the water is above 0°C
+				const hasSuitableHumidity = RH < @splat(VECTOR_SIZE, @as(f32, 1.0));
+				const isLiquid = temp > @splat(VECTOR_SIZE, @as(f32, 273.15));
+				const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @splat(VECTOR_SIZE, false));
+				const computedDiff = @minimum(@splat(VECTOR_SIZE, 0.01 * dt), mass);
+				const diff = @select(f32, doEvaporation, computedDiff, VECTOR_ZERO);
+				massToRemove += diff;
+				saveSimdVector(self.newWaterVaporMass, i, vaporMass + diff);
 			}
+
+			const totalHeight = elevation + mass * @splat(VECTOR_SIZE, kmPerWaterMass);
+			// NOTE: this could just be replaced by setting shareFactor to be 1/7 at maximum
+			const shared = @minimum(
+				mass * @splat(VECTOR_SIZE, shareFactor),
+				mass / @splat(VECTOR_SIZE, @as(f32, 7.0))
+			);
+
+			//std.debug.assert(self.waterMass[i] >= 0);
+
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardLeft), shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardRight), shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardLeft), shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardRight), shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Left), shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Right), shared, totalHeight, kmPerWaterMass);
+			// TODO: re-add debug asserts
+			saveSimdVector(self.newWaterMass, i, mass - massToRemove);
 		}
+		const endTime = std.time.nanoTimestamp();
+		std.log.info("Took {d}µs to do one step of water simulation.", .{ @divTrunc(endTime - startTime, 1000) });
 
 		// Those are simply the coordinates of points in an hexagon,
 		// which is enough to get a (rough approximation of a) tangent
@@ -980,7 +995,7 @@ pub const Planet = struct {
 
 		// Do some wind simulation
 		i = start;
-		if (true) {
+		if (false) {
 		
 		// For simplicity, take the viscosity of air at 20°C
 		// (see https://en.wikipedia.org/wiki/Viscosity#Air)
@@ -1053,10 +1068,48 @@ pub const Planet = struct {
 	/// the amount of substance can get very high.
 	/// Note: instead of using the gas constant, the Boltzmann constant is directly used
 	/// as substanceDivider also accounts for the Avogadro constant (NA)
-	pub inline fn getPartialPressure(substanceDivider: f64, temperature: f32, mass: f64) f64 {
+	pub inline fn getPartialPressure(substanceDivider: f64, temperature: f32, mass: f64) f32 {
 		const k = 1.380649 * comptime std.math.pow(f64, 10, -23); // Boltzmann constant
 		const waterPartialPressure = (mass * k * temperature) / substanceDivider; // Pa
-		return waterPartialPressure;
+		return @floatCast(f32, waterPartialPressure);
+	}
+
+	pub inline fn getPartialPressures(substanceDivider: f64, temperatures: SimdVector, masses: SimdVector) SimdVector {
+		// Intermediary computations are done if f64
+		const k = @splat(VECTOR_SIZE, 1.380649 * comptime std.math.pow(f64, 10, -23)); // Boltzmann constant
+
+		// Workaround as you can't do @floatCast with a vector
+		// TODO: send issue to ziglang/zig
+		// TODO: benchmark whether manually @floatCast'ing makes it slower than a naive non-SIMD approach
+		const masses_f64 = blk: {
+			var vector: @Vector(VECTOR_SIZE, f64) = undefined;
+			comptime var i: usize = 0;
+			inline while (i < VECTOR_SIZE) : (i += 1) {
+				vector[i] = @floatCast(f64, masses[i]);
+			}
+			break :blk vector;
+		};
+
+		const temperatures_f64 = blk: {
+			var vector: @Vector(VECTOR_SIZE, f64) = undefined;
+			comptime var i: usize = 0;
+			inline while (i < VECTOR_SIZE) : (i += 1) {
+				vector[i] = @floatCast(f64, temperatures[i]);
+			}
+			break :blk vector;
+		};
+
+		const waterPartialPressures = (masses_f64 * k * temperatures_f64) / @splat(VECTOR_SIZE, substanceDivider); // Pa
+
+		const results_f32 = blk: {
+			var vector: @Vector(VECTOR_SIZE, f32) = undefined;
+			comptime var i: usize = 0;
+			inline while (i < VECTOR_SIZE) : (i += 1) {
+				vector[i] = @floatCast(f32, waterPartialPressures[i]);
+			}
+			break :blk vector;
+		};
+		return results_f32;
 	}
 
 	/// Returns the mass of all the air above the given point's area, in 10⁹ kg
@@ -1065,12 +1118,12 @@ pub const Planet = struct {
 		return self.waterVaporMass[idx] + self.averageNitrogenMass + self.averageOxygenMass + self.averageCarbonDioxideMass + 1;
 	}
 
-	pub inline fn getAirPressure(self: Planet, substanceDivider: f64, temperature: f32, vaporMass: f64) f64 {
+	pub inline fn getAirPressure(self: Planet, substanceDivider: f64, temperature: f32, vaporMass: f64) f32 {
 		return getPartialPressure(substanceDivider, temperature, vaporMass + self.averageNitrogenMass + self.averageOxygenMass + self.averageCarbonDioxideMass + 1);
 	}
 
 	/// Returns the pressure that air excerts on a given point, in Pascal.
-	pub fn getAirPressureOfPoint(self: Planet, idx: usize) f64 {
+	pub fn getAirPressureOfPoint(self: Planet, idx: usize) f32 {
 		return self.getAirPressure(self.getSubstanceDivider(), self.temperature[idx], self.waterVaporMass[idx]);
 	}
 
@@ -1081,8 +1134,8 @@ pub const Planet = struct {
 		return 0.61078 * @exp(17.27 * (temperature-273.15) / (temperature + 237.3 - 273.15)) * 1000;
 	}
 
-  /// We precompute the values from getEquilibriumVaporPressure so that calling the function
-  /// is faster.
+	/// We precompute the values from getEquilibriumVaporPressure so that calling the function
+	/// is faster.
 	const equilibriumVaporPressures = blk: {
 		const from = 0.0;
 		const to = 1000.0;
@@ -1118,8 +1171,22 @@ pub const Planet = struct {
 		}
 	}
 
-	pub inline fn getRelativeHumidity(substanceDivider: f64, temperature: f32, mass: f64) f64 {
+	/// This function is implemented quite naively as indexing isn't easily parallelizable
+	pub inline fn getEquilibriumVaporPressures(temperature: SimdVector) SimdVector {
+		var vector: SimdVector = undefined;
+		comptime var i: usize = 0;
+		inline while (i < VECTOR_SIZE) : (i += 1) {
+			vector[i] = getEquilibriumVaporPressure(temperature[i]);
+		}
+		return vector;
+	}
+
+	pub inline fn getRelativeHumidity(substanceDivider: f64, temperature: f32, mass: f64) f32 {
 		return getPartialPressure(substanceDivider, temperature, mass) / getEquilibriumVaporPressure(temperature);
+	}
+
+	pub inline fn getRelativeHumidities(substanceDivider: f64, temperatures: SimdVector, masses: SimdVector) SimdVector {
+		return getPartialPressures(substanceDivider, temperatures, masses) / getEquilibriumVaporPressures(temperatures);
 	}
 
 	/// Returns the constant used for computations with the perfect gas law
@@ -1137,17 +1204,51 @@ pub const Planet = struct {
 		return substanceDivider;
 	}
 
-	fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32, kmPerWaterMass: f32) f32 {
-		const targetTotalHeight = self.elevation[target] + self.waterMass[target] * kmPerWaterMass;
-		if (totalHeight > targetTotalHeight) {
-			var transmitted = std.math.min(shared, shared * (totalHeight - targetTotalHeight) / 2 / kmPerWaterMass);
-			std.debug.assert(transmitted >= 0);
-			self.newWaterMass[target] += transmitted;
-			return transmitted;
-		} else {
-			return 0;
+	fn sendWater(self: Planet, target: @Vector(VECTOR_SIZE, usize), shared: SimdVector, totalHeight: SimdVector, kmPerWaterMass: f32) SimdVector {
+		const elevation = blk: {
+			var vector: SimdVector = undefined;
+			comptime var i: usize = 0;
+			inline while (i < VECTOR_SIZE) : (i += 1) {
+				vector[i] = self.elevation[target[i]];
+			}
+			break :blk vector;
+		};
+		const waterMass = blk: {
+			var vector: SimdVector = undefined;
+			comptime var i: usize = 0;
+			inline while (i < VECTOR_SIZE) : (i += 1) {
+				vector[i] = self.waterMass[target[i]];
+			}
+			break :blk vector;
+		};
+		const targetTotalHeight = elevation + waterMass * @splat(VECTOR_SIZE, kmPerWaterMass);
+
+		const doTransmit = totalHeight > targetTotalHeight;
+		const originalTransmitted = @minimum(shared, shared * (totalHeight - targetTotalHeight) / @splat(VECTOR_SIZE, kmPerWaterMass) / @splat(VECTOR_SIZE, @as(f32, 2.0)));
+
+		const zero = @splat(VECTOR_SIZE, @as(f32, 0.0));
+		const transmitted = @select(f32, doTransmit, originalTransmitted, zero);
+		//std.debug.assert(transmitted >= 0);
+		{
+			comptime var i: usize = 0;
+			inline while (i < VECTOR_SIZE) : (i += 1) {
+				self.newWaterMass[target[i]] += transmitted[i];
+			}
 		}
+		return transmitted;
 	}
+
+	// fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32, kmPerWaterMass: f32) f32 {
+	// 	const targetTotalHeight = self.elevation[target] + self.waterMass[target] * kmPerWaterMass;
+	// 	if (totalHeight > targetTotalHeight) {
+	// 		var transmitted = std.math.min(shared, shared * (totalHeight - targetTotalHeight) / 2 / kmPerWaterMass);
+	// 		std.debug.assert(transmitted >= 0);
+	// 		self.newWaterMass[target] += transmitted;
+	// 		return transmitted;
+	// 	} else {
+	// 		return 0;
+	// 	}
+	// }
 
 	fn sendWaterVapor(self: Planet, target: usize, shared: f32, selfMass: f32) f32 {
 		const targetMass = self.waterVaporMass[target];
@@ -1202,8 +1303,10 @@ pub const Planet = struct {
 			var iteration: usize = 0;
 			var numIterations: usize = 1;
 			while (iteration < numIterations) : (iteration += 1) {
-				std.mem.copy(f32, self.newWaterMass, self.waterMass);
-				std.mem.copy(f32, self.newWaterVaporMass, self.waterVaporMass);
+				//std.mem.copy(f32, self.newWaterMass, self.waterMass);
+				//std.mem.copy(f32, self.newWaterVaporMass, self.waterVaporMass);
+				@memcpy(@ptrCast([*]u8, self.newWaterMass.ptr), @ptrCast([*]u8, self.waterMass.ptr), self.waterMass.len * 4);
+				@memcpy(@ptrCast([*]u8, self.newWaterVaporMass.ptr), @ptrCast([*]u8, self.waterVaporMass.ptr), self.waterMass.len * 4);
 
 				{
 					var jobs: [32]@Frame(simulateWater) = undefined;

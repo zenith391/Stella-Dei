@@ -1,6 +1,5 @@
 const std  = @import("std");
 const deps = @import("deps.zig");
-const build_tracy = @import(".zigmod/deps/git/github.com/SpexGuy/Zig-Tracy/build_tracy.zig");
 const glfw = deps.imports.build_glfw;
 
 /// Step used to convert from tabs to space

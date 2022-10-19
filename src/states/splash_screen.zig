@@ -1,6 +1,5 @@
 const std = @import("std");
 const gl = @import("gl");
-const nk = @import("../nuklear.zig");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
 const MainMenuState = @import("main_menu.zig").MainMenuState;

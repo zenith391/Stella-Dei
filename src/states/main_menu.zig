@@ -1,7 +1,6 @@
 const std = @import("std");
 const gl = @import("gl");
 const za = @import("zalgebra");
-const nk = @import("../nuklear.zig");
 const nvg = @import("nanovg");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
