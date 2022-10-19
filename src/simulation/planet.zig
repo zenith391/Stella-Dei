@@ -864,18 +864,15 @@ pub const Planet = struct {
 
 		const dt = options.dt * options.timeScale;
 
-		const newMass = self.newWaterMass;
 		const meanPointArea = self.getMeanPointArea();
 		const meanDistance = std.math.sqrt(meanPointArea); // m
 		const meanDistanceKm = meanDistance / 1000; // km
 		const kmPerWaterMass = self.getKmPerWaterMass(); // km / 10⁹ kg
 
-		const shareFactor = 0.00002 * dt / (6 * @intToFloat(f32, numIterations));
+		const shareFactor = std.math.min(0.00002 * dt / (6 * @intToFloat(f32, numIterations)), 1.0 / 7.0);
 		const substanceDivider: f64 = self.getSubstanceDivider();
 		const meanAtmVolume: f64 = self.getMeanPointArea() * 12_000; // m³
-		//_ = Vector;
 		
-		const startTime = std.time.nanoTimestamp();
 		// Do some liquid simulation
 		var i: usize = start;
 		while (i < end - VECTOR_SIZE + 1) : (i += VECTOR_SIZE) {
@@ -890,14 +887,12 @@ pub const Planet = struct {
 			};
 			const temp = loadSimdVector(self.temperature, i).*;
 			const elevation = loadSimdVector(self.elevation, i).*;
-			const mass = loadSimdVector(self.newWaterMass, i).*;
+			var mass = loadSimdVector(self.newWaterMass, i).*;
 			const vaporMass = loadSimdVector(self.newWaterVaporMass, i).*;
-			_ = newMass;
 
 			//const doApply = temp > @splat(VECTOR_SIZE, 273.15);
 
 			// Mass to remove from the current cell because it has been shared to others or evaporated
-			var massToRemove = @splat(VECTOR_SIZE, @as(f32, 0.0));
 			{
 				const RH = Planet.getRelativeHumidities(substanceDivider, temp, vaporMass);
 				// evaporation only happens when the air isn't saturated and when the water is above 0°C
@@ -906,30 +901,28 @@ pub const Planet = struct {
 				const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @splat(VECTOR_SIZE, false));
 				const computedDiff = @minimum(@splat(VECTOR_SIZE, 0.01 * dt), mass);
 				const diff = @select(f32, doEvaporation, computedDiff, VECTOR_ZERO);
-				massToRemove += diff;
+				mass -= diff;
 				saveSimdVector(self.newWaterVaporMass, i, vaporMass + diff);
 			}
 
 			const totalHeight = elevation + mass * @splat(VECTOR_SIZE, kmPerWaterMass);
-			// NOTE: this could just be replaced by setting shareFactor to be 1/7 at maximum
-			const shared = @minimum(
-				mass * @splat(VECTOR_SIZE, shareFactor),
-				mass / @splat(VECTOR_SIZE, @as(f32, 7.0))
-			);
+			const shared = mass * @splat(VECTOR_SIZE, shareFactor);
 
-			//std.debug.assert(self.waterMass[i] >= 0);
-
+			var massToRemove = @splat(VECTOR_SIZE, @as(f32, 0.0));
 			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardLeft), shared, totalHeight, kmPerWaterMass);
 			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardRight), shared, totalHeight, kmPerWaterMass);
 			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardLeft), shared, totalHeight, kmPerWaterMass);
 			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardRight), shared, totalHeight, kmPerWaterMass);
 			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Left), shared, totalHeight, kmPerWaterMass);
 			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Right), shared, totalHeight, kmPerWaterMass);
-			// TODO: re-add debug asserts
+
+			if (!@reduce(.And, (mass - massToRemove) >= VECTOR_ZERO)) {
+				std.log.err("PROBLEM! {d} < {d}", .{ mass, massToRemove });
+			}
+
+			std.debug.assert(@reduce(.And, (mass - massToRemove) >= VECTOR_ZERO));
 			saveSimdVector(self.newWaterMass, i, mass - massToRemove);
 		}
-		const endTime = std.time.nanoTimestamp();
-		std.log.info("Took {d}µs to do one step of water simulation.", .{ @divTrunc(endTime - startTime, 1000) });
 
 		// Those are simply the coordinates of points in an hexagon,
 		// which is enough to get a (rough approximation of a) tangent
@@ -1228,7 +1221,6 @@ pub const Planet = struct {
 
 		const zero = @splat(VECTOR_SIZE, @as(f32, 0.0));
 		const transmitted = @select(f32, doTransmit, originalTransmitted, zero);
-		//std.debug.assert(transmitted >= 0);
 		{
 			comptime var i: usize = 0;
 			inline while (i < VECTOR_SIZE) : (i += 1) {
