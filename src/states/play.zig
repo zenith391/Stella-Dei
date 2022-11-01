@@ -214,7 +214,7 @@ pub const PlayState = struct {
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u64);
-		const planet = Planet.generate(game.allocator, 6, planetRadius, seed, .{}) catch unreachable;
+		const planet = Planet.generate(game.allocator, 7, planetRadius, seed, .{}) catch unreachable;
 
 		if (false) {
 			// Load Earth
@@ -725,7 +725,7 @@ pub const PlayState = struct {
 
 		const renderHud = !self.showEscapeMenu;
 		if (renderHud) {
-			const panelWidth = 190;
+			const panelWidth = 400;
 			const panelHeight = 70;
 			const panelX = size.x() / 2 - panelWidth / 2;
 			const panelY = size.y() - panelHeight - 15;
@@ -744,6 +744,15 @@ pub const PlayState = struct {
 			}
 			if (ui.toolButton(vg, game, "drain-water", panelX + 140, panelY, 50, 50, renderer.textureCache.get("ui/drain-water"))) {
 				self.selectedTool = .DrainWater;
+			}
+			if (ui.toolButton(vg, game, "place-vegetation", panelX + 210, panelY, 50, 50, renderer.textureCache.get("ui/place-vegetation"))) {
+				self.selectedTool = .PlaceVegetation;
+			}
+			if (ui.toolButton(vg, game, "raise-terrain", panelX + 280, panelY, 50, 50, renderer.textureCache.get("ui/raise-terrain"))) {
+				self.selectedTool = .RaiseTerrain;
+			}
+			if (ui.toolButton(vg, game, "lower-terrain", panelX + 350, panelY, 50, 50, renderer.textureCache.get("ui/lower-terrain"))) {
+				self.selectedTool = .LowerTerrain;
 			}
 		}
 
@@ -874,72 +883,6 @@ pub const PlayState = struct {
 		// 		if (self.timeScale < 190000) {
 		// 			self.timeScale = std.math.min(200_000, self.timeScale + 3600);
 		// 		}
-		// 	}
-		// }
-		// nk.nk_end(ctx);
-
-		// if (nk.nk_begin(ctx, "No Tool", .{ .x = 550, .y = 10, .w = 70, .h = 70 },
-		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
-			
-		// 	const waterIcon = renderer.textureCache.get("ui/no-tool").toNkImage();
-		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
-		// 		self.selectedTool = .None;
-		// 	}
-		// }
-		// nk.nk_end(ctx);
-
-		// if (nk.nk_begin(ctx, "Emit Water Tool", .{ .x = 625, .y = 10, .w = 70, .h = 70 },
-		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
-			
-		// 	const waterIcon = renderer.textureCache.get("ui/emit-water").toNkImage();
-		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
-		// 		self.selectedTool = .EmitWater;
-		// 	}
-		// }
-		// nk.nk_end(ctx);
-
-		// if (nk.nk_begin(ctx, "Drain Water Tool", .{ .x = 700, .y = 10, .w = 70, .h = 70 },
-		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
-			
-		// 	const waterIcon = renderer.textureCache.get("ui/drain-water").toNkImage();
-		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
-		// 		self.selectedTool = .DrainWater;
-		// 	}
-		// }
-		// nk.nk_end(ctx);
-
-		// if (nk.nk_begin(ctx, "Place Vegetation Tool", .{ .x = 775, .y = 10, .w = 70, .h = 70 },
-		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
-			
-		// 	const waterIcon = renderer.textureCache.get("ui/place-vegetation").toNkImage();
-		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
-		// 		self.selectedTool = .PlaceVegetation;
-		// 	}
-		// }
-		// nk.nk_end(ctx);
-
-		// if (nk.nk_begin(ctx, "Raise Terrain Tool", .{ .x = 850, .y = 10, .w = 70, .h = 70 },
-		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
-			
-		// 	const waterIcon = renderer.textureCache.get("ui/raise-terrain").toNkImage();
-		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
-		// 		self.selectedTool = .RaiseTerrain;
-		// 	}
-		// }
-		// nk.nk_end(ctx);
-
-		// if (nk.nk_begin(ctx, "Lower Terrain Tool", .{ .x = 925, .y = 10, .w = 70, .h = 70 },
-		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-		// 	nk.nk_layout_row_static(ctx, 60, 60, 1);
-			
-		// 	const waterIcon = renderer.textureCache.get("ui/lower-terrain").toNkImage();
-		// 	if (nk.nk_button_image(ctx, waterIcon) != 0) {
-		// 		self.selectedTool = .LowerTerrain;
 		// 	}
 		// }
 		// nk.nk_end(ctx);

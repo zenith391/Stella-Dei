@@ -32,7 +32,7 @@ pub const MainMenuState = struct {
 			earthFile = file;
 		} else |err| err catch {}; // ignore error
 
-		var planet = Planet.generate(game.allocator, 7, 5000, seed, .{ .generate_terrain = earthFile == null }) catch unreachable;
+		var planet = Planet.generate(game.allocator, if (@import("builtin").mode == .Debug) 7 else 8, 5000, seed, .{ .generate_terrain = earthFile == null }) catch unreachable;
 		if (earthFile) |*file| {
 			defer file.close();
 			planet.loadFromImage(game.allocator, file) catch {};
