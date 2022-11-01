@@ -1,5 +1,6 @@
 const std = @import("std");
 const nvg = @import("nanovg");
+const renderer = @import("renderer.zig");
 const Game = @import("main.zig").Game;
 
 const colors = struct {
@@ -10,6 +11,11 @@ pub const UiComponentState = union(enum) {
 	Button: struct {
 		color: nvg.Color,
 		pressed: bool = false,
+	},
+	ToolButton: struct {
+		color: nvg.Color,
+		pressed: bool = false,
+		underlineWidth: f32 = 0,
 	}
 };
 
@@ -44,6 +50,42 @@ pub fn button(vg: nvg, game: *Game, name: []const u8, x: f32, y: f32, w: f32, h:
 			return true;
 		} else {
 			state.Button.pressed = pressed;
+		}
+	}
+	return false;
+}
+
+pub fn toolButton(vg: nvg, game: *Game, name: []const u8, x: f32, y: f32, w: f32, h: f32, image: *renderer.Texture) bool {
+	const cursor = game.window.getCursorPos() catch unreachable;
+	const pressed = game.window.getMouseButton(.left) == .press;
+	const hovered = cursor.xpos >= x and cursor.ypos >= y and cursor.xpos < x + w and cursor.ypos < y + h + 20;
+	var state = game.imgui_state.get(name) orelse UiComponentState { .ToolButton = .{
+		.color = colors.main
+	}};
+	defer game.imgui_state.put(name, state) catch {};
+
+	const targetColor = if (hovered) nvg.rgb(50, 50, 200) else nvg.rgb(100, 100, 255);
+	state.ToolButton.color = nvg.lerpRGBA(state.ToolButton.color, targetColor, 1 - 0.2);
+
+	const targetUnderlineWidth = if (hovered) w else 10;
+	state.ToolButton.underlineWidth = state.ToolButton.underlineWidth * 0.8 + targetUnderlineWidth * 0.2;
+
+	vg.beginPath();
+	vg.fillPaint(vg.imagePattern(x, y, w, h, 0, image.toVgImage(vg), 1.0));
+	vg.roundedRect(x, y, w, h, 10);
+	vg.fill();
+
+	vg.beginPath();
+	vg.fillColor(state.ToolButton.color);
+	vg.roundedRect(x+w/2-state.ToolButton.underlineWidth/2, y+h+10, state.ToolButton.underlineWidth, 10, 5);
+	vg.fill();
+
+	if (hovered) {
+		if (state.ToolButton.pressed and pressed == false) {
+			state.ToolButton.pressed = false;
+			return true;
+		} else {
+			state.ToolButton.pressed = pressed;
 		}
 	}
 	return false;

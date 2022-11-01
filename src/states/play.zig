@@ -214,7 +214,7 @@ pub const PlayState = struct {
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u64);
-		const planet = Planet.generate(game.allocator, 7, planetRadius, seed, .{}) catch unreachable;
+		const planet = Planet.generate(game.allocator, 6, planetRadius, seed, .{}) catch unreachable;
 
 		if (false) {
 			// Load Earth
@@ -725,13 +725,25 @@ pub const PlayState = struct {
 
 		const renderHud = !self.showEscapeMenu;
 		if (renderHud) {
-			const panelWidth = 200;
-			const panelHeight = 60;
+			const panelWidth = 190;
+			const panelHeight = 70;
 			const panelX = size.x() / 2 - panelWidth / 2;
-			const panelY = size.y() - panelHeight - 10;
+			const panelY = size.y() - panelHeight - 15;
 
-			if (ui.button(vg, game, "emit-water", panelX + 10, panelY + 10, 170, 40, "Emit Water Tool")) {
+			const colorGradBottom = nvg.lerpRGBA(nvg.rgba(255,255,255,100), nvg.rgba(0,0,0,100), 1 - 0.2);
+			vg.beginPath();
+			vg.fillPaint(vg.linearGradient(panelX-5, panelY-5, panelX+panelWidth+10, panelY+panelHeight+10, nvg.rgb(255,255,255), colorGradBottom));
+			vg.roundedRect(panelX-5, panelY-5, panelWidth+10, panelHeight+10, 10);
+			vg.fill();
+
+			if (ui.toolButton(vg, game, "no-tool", panelX, panelY, 50, 50, renderer.textureCache.get("ui/no-tool"))) {
+				self.selectedTool = .None;
+			}
+			if (ui.toolButton(vg, game, "emit-water", panelX + 70, panelY, 50, 50, renderer.textureCache.get("ui/emit-water"))) {
 				self.selectedTool = .EmitWater;
+			}
+			if (ui.toolButton(vg, game, "drain-water", panelX + 140, panelY, 50, 50, renderer.textureCache.get("ui/drain-water"))) {
+				self.selectedTool = .DrainWater;
 			}
 		}
 

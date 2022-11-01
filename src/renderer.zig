@@ -110,6 +110,9 @@ pub const Renderer = struct {
 
 pub const Texture = struct {
 	texture: gl.GLuint,
+	nvgHandle: ?i32 = null,
+	width: usize,
+	height: usize,
 
 	const PixelFormat = enum(gl.GLenum) {
 		RGBA32 = gl.RGBA,
@@ -165,7 +168,7 @@ pub const Texture = struct {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-		return Texture { .texture = texture };
+		return Texture { .texture = texture, .width = width, .height = height };
 	}
 
 	pub fn initCubemap() Texture {
@@ -177,7 +180,7 @@ pub const Texture = struct {
 		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.MIRRORED_REPEAT);
 		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-		return Texture { .texture = texture };
+		return Texture { .texture = texture, .width = 1, .height = 1 };
 	}
 
 	pub fn generateMipmaps(self: Texture) void {
@@ -201,7 +204,6 @@ pub const Texture = struct {
 		gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.texture);
 		gl.texImage2D(@enumToInt(face), 0, gl.RGB, 
 			@intCast(c_int, width), @intCast(c_int, height), 0, gl.RGB, gl.UNSIGNED_BYTE, data.ptr);
-
 	}
 
 	/// Assumes RGB24
@@ -215,7 +217,22 @@ pub const Texture = struct {
 	}
 
 	// TODO: toVgImage function for using textures in NanoVG
+	pub fn toVgImage(self: *Texture, vg: nvg) nvg.Image {
+		if (self.nvgHandle) |handle| {
+			return .{ .handle = handle };
+		} else {
+			const ctx = @ptrCast(*nvg.gl.GLContext, @alignCast(@alignOf(*nvg.gl.GLContext), vg.ctx.params.user_ptr));
+			var tex = ctx.allocTexture() catch unreachable;
+			tex.width = @intCast(i32, self.width);
+			tex.height = @intCast(i32, self.height);
+			tex.tex = self.texture;
+			tex.flags = .{};
+			tex.tex_type = .rgba;
 
+			self.nvgHandle = tex.id;
+			return .{ .handle = tex.id };
+		}
+	}
 };
 
 pub const TextureCache = struct {
@@ -227,7 +244,7 @@ pub const TextureCache = struct {
 		};
 	}
 
-	pub fn get(self: *TextureCache, name: []const u8) Texture {
+	pub fn get(self: *TextureCache, name: []const u8) *Texture {
 		return getExt(self, name, .{});
 	}
 
@@ -235,8 +252,8 @@ pub const TextureCache = struct {
 		mipmaps: bool = false,
 	};
 
-	pub fn getExt(self: *TextureCache, name: []const u8, options: TextureOptions) Texture {
-		if (self.cache.get(name)) |texture| {
+	pub fn getExt(self: *TextureCache, name: []const u8, options: TextureOptions) *Texture {
+		if (self.cache.getPtr(name)) |texture| {
 			return texture;
 		} else {
 			const path = std.mem.concat(self.cache.allocator, u8,
@@ -255,7 +272,7 @@ pub const TextureCache = struct {
 			}
 			self.cache.put(name, texture) catch unreachable;
 
-			return texture;
+			return self.cache.getPtr(name).?;
 		}
 	}
 

@@ -160,7 +160,7 @@ pub const EventLoop = struct {
 				resume node.data.frame;
 			} else {
 				// wait until a task is available
-				std.time.sleep(16 * std.time.ns_per_ms);
+				std.time.sleep(1 * std.time.ns_per_ms);
 			}
 		}
 	}

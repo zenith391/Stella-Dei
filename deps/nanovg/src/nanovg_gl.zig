@@ -43,7 +43,7 @@ pub fn init(allocator: Allocator, options: Options) !nvg {
     };
 }
 
-const GLContext = struct {
+pub const GLContext = struct {
     allocator: Allocator,
     options: Options,
     shader: Shader,
@@ -94,7 +94,7 @@ const GLContext = struct {
         }
     }
 
-    fn allocTexture(ctx: *GLContext) !*Texture {
+    pub fn allocTexture(ctx: *GLContext) !*Texture {
         var found_tex: ?*Texture = null;
         for (ctx.textures.items) |*tex| {
             if (tex.id == 0) {
