@@ -214,7 +214,7 @@ pub const PlayState = struct {
 		// TODO: make a loading scene
 		const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
 		const seed = randomPrng.random().int(u64);
-		const planet = Planet.generate(game.allocator, 7, planetRadius, seed, .{}) catch unreachable;
+		const planet = Planet.generate(game.allocator, 6, planetRadius, seed, .{}) catch unreachable;
 
 		if (false) {
 			// Load Earth
@@ -691,10 +691,10 @@ pub const PlayState = struct {
 				self.solarConstant = std.math.min(self.solarConstant + 100, 5000);
 			}
 
-			if (ui.button(vg, game, "clear-water", size.x() - 200, 70, 170, 40, "Clear all water")) {
+			if (ui.button(vg, game, "clear-water", 20, 140, 170, 40, "Clear all water")) {
 				self.debug_clearWater = true;
 			}
-			if (ui.button(vg, game, "reload-shaders", size.x() - 200, 140, 170, 40, "Reload shaders")) {
+			if (ui.button(vg, game, "reload-shaders", 20, 210, 170, 40, "Reload shaders")) {
 				renderer.reloadShaders() catch unreachable;
 			}
 		}
@@ -799,6 +799,23 @@ pub const PlayState = struct {
 		// 	nk.nk_end(ctx);
 		// }
 
+		if (self.debug_showMoreInfo) {
+			vg.textAlign(.{ .horizontal = .left, .vertical = .top });
+			const baseX = size.x() - 350;
+			const baseY = size.y() - 290;
+			const point = self.selectedPoint;
+			const planet = self.planet;
+
+			const RH = Planet.getRelativeHumidity(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]);
+			ui.label(vg, game, "Humidity: {d:.1}%", .{ RH * 100 }, baseX, baseY);
+			ui.label(vg, game, "Water Mass: {:.1} kg", .{ planet.waterMass[point] * 1_000_000_000 }, baseX, baseY + 20);
+			// The units are given in centimeters, which is the equivalent amount of water that could be produced if all the water vapor in the column were to condense
+			// similar to https://earthobservatory.nasa.gov/global-maps/MYDAL2_M_SKY_WV
+			ui.label(vg, game, "Water Vapor: {d:.1} cm", .{ planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }, baseX, baseY + 40);
+			ui.label(vg, game, "Vapor Mass: {:.1} kg", .{ planet.waterVaporMass[point] * 1_000_000_000 }, baseX, baseY + 60);
+			ui.label(vg, game, "Air Speed: {d:.1} km/h", .{ planet.airVelocity[point].length() * 3600 }, baseX, baseY + 80);
+		}
+
 		// const infoHeight: f32 = if (self.debug_showMoreInfo) 290 else 175;
 		// if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - infoHeight - 30, .w = 300, .h = infoHeight },
 		// 	0) != 0) {
@@ -815,9 +832,6 @@ pub const PlayState = struct {
 
 		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
 		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-			
-		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
-		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Mass: {:.1} kg", .{ planet.waterMass[point] * 1_000_000_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
 		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
 		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Rainfall: {d:.3} cm / 24h", .{ planet.rainfall[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
@@ -825,21 +839,9 @@ pub const PlayState = struct {
 		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
 		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
-		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
-		// 	const RH = Planet.getRelativeHumidity(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]);
-		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Humidity: {d:.1}%", .{ RH * 100 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-
-		// 	nk.nk_layout_row_dynamic(ctx, 20, 1);
-		// 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Speed (km/h): {d:.1}", .{ planet.airVelocity[point].length() * 3600 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-
 		// 	if (self.debug_showMoreInfo) {
 		// 		nk.nk_layout_row_dynamic(ctx, 20, 1);
 		// 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point Area: {d}km²", .{ @floor(planet.getMeanPointArea() / 1_000_000) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-
-		// 		// The units are given in centimeters, which is the equivalent amount of water that could be produced if all the water vapor in the column were to condense
-		// 		// similar to https://earthobservatory.nasa.gov/global-maps/MYDAL2_M_SKY_WV
-		// 		nk.nk_layout_row_dynamic(ctx, 20, 1);
-		// 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Water Vapor: {d:.1} cm", .{ planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
 
 		// 		nk.nk_layout_row_dynamic(ctx, 20, 1);
 		// 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
@@ -857,17 +859,26 @@ pub const PlayState = struct {
 		// _ = nk.nk_style_push_style_item(ctx, &ctx.style.window.fixed_background, nk.nk_style_item_color(windowColor));
 		// defer _ = nk.nk_style_pop_style_item(ctx);
 
-		// if (nk.nk_begin(ctx, "Game Pause", .{ .x = size.x() - 150, .y = 50, .w = 90, .h = 60 }, 
-		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-		// 	nk.nk_layout_row_dynamic(ctx, 40, 2);
-		// 	if (nk.nk_button_label(ctx, "||") != 0) {
-		// 		self.paused = true;
-		// 	}
-		// 	if (nk.nk_button_symbol(ctx, nk.NK_SYMBOL_TRIANGLE_RIGHT) != 0) {
-		// 		self.paused = false;
-		// 	}
-		// }
-		// nk.nk_end(ctx);
+		if (ui.button(vg, game, "game-pause", size.x() - 70, 30, 40, 40, 
+			if (self.paused) ">" else "||")) {
+			self.paused = !self.paused;
+		}
+
+
+		{
+			vg.textAlign(.{ .horizontal = .center, .vertical = .top });
+			ui.label(vg, game, "Game Speed", .{}, size.x() - 80, 130);
+			ui.label(vg, game, "{}/s", .{ std.fmt.fmtDuration(@floatToInt(u64, self.timeScale) * std.time.ns_per_s) }, size.x() - 90, 150);
+			if (ui.button(vg, game, "game-speed-minus", size.x() - 150, 150, 20, 20, "-")) {
+				self.timeScale = std.math.max(1.0, self.timeScale - 3600);
+			}
+			if (ui.button(vg, game, "game-speed-plus", size.x() - 25, 150, 20, 20, "+")) {
+				if (self.timeScale < 190000) {
+					if (self.timeScale == 1) self.timeScale = 0;
+					self.timeScale = std.math.min(200_000, self.timeScale + 3600);
+				}
+			}
+		}
 
 		// if (nk.nk_begin(ctx, "Game Speed", .{ .x = size.x() - 200, .y = 130, .w = 140, .h = 180 }, 
 		// 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {

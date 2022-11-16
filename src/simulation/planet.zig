@@ -612,8 +612,8 @@ pub const Planet = struct {
 		var neighbours: IndexVector = undefined;
 		// XXX: do something more parallel?
 		{
-			var i: usize = 0;
-			while (i < VECTOR_SIZE) : (i += 1) {
+			comptime var i: usize = 0;
+			inline while (i < VECTOR_SIZE) : (i += 1) {
 				neighbours[i] = self.verticesNeighbours[indexes[i]][directionInt];
 			}
 		}
@@ -870,17 +870,11 @@ pub const Planet = struct {
 		const meanAtmVolume: f64 = self.getMeanPointArea() * 12_000; // m³
 		
 		// Do some liquid simulation
+		const counting_vector = std.simd.iota(usize, VECTOR_SIZE);
 		var i: usize = start;
 		while (i < end - VECTOR_SIZE + 1) : (i += VECTOR_SIZE) {
 			// only fluid if it's not ice
-			const indices = blk: {
-				var vector: IndexVector = undefined;
-				comptime var j: usize = 0;
-				inline while (j < VECTOR_SIZE) : (j += 1) {
-					vector[j] = i + j;
-				}
-				break :blk vector;
-			};
+			const indices = @splat(VECTOR_SIZE, i) + counting_vector; // i + 0, i + 1, i + 2, ...
 			const temp = loadSimdVector(self.temperature, i).*;
 			const elevation = loadSimdVector(self.elevation, i).*;
 			var mass = loadSimdVector(self.newWaterMass, i).*;
@@ -897,7 +891,7 @@ pub const Planet = struct {
 				const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @splat(VECTOR_SIZE, false));
 				const computedDiff = @min(@splat(VECTOR_SIZE, 0.01 * dt), mass);
 				const diff = @select(f32, doEvaporation, computedDiff, VECTOR_ZERO);
-				mass -= diff;
+				//mass -= diff;
 				saveSimdVector(self.newWaterVaporMass, i, vaporMass + diff);
 			}
 
@@ -905,12 +899,13 @@ pub const Planet = struct {
 			const shared = mass * @splat(VECTOR_SIZE, shareFactor);
 
 			var massToRemove = @splat(VECTOR_SIZE, @as(f32, 0.0));
-			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardLeft), shared, totalHeight, kmPerWaterMass);
-			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardRight), shared, totalHeight, kmPerWaterMass);
-			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardLeft), shared, totalHeight, kmPerWaterMass);
-			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardRight), shared, totalHeight, kmPerWaterMass);
-			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Left), shared, totalHeight, kmPerWaterMass);
-			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Right), shared, totalHeight, kmPerWaterMass);
+			//_ = shared; _ = totalHeight; _ = indices;
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardLeft), indices, shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardRight), indices, shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardLeft), indices, shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardRight), indices, shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Left), indices, shared, totalHeight, kmPerWaterMass);
+			massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Right), indices, shared, totalHeight, kmPerWaterMass);
 
 			std.debug.assert(@reduce(.And, (mass - massToRemove) >= VECTOR_ZERO));
 			saveSimdVector(self.newWaterMass, i, mass - massToRemove);
@@ -969,9 +964,9 @@ pub const Planet = struct {
 					// clouds don't go above 15km
 					if (self.newWaterMass[i] * kmPerWaterMass + self.elevation[i] - self.radius < 15) {
 						// TODO: form cloud as clouds are formed from super-saturated air
-						const diff = std.math.min(mass, 0.5 * dt * mass / 100000.0);
+						//const diff = std.math.min(mass, 0.5 * dt * mass / 100000.0);
+						const diff = mass;
 						self.newWaterVaporMass[i] -= diff;
-						self.newWaterMass[i] += diff;
 						self.rainfall[i] += diff / dt * 86400;
 					}
 				}
@@ -1189,7 +1184,7 @@ pub const Planet = struct {
 		return substanceDivider;
 	}
 
-	fn sendWater(self: Planet, target: @Vector(VECTOR_SIZE, usize), shared: SimdVector, totalHeight: SimdVector, kmPerWaterMass: f32) SimdVector {
+	fn sendWater(self: Planet, target: IndexVector, origin: IndexVector, shared: SimdVector, totalHeight: SimdVector, kmPerWaterMass: f32) SimdVector {
 		const elevation = blk: {
 			var vector: SimdVector = undefined;
 			comptime var i: usize = 0;
@@ -1212,7 +1207,16 @@ pub const Planet = struct {
 		const originalTransmitted = @min(shared, shared * (totalHeight - targetTotalHeight) / @splat(VECTOR_SIZE, kmPerWaterMass) / @splat(VECTOR_SIZE, @as(f32, 2.0)));
 
 		const zero = @splat(VECTOR_SIZE, @as(f32, 0.0));
-		const transmitted = @select(f32, doTransmit, originalTransmitted, zero);
+		var transmitted = @select(f32, doTransmit, originalTransmitted, zero);
+
+		// Do not transfer to a point that is loaded in the current vector
+		// This causes water to disappear
+		for (@as([8]usize, target)) |target_elem, idx| {
+			if (@reduce(.Or, origin == @splat(VECTOR_SIZE, target_elem))) {
+				transmitted[idx] = 0;
+			}
+		}
+
 		{
 			comptime var i: usize = 0;
 			inline while (i < VECTOR_SIZE) : (i += 1) {
@@ -1287,10 +1291,8 @@ pub const Planet = struct {
 			var iteration: usize = 0;
 			var numIterations: usize = 1;
 			while (iteration < numIterations) : (iteration += 1) {
-				//std.mem.copy(f32, self.newWaterMass, self.waterMass);
-				//std.mem.copy(f32, self.newWaterVaporMass, self.waterVaporMass);
-				@memcpy(@ptrCast([*]u8, self.newWaterMass.ptr), @ptrCast([*]u8, self.waterMass.ptr), self.waterMass.len * 4);
-				@memcpy(@ptrCast([*]u8, self.newWaterVaporMass.ptr), @ptrCast([*]u8, self.waterVaporMass.ptr), self.waterMass.len * 4);
+				std.mem.copy(f32, self.newWaterMass, self.waterMass);
+				std.mem.copy(f32, self.newWaterVaporMass, self.waterVaporMass);
 
 				{
 					var jobs: [32]@Frame(simulateWater) = undefined;
