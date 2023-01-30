@@ -7,10 +7,6 @@ dev_dependencies:
       name: zalgebra
       license: MIT
       main: src/main.zig
-    - src: git https://github.com/MasterQ32/zig-opengl
-      name: gl
-      license: EUPL-1.2
-      main: exports/gl_3v3.zig
     - src: git https://github.com/zigimg/zigimg
     - src: system_lib c
     - src: git https://github.com/hexops/mach-glfw

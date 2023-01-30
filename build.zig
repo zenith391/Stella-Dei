@@ -96,7 +96,7 @@ pub fn linkTracy(b: *std.build.Builder, step: *std.build.LibExeObjStep, opt_path
     }
 }
 
-pub fn build(b: *std.build.Builder) void {
+pub fn build(b: *std.build.Builder) !void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -116,10 +116,11 @@ pub fn build(b: *std.build.Builder) void {
     if (mode != .Debug) exe.subsystem = .Windows;
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    exe.use_stage1 = true;
+    //exe.use_stage1 = true;
     linkTracy(b, exe, if (use_tracy) "deps/tracy-0.8.2/" else null);
+    exe.addPackagePath("gl", "deps/gl3v3.zig");
     deps.addAllTo(exe);
-    glfw.link(b, exe, .{});
+    try glfw.link(b, exe, .{});
 
     exe.addIncludePath("deps");
     exe.addCSourceFile("deps/miniaudio.c", &.{
