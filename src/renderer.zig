@@ -83,12 +83,14 @@ pub const Renderer = struct {
         const skyboxProgram = try ShaderProgram.loadFromPath("src/shaders/skybox");
         const sunProgram = try ShaderProgram.loadFromPath("src/shaders/sun");
         const cloudsProgram = try ShaderProgram.loadFromPath("src/shaders/clouds");
+        const postprocessProgram = try ShaderProgram.loadFromPath("src/shaders/postprocess");
 
         self.terrainProgram = terrainProgram;
         self.entityProgram = entityProgram;
         self.skyboxProgram = skyboxProgram;
         self.sunProgram = sunProgram;
         self.cloudsProgram = cloudsProgram;
+        self.postprocessProgram = postprocessProgram;
 
         log.debug("Reloaded shaders.", .{});
     }
@@ -421,8 +423,8 @@ const ShaderProgram = struct {
 
 pub const Framebuffer = struct {
     fbo: gl.GLuint,
-    rbo: gl.GLuint,
-    texture: gl.GLuint,
+    colorTexture: gl.GLuint,
+    depthTexture: gl.GLuint,
     width: c_int,
     height: c_int,
 
@@ -432,26 +434,35 @@ pub const Framebuffer = struct {
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
         defer gl.bindFramebuffer(gl.FRAMEBUFFER, 0);
 
-        var texture: gl.GLuint = undefined;
-        gl.genTextures(1, &texture);
-        gl.bindTexture(gl.TEXTURE_2D, texture);
+        var colorTexture: gl.GLuint = undefined;
+        gl.genTextures(1, &colorTexture);
+        gl.bindTexture(gl.TEXTURE_2D, colorTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB16F, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTexture, 0);
 
-        var rbo: gl.GLuint = undefined;
-        gl.genRenderbuffers(1, &rbo);
-        gl.bindRenderbuffer(gl.RENDERBUFFER, rbo);
-        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, width, height);
-        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, rbo);
-        gl.bindRenderbuffer(gl.RENDERBUFFER, 0);
+        var depthTexture: gl.GLuint = undefined;
+        gl.genTextures(1, &depthTexture);
+        gl.bindTexture(gl.TEXTURE_2D, depthTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, width, height, 0, gl.DEPTH_COMPONENT, gl.FLOAT, null);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depthTexture, 0);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
 
         if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
             return error.IncompleteFramebuffer;
         }
 
-        return Framebuffer{ .fbo = fbo, .texture = texture, .rbo = rbo, .width = width, .height = height };
+        return Framebuffer{
+            .fbo = fbo,
+            .colorTexture = colorTexture,
+            .depthTexture = depthTexture,
+            .width = width,
+            .height = height,
+        };
     }
 
     pub fn bind(self: Framebuffer) void {
@@ -464,7 +475,7 @@ pub const Framebuffer = struct {
 
     pub fn deinit(self: Framebuffer) void {
         gl.deleteFramebuffers(1, &self.fbo);
-        gl.deleteRenderbuffers(1, &self.rbo);
-        gl.deleteTextures(1, &self.texture);
+        gl.deleteTextures(1, &self.colorTexture);
+        gl.deleteTextures(1, &self.depthTexture);
     }
 };

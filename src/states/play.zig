@@ -338,14 +338,39 @@ pub const PlayState = struct {
         self.renderScene(game, renderer);
 
         self.framebuffer.unbind();
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        renderer.postprocessProgram.use();
-        renderer.postprocessProgram.setUniformInt("screenTexture", 0);
-        gl.bindVertexArray(QuadMesh.getVAO());
-        gl.disable(gl.DEPTH_TEST);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.texture);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        {
+            const program = renderer.postprocessProgram;
+            var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi));
+            var sunTheta: f32 = std.math.pi / 2.0;
+            var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
+            const zFar = self.planet.radius * 5;
+            const zNear = zFar / 10000;
+            const right = self.cameraPos.cross(Vec3.forward()).norm();
+            const forward = self.cameraPos.cross(right).norm().negate();
+            const planetTarget = Vec3.new(0, 0, 0).sub(self.cameraPos).norm();
+            const distToPlanet = self.cameraDistance - self.planet.radius;
+            const target = self.cameraPos.add(Vec3.lerp(planetTarget, forward, std.math.pow(f32, 2, -distToPlanet / self.planet.radius * 5) * 0.6));
+
+            program.use();
+            program.setUniformInt("screenTexture", 0);
+            program.setUniformInt("screenDepth", 1);
+            program.setUniformMat4("projMatrix", Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
+            program.setUniformMat4("viewMatrix", Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
+            program.setUniformVec3("viewPos", self.cameraPos);
+            program.setUniformVec3("lightDir", solarVector);
+            program.setUniformFloat("planetRadius", self.planet.radius);
+            program.setUniformFloat("atmosphereRadius", self.planet.radius + 50);
+            program.setUniformFloat("lightIntensity", self.solarConstant / 1500);
+
+            gl.bindVertexArray(QuadMesh.getVAO());
+            gl.disable(gl.DEPTH_TEST);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.colorTexture);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.depthTexture);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
     }
 
     pub fn renderScene(self: *PlayState, game: *Game, renderer: *Renderer) void {
