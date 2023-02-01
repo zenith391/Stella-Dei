@@ -39,6 +39,10 @@ void main() {
 	
 	//float factor = hitInfo.y / (hitInfo.x * 2);
 	//fragColor = vec4(factor, factor, factor, 1.0f);
-	fragColor = vec4(color, 1.0f);
+
+	// HDR
+	float gamma = 1.0; // 2.2
+	float exposure = 1.0;
+	fragColor = vec4(pow(vec3(1.0) - exp(-color * exposure), vec3(1.0 / gamma)), 1.0f);
 }
 
