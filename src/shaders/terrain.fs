@@ -70,6 +70,27 @@ vec3 hsv2rgb(vec3 c) {
 	return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
+// Returns vector (dstToSphere, dstThroughSphere)
+vec2 raySphere(float sphereRadius, vec3 rayOrigin, vec3 rayDir) {
+	vec3 offset = rayOrigin;
+	float a = 1;
+	float b = 2 * dot(offset, rayDir);
+	float c = dot(offset, offset) - sphereRadius * sphereRadius;
+	float d = b * b - 4 * a * c;
+	
+	if (d > 0) {
+		float s = sqrt(d);
+		float dstNear = max(0, (-b - s) / (2 * a));
+		float dstFar = (-b + s) / (2 * a);
+		if (dstFar >= 0) {
+			return vec2(dstNear, dstFar - dstNear);
+		}
+	}
+	
+	// TODO: vec2(infinity, 0)
+	return vec2(100000, 0);
+}
+
 void main() {
 	if (displayMode == 0) {
 		vec3 ambient = (0.05 + lightIntensity / 10) * lightColor;
@@ -125,6 +146,7 @@ void main() {
 		
 		float gamma = 1.0; // 2.2
 		fragColor = vec4(pow(vec3(1.0) - exp(-result * 1.0), vec3(1.0 / gamma)), 1.0f);
+		
 		//fragColor = vec4(pow(result / (result + vec3(1.0)), vec3(1.0 / gamma)), 1.0f);
 	} else if (displayMode == 1) { // temperature
 		vec3 cold = vec3(234.0f / 360.0f, 1.0f, 0.5f);
@@ -153,3 +175,4 @@ void main() {
 		fragColor = vec4(result, 1.0f);
 	}
 }
+

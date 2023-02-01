@@ -8,6 +8,7 @@ const ui = @import("../ui.zig");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
 const Texture = @import("../renderer.zig").Texture;
+const Framebuffer = @import("../renderer.zig").Framebuffer;
 const MouseButton = glfw.mouse_button.MouseButton;
 const SoundTrack = @import("../audio.zig").SoundTrack;
 const MainMenuState = @import("main_menu.zig").MainMenuState;
@@ -84,6 +85,41 @@ pub const CubeMesh = struct {
     }
 };
 
+pub const QuadMesh = struct {
+    // zig fmt: off
+    const vertices = [6 * 4]f32{
+        // position + texture coords
+        -1.0,  1.0, 0.0, 1.0,
+        -1.0, -1.0, 0.0, 0.0,
+         1.0, -1.0, 1.0, 0.0,
+        -1.0,  1.0, 0.0, 1.0,
+         1.0, -1.0, 1.0, 0.0,
+         1.0,  1.0, 1.0, 1.0,
+    };
+    // zig fmt: on
+
+    var quad_vao: ?gl.GLuint = null;
+
+    pub fn getVAO() gl.GLuint {
+        if (quad_vao == null) {
+            var vao: gl.GLuint = undefined;
+            gl.genVertexArrays(1, &vao);
+            var vbo: gl.GLuint = undefined;
+            gl.genBuffers(1, &vbo);
+
+            gl.bindVertexArray(vao);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+            gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), &vertices, gl.STATIC_DRAW);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 2 * @sizeOf(f32))); // position
+            gl.enableVertexAttribArray(0);
+            gl.enableVertexAttribArray(1);
+            quad_vao = vao;
+        }
+        return quad_vao.?;
+    }
+};
+
 pub const SunMesh = struct {
     const IcosphereMesh = @import("../utils.zig").IcosphereMesh;
 
@@ -132,6 +168,7 @@ pub const PlayState = struct {
     /// seems higher than it is really.
     noiseCubemap: Texture,
     skyboxCubemap: Texture,
+    framebuffer: Framebuffer,
 
     /// The position of the camera
     /// This is already scaled by cameraDistance
@@ -231,6 +268,8 @@ pub const PlayState = struct {
 
         Lifeform.initMeshes(game.allocator) catch unreachable;
 
+        var framebuffer = Framebuffer.create(800, 600) catch unreachable;
+
         const cursorPos = game.window.getCursorPos() catch unreachable;
         std.valgrind.callgrind.startInstrumentation();
         return PlayState{
@@ -238,6 +277,7 @@ pub const PlayState = struct {
             .noiseCubemap = cubemap,
             .skyboxCubemap = skybox,
             .planet = planet,
+            .framebuffer = framebuffer,
             .cameraDistance = planetRadius * 10,
             .targetCameraDistance = planetRadius * 2.5,
         };
@@ -286,8 +326,32 @@ pub const PlayState = struct {
                 .scale(self.cameraDistance);
         }
 
-        const planet = &self.planet;
+        if (@floatToInt(c_int, size.x()) != self.framebuffer.width or @floatToInt(c_int, size.y()) != self.framebuffer.height) {
+            self.framebuffer.deinit();
+            self.framebuffer = Framebuffer.create(@floatToInt(c_int, size.x()), @floatToInt(c_int, size.y())) catch unreachable;
+        }
 
+        self.framebuffer.bind();
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.enable(gl.DEPTH_TEST);
+
+        self.renderScene(game, renderer);
+
+        self.framebuffer.unbind();
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        renderer.postprocessProgram.use();
+        renderer.postprocessProgram.setUniformInt("screenTexture", 0);
+        gl.bindVertexArray(QuadMesh.getVAO());
+        gl.disable(gl.DEPTH_TEST);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.texture);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
+    pub fn renderScene(self: *PlayState, game: *Game, renderer: *Renderer) void {
+        const size = renderer.framebufferSize;
+
+        const planet = &self.planet;
         var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi));
         var sunTheta: f32 = std.math.pi / 2.0;
         var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
@@ -947,5 +1011,6 @@ pub const PlayState = struct {
     pub fn deinit(self: *PlayState, game: *Game) void {
         SunMesh.deinit(game.allocator);
         self.planet.deinit();
+        self.framebuffer.deinit();
     }
 };

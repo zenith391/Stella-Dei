@@ -1309,7 +1309,7 @@ pub const Planet = struct {
         // Geologic simulation only happens when the time scale is more than 1 year per second
         if (dt > 365 * std.time.ns_per_day) {}
 
-        if (options.gameTime > self.nextMeteorite) {
+        if (options.gameTime > self.nextMeteorite and false) {
             var prng = std.rand.DefaultPrng.init(@floatToInt(u64, options.gameTime));
             const random = prng.random();
             const impactCenter = random.intRangeLessThanBiased(usize, 0, self.vertices.len);
