@@ -360,8 +360,9 @@ pub const PlayState = struct {
             program.setUniformVec3("viewPos", self.cameraPos);
             program.setUniformVec3("lightDir", solarVector);
             program.setUniformFloat("planetRadius", self.planet.radius);
-            program.setUniformFloat("atmosphereRadius", self.planet.radius + 50);
+            program.setUniformFloat("atmosphereRadius", self.planet.radius + 50 * 10); // * HEIGHT_ELEVATION
             program.setUniformFloat("lightIntensity", self.solarConstant / 1500);
+            program.setUniformInt("enableAtmosphere", @boolToInt(self.displayMode == .Normal));
 
             gl.bindVertexArray(QuadMesh.getVAO());
             gl.disable(gl.DEPTH_TEST);

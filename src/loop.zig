@@ -113,7 +113,7 @@ pub fn Job(comptime ResultType: type) type {
 
         pub fn notify(self: *Self, value: ResultType) void {
             self.result = value;
-            self.completed.store(true, .Release);
+            defer self.completed.store(true, .Release);
 
             if (self.toNotify) |job| {
                 job.notify(value);

@@ -18,6 +18,10 @@ const Mat4 = za.Mat4;
 pub const MainMenuState = struct {
     planet: Planet,
     do_render: bool = true,
+    newAlpha: u8 = 128,
+    loadAlpha: u8 = 128,
+    settingsAlpha: u8 = 128,
+    exitAlpha: u8 = 128,
 
     pub fn init(game: *Game) MainMenuState {
         const soundTrack = @import("../audio.zig").SoundTrack{ .items = &.{
@@ -56,7 +60,7 @@ pub const MainMenuState = struct {
         const zNear = zFar / 10000;
 
         var cameraPos = Vec3.new(-802, -913, 292)
-            .norm().scale(10000);
+            .norm().scale(10000 * 1.5);
 
         const planetTarget = Vec3.new(0, 0, 0).sub(cameraPos).norm();
         const target = planetTarget;
@@ -108,20 +112,42 @@ pub const MainMenuState = struct {
         const size = renderer.framebufferSize;
         const vg = renderer.vg;
 
-        const rowWidth = 200 + 50 + 100;
-        const rowHeight = 60;
-        if (ui.button(vg, game, "play-button", size.x() / 2 - rowWidth / 2, size.y() - rowHeight, 200, 50, "Play")) {
-            _ = self;
-            // Sets the game state to play (that is, start the game)
-            // To see the code, look in src/states/play.zig
-            //const job = Job(void).create(game.loop) catch unreachable;
-            //job.call(switchToPlay, .{game}) catch unreachable;
-            //game.deinitJob = job;
-            //self.do_render = false;
-            game.setState(PlayState);
+        const centerY = size.y() / 2.0;
+        const columnHeight = 160.0;
+        const columnX = 100.0;
+        const columnY = centerY - columnHeight / 2.0;
+        const pressed = game.window.getMouseButton(.left) == .press;
+
+        vg.textAlign(.{ .horizontal = .left, .vertical = .top });
+        vg.fontSize(26.0);
+        if (ui.coloredLabel(vg, game, "new-label", "New Planet", .{}, columnX, columnY, nvg.rgba(255, 255, 255, self.newAlpha))) {
+            self.newAlpha = 255;
+            if (pressed) {
+                game.setState(PlayState);
+            }
+        } else {
+            self.newAlpha = 128;
         }
-        if (ui.button(vg, game, "exit-button", size.x() / 2 - rowWidth / 2 + 250, size.y() - rowHeight, 100, 50, "Exit")) {
-            game.window.setShouldClose(true);
+
+        if (ui.coloredLabel(vg, game, "load-label", "Load Planet", .{}, columnX, columnY + 40, nvg.rgba(255, 255, 255, self.loadAlpha))) {
+            //self.loadAlpha = 255;
+        } else {
+            self.loadAlpha = 80;
+        }
+
+        if (ui.coloredLabel(vg, game, "settings-label", "Settings", .{}, columnX, columnY + 80, nvg.rgba(255, 255, 255, self.settingsAlpha))) {
+            //self.settingsAlpha = 255;
+        } else {
+            self.settingsAlpha = 80;
+        }
+
+        if (ui.coloredLabel(vg, game, "exit-label", "Exit", .{}, columnX, columnY + 120, nvg.rgba(255, 255, 255, self.exitAlpha))) {
+            self.exitAlpha = 255;
+            if (pressed) {
+                game.window.setShouldClose(true);
+            }
+        } else {
+            self.exitAlpha = 128;
         }
     }
 

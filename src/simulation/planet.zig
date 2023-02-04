@@ -22,7 +22,8 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Allocator = std.mem.Allocator;
 
-const VECTOR_SIZE = 8; // TODO(stage2): std.simd.suggestVectorSize(f32);
+//const VECTOR_SIZE = 8; // TODO(stage2): std.simd.suggestVectorSize(f32);
+const VECTOR_SIZE = std.simd.suggestVectorSize(f32) orelse 4;
 const VECTOR_ALIGN = @alignOf(SimdVector);
 const SimdVector = @Vector(VECTOR_SIZE, f32);
 const IndexVector = @Vector(VECTOR_SIZE, usize);
@@ -387,6 +388,7 @@ pub const Planet = struct {
         const meanPointArea = (4 * std.math.pi * radius * radius) / @intToFloat(f32, numPoints);
         std.log.info("There are {d} points in the ico-sphere.\n", .{numPoints});
         std.log.info("The mean area per point of the ico-sphere is {d} km²\n", .{meanPointArea});
+        std.log.info("SIMD Vectors: {} x f32", .{VECTOR_SIZE});
 
         return planet;
     }
@@ -842,7 +844,7 @@ pub const Planet = struct {
     }
 
     fn simulateWater(self: *Planet, loop: *EventLoop, options: SimulationOptions, numIterations: usize, start: usize, end: usize) void {
-        loop.yield();
+        _ = loop;
         const zone = tracy.ZoneN(@src(), "Water Simulation");
         defer zone.End();
 
@@ -877,11 +879,13 @@ pub const Planet = struct {
                 const hasSuitableHumidity = RH < @splat(VECTOR_SIZE, @as(f32, 1.0));
                 const isLiquid = temp > @splat(VECTOR_SIZE, @as(f32, 273.15));
                 const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @splat(VECTOR_SIZE, false));
-                const computedDiff = @min(@splat(VECTOR_SIZE, 0.01 * dt), mass);
+                const computedDiff = @min(@splat(VECTOR_SIZE, 10 * dt), mass);
                 const diff = @select(f32, doEvaporation, computedDiff, VECTOR_ZERO);
                 mass -= diff;
                 saveSimdVector(self.newWaterVaporMass, i, vaporMass + diff);
             }
+
+            // TODO: ebulittion
 
             const totalHeight = elevation + mass * @splat(VECTOR_SIZE, kmPerWaterMass);
             const shared = mass * @splat(VECTOR_SIZE, shareFactor);
@@ -1194,7 +1198,7 @@ pub const Planet = struct {
 
         // Do not transfer to a point that is loaded in the current vector
         // This causes water to disappear
-        for (@as([8]usize, target)) |target_elem, idx| {
+        for (@as([VECTOR_SIZE]usize, target)) |target_elem, idx| {
             if (@reduce(.Or, origin == @splat(VECTOR_SIZE, target_elem))) {
                 transmitted[idx] = 0;
             }
@@ -1281,20 +1285,22 @@ pub const Planet = struct {
                 std.mem.copy(f32, self.newWaterVaporMass, self.waterVaporMass);
 
                 {
-                    //var jobs: [32]@Frame(simulateWater) = undefined;
-                    //const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
-                    //const pointCount = self.vertices.len;
-                    //var i: usize = 0;
-                    //while (i < parallelness) : (i += 1) {
-                    //    const start = pointCount / parallelness * i;
-                    //    const end = if (i == parallelness - 1) pointCount else pointCount / parallelness * (i + 1);
-                    //    jobs[i] = async self.simulateWater(loop, options, numIterations, start, end);
-                    // }
+                    var jobs: [32]*Job(void) = undefined;
+                    const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+                    const pointCount = self.vertices.len;
+                    var i: usize = 0;
+                    while (i < parallelness) : (i += 1) {
+                        const start = pointCount / parallelness * i;
+                        const end = if (i == parallelness - 1) pointCount else pointCount / parallelness * (i + 1);
+                        const job = Job(void).create(loop) catch unreachable;
+                        job.call(simulateWater, .{ self, loop, options, numIterations, start, end }) catch unreachable;
+                        jobs[i] = job;
+                    }
 
-                    //i = 0;
-                    //while (i < parallelness) : (i += 1) {
-                    //    await jobs[i];
-                    // }
+                    i = 0;
+                    while (i < parallelness) : (i += 1) {
+                        jobs[i].wait();
+                    }
                 }
 
                 std.mem.swap([]f32, &self.waterMass, &self.newWaterMass);
