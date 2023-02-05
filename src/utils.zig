@@ -199,3 +199,43 @@ pub const IcosphereMesh = struct {
         allocator.free(self.vertices);
     }
 };
+
+/// Wavelength must be a number expressed in nanometers
+/// The returned color is in the RGB color space.
+/// It doesn't account for HDR or tone mapping.
+pub fn getWavelengthColor(wavelength: f32) Vec3 {
+    const gamma: f32 = 0.80;
+
+    var red: f32 = 0;
+    var green: f32 = 0;
+    var blue: f32 = 0;
+
+    // Refactor
+    if (wavelength >= 380 and wavelength < 510) {
+        red = std.math.max(0, -(wavelength - 440) / (440 - 380));
+        green = std.math.clamp((wavelength - 440) / (490 - 440), 0, 1);
+        blue = std.math.clamp(-(wavelength - 510) / (510 - 490), 0, 1);
+    } else if (wavelength >= 510) {
+        red = std.math.clamp((wavelength - 510) / (580 - 510), 0, 1);
+        green = std.math.clamp(-(wavelength - 645) / (645 - 580), 0, 1);
+        blue = 0.0;
+    }
+
+    // Let the intensity fall off near the vision limits
+    var factor: f32 = 1;
+    if (wavelength >= 380 and wavelength < 420) {
+        factor = 0.3 + 0.7 * (wavelength - 380) / (420 - 380);
+    } else if (wavelength >= 420 and wavelength < 701) {
+        factor = 1;
+    } else if (wavelength < 781) {
+        factor = 0.3 + 0.7 * (780 - wavelength) / (780 - 700);
+    } else {
+        factor = 0;
+    }
+
+    red = std.math.pow(f32, red * factor, gamma);
+    green = std.math.pow(f32, green * factor, gamma);
+    blue = std.math.pow(f32, blue * factor, gamma);
+
+    return Vec3.new(red, green, blue);
+}

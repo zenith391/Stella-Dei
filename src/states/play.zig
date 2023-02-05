@@ -4,6 +4,7 @@ const za = @import("zalgebra");
 const glfw = @import("glfw");
 const nvg = @import("nanovg");
 const ui = @import("../ui.zig");
+const utils = @import("../utils.zig");
 
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
@@ -451,6 +452,7 @@ pub const PlayState = struct {
             program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display mode
             program.setUniformVec3("selectedVertexPos", planet.transformedPoints[self.selectedPoint]);
             program.setUniformFloat("kmPerWaterMass", planet.getKmPerWaterMass());
+            program.setUniformVec3("vegetationColor", utils.getWavelengthColor(planet.plantColorWavelength));
 
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);

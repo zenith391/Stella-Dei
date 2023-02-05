@@ -11,6 +11,7 @@ uniform samplerCube noiseCubemap;
 uniform sampler2D terrainNormalMap;
 uniform sampler2D waterNormalMap;
 uniform vec3 selectedVertexPos;
+uniform vec3 vegetationColor;
 
 in vec3 worldNormal;
 in vec3 worldPosition;
@@ -83,7 +84,7 @@ void main() {
 
 		float specularStrength = 0.2 * lightIntensity;
 		float specularPower = 32;
-		vec3 terrainColor = mix(vec3(0.5f, 0.4f, 0.3f), vec3(0.0f, 0.7f, 0.0f), vegetation);
+		vec3 terrainColor = mix(vec3(0.5f, 0.4f, 0.3f), vegetationColor, vegetation);
 		vec3 objectColor = terrainColor * (noiseValue() / 20 + 1);
 
 		float waterTreshold = 0.1 + (noiseValue() * 2 - 1) * 0.025;

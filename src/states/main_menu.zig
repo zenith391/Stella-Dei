@@ -84,6 +84,7 @@ pub const MainMenuState = struct {
             program.setUniformInt("displayMode", 0);
             program.setUniformInt("selectedVertex", 0);
             program.setUniformFloat("kmPerWaterMass", planet.getKmPerWaterMass());
+            program.setUniformVec3("vegetationColor", Vec3.new(0.0, 0.7, 0.0));
 
             gl.activeTexture(gl.TEXTURE0);
             //gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);

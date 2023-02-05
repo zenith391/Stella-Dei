@@ -156,6 +156,8 @@ pub const Planet = struct {
     /// Unit: J.K-1
     heatCapacityCache: []f32,
     vegetation: []f32,
+    /// The wavelength of plant's color, in nanometers
+    plantColorWavelength: f32 = 530,
     /// Buffer array that is used to store the temperatures to be used after next update
     newTemperature: []f32,
     newWaterMass: []f32,
@@ -1236,6 +1238,38 @@ pub const Planet = struct {
         }
     }
 
+    fn simulateVegetation(self: *Planet, options: SimulationOptions, start: usize, end: usize) void {
+        const zone = tracy.ZoneN(@src(), "Vegetation Simulation");
+        defer zone.End();
+
+        const dt = options.dt * options.timeScale;
+        // The surface of the planet (approx.) divided by the numbers of points
+        const meanPointArea = self.getMeanPointArea(); // m²
+        const solarVector = options.solarVector;
+
+        // Normally, I should take the distance from the planet to the star and calculate thingies but no
+        const solarIrrCoeff = options.solarConstant * meanPointArea * @intToFloat(f32, self.vegetation.len); // W
+        const stefanBoltzmannConstant = 0.00000005670374; // W.m-2.K-4
+        const wienConstant = 0.002897729; // K.m
+        const solarTemperature = std.math.pow(f32, solarIrrCoeff / stefanBoltzmannConstant, 1.0 / 8.0) * 4;
+        const maxWavelength = wienConstant / solarTemperature;
+        const m_to_nm = std.math.pow(f32, 10.0, 9.0);
+        self.plantColorWavelength = maxWavelength * m_to_nm;
+
+        var i = start;
+        while (i < end) : (i += 1) {
+            const vert = self.transformedPoints[i];
+            const normVert = vert.norm();
+            const solarCoeff = std.math.max(0, normVert.dot(solarVector) / normVert.length());
+            // TODO: Direct Normal Irradiance? when we have atmosphere
+
+            _ = solarCoeff;
+            _ = dt;
+
+            self.vegetation[i] = 1;
+        }
+    }
+
     pub fn simulate(self: *Planet, loop: *EventLoop, options: SimulationOptions) void {
         //const zone = tracy.ZoneN(@src(), "Simulate planet");
         //defer zone.End();
@@ -1366,34 +1400,50 @@ pub const Planet = struct {
             // TODO: switch down to much simplified and "globalized" life simulation
         }
 
-        if (options.timeScale < 100000) {
+        if (options.timeScale < 100000 or true) {
             // TODO: better
-            const zone = tracy.ZoneN(@src(), "Vegetation Simulation");
-            defer zone.End();
+            {
+                var jobs: [32]*Job(void) = undefined;
+                const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+                const pointCount = self.vertices.len;
+                var i: usize = 0;
+                while (i < parallelness) : (i += 1) {
+                    const start = pointCount / parallelness * i;
+                    const end = if (i == parallelness - 1) pointCount else pointCount / parallelness * (i + 1);
+                    const job = Job(void).create(loop) catch unreachable;
+                    job.call(simulateVegetation, .{ self, options, start, end }) catch unreachable;
+                    jobs[i] = job;
+                }
 
-            var i: usize = 0;
-            while (i < self.vertices.len) : (i += 1) {
-                const vegetation = self.vegetation[i];
-                const waterMass = self.waterMass[i];
-                var newVegetation: f32 = vegetation;
-                // vegetation roots can drown in too much water
-                newVegetation -= 0.0001 * dt * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
-                newVegetation -= 0.0001 * dt * @as(f32, if (self.elevation[i] - self.radius >= 7) 1.0 else 0.0);
-                // but it still needs water to grow
-                const shareCoeff = @as(f32, if (waterMass >= 10) 1.0 else 0.0);
-                newVegetation -= 0.0000001 * dt / 10;
-                // TODO: actually consume the water ?
-
-                const isInappropriateTemperature = self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0;
-                newVegetation -= 0.000001 * dt * @as(f32, if (isInappropriateTemperature) 1.0 else 0.0);
-                self.vegetation[i] = std.math.max(0, newVegetation);
-
-                for (self.getNeighbours(i)) |neighbour| {
-                    if (self.waterMass[neighbour] < 0.1) {
-                        self.vegetation[neighbour] = std.math.clamp(self.vegetation[neighbour] + vegetation * 0.0000001 * dt * shareCoeff, 0, 1);
-                    }
+                i = 0;
+                while (i < parallelness) : (i += 1) {
+                    jobs[i].wait();
                 }
             }
+
+            //var i: usize = 0;
+            //while (i < self.vertices.len) : (i += 1) {
+            //    const vegetation = self.vegetation[i];
+            //    const waterMass = self.waterMass[i];
+            //    var newVegetation: f32 = vegetation;
+            //    // vegetation roots can drown in too much water
+            //    newVegetation -= 0.0001 * dt * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
+            //    newVegetation -= 0.0001 * dt * @as(f32, if (self.elevation[i] - self.radius >= 7) 1.0 else 0.0);
+            //    // but it still needs water to grow
+            //    const shareCoeff = @as(f32, if (waterMass >= 10) 1.0 else 0.0);
+            //    newVegetation -= 0.0000001 * dt / 10;
+            //    // TODO: actually consume the water ?
+
+            //    const isInappropriateTemperature = self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0;
+            //    newVegetation -= 0.000001 * dt * @as(f32, if (isInappropriateTemperature) 1.0 else 0.0);
+            //    self.vegetation[i] = std.math.max(0, newVegetation);
+
+            //    for (self.getNeighbours(i)) |neighbour| {
+            //        if (self.waterMass[neighbour] < 0.1) {
+            //            self.vegetation[neighbour] = std.math.clamp(self.vegetation[neighbour] + vegetation * 0.0000001 * dt * shareCoeff, 0, 1);
+            //        }
+            //    }
+            //}
         }
     }
 
