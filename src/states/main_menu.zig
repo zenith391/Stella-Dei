@@ -5,6 +5,7 @@ const nvg = @import("nanovg");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
 const PlayState = @import("play.zig").PlayState;
+const GameIntroState = @import("game_intro.zig").GameIntroState;
 const ui = @import("../ui.zig");
 
 const Planet = @import("../simulation/planet.zig").Planet;
@@ -124,7 +125,7 @@ pub const MainMenuState = struct {
         if (ui.coloredLabel(vg, game, "new-label", "New Planet", .{}, columnX, columnY, nvg.rgba(255, 255, 255, self.newAlpha))) {
             self.newAlpha = 255;
             if (pressed) {
-                game.setState(PlayState);
+                game.setState(GameIntroState);
             }
         } else {
             self.newAlpha = 128;
@@ -150,10 +151,6 @@ pub const MainMenuState = struct {
         } else {
             self.exitAlpha = 128;
         }
-    }
-
-    fn switchToPlay(game: *Game) void {
-        game.setState(PlayState);
     }
 
     pub fn deinit(self: *MainMenuState, game: *Game) void {

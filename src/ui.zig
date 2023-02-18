@@ -106,22 +106,23 @@ pub fn label(vg: nvg, game: *Game, comptime fmt: []const u8, args: anytype, x: f
 pub fn coloredLabel(vg: nvg, game: *Game, name: []const u8, comptime fmt: []const u8, args: anytype, x: f32, y: f32, color: nvg.Color) bool {
     const cursor = game.window.getCursorPos();
     // TODO: real text size
-    const w = 180;
-    const h = 30;
+    var buf: [500]u8 = undefined;
+    const text = std.fmt.bufPrint(&buf, fmt, args) catch unreachable;
 
-    const hovered = cursor.xpos >= x and cursor.ypos >= y and cursor.xpos < x + w and cursor.ypos < y + h;
+    // This will be filled as [xMin, yMin, xMax, yMax]
+    var bounds: [4]f32 = undefined;
+    vg.fontFace("sans-serif");
+    vg.fontBlur(0);
+    _ = vg.textBounds(x, y, text, &bounds);
+
+    const hovered = cursor.xpos >= bounds[0] and cursor.ypos >= bounds[1] and cursor.xpos < bounds[2] and cursor.ypos < bounds[3];
     var state = game.imgui_state.get(name) orelse UiComponentState{ .Label = .{ .color = color } };
     defer game.imgui_state.put(name, state) catch {};
 
     const targetColor = color;
     state.Label.color = nvg.lerpRGBA(state.Label.color, targetColor, 1 - 0.2);
 
-    var buf: [500]u8 = undefined;
-    const text = std.fmt.bufPrint(&buf, fmt, args) catch unreachable;
-
-    vg.fontFace("sans-serif");
     vg.fillColor(state.Label.color);
-    vg.fontBlur(0);
     _ = vg.text(x, y, text);
 
     return hovered;

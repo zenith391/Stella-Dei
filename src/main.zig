@@ -15,6 +15,7 @@ var texture: Texture = undefined;
 
 const SplashScreenState = @import("states/splash_screen.zig").SplashScreenState;
 const MainMenuState = @import("states/main_menu.zig").MainMenuState;
+const GameIntroState = @import("states/game_intro.zig").GameIntroState;
 const PlayState = @import("states/play.zig").PlayState;
 
 pub const log_level = .debug;
@@ -22,6 +23,7 @@ pub const log_level = .debug;
 pub const GameState = union(enum) {
     SplashScreen: SplashScreenState,
     MainMenu: MainMenuState,
+    GameIntro: GameIntroState,
     Playing: PlayState,
 };
 
@@ -60,6 +62,7 @@ pub const Game = struct {
     pub fn setState(self: *Game, comptime NewState: type) void {
         var state = NewState.init(self);
         if (self.state_init) self.deinitState();
+        self.imgui_state.clearRetainingCapacity();
 
         inline for (std.meta.fields(GameState)) |field| {
             if (field.type == NewState) {
@@ -69,6 +72,10 @@ pub const Game = struct {
             }
         }
         @compileError(@typeName(NewState) ++ " is not in the GameState union");
+    }
+
+    pub fn getTime() f64 {
+        return @intToFloat(f64, std.time.milliTimestamp());
     }
 
     pub fn deinitState(self: *Game) void {
