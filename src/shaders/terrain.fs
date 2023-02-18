@@ -45,7 +45,7 @@ vec3 getNormal(vec3 viewDir) {
 	float waterBlend = 1 - exp(-waterElevation * 1.0);
 
 	float scale = 0.003;
-	float strength = 1.0;
+	float strength = 0.8;
 	vec2 uvX = parallaxMapping(worldPosition.zy * scale, viewDir);
 	vec2 uvY = parallaxMapping(worldPosition.xz * scale, viewDir);
 	vec2 uvZ = parallaxMapping(worldPosition.xy * scale, viewDir);

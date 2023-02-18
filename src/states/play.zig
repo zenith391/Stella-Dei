@@ -170,6 +170,7 @@ pub const PlayState = struct {
     noiseCubemap: Texture,
     skyboxCubemap: Texture,
     framebuffer: Framebuffer,
+    blurFramebuffer: Framebuffer,
 
     /// The position of the camera
     /// This is already scaled by cameraDistance
@@ -254,7 +255,8 @@ pub const PlayState = struct {
         // TODO: make a loading scene
         const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
         const seed = randomPrng.random().int(u64);
-        const planet = Planet.generate(game.allocator, 7, planetRadius, seed, .{}) catch unreachable;
+        const subdivisions = if (@import("builtin").mode == .Debug) 6 else 7;
+        const planet = Planet.generate(game.allocator, subdivisions, planetRadius, seed, .{}) catch unreachable;
 
         if (false) {
             // Load Earth
@@ -270,6 +272,7 @@ pub const PlayState = struct {
         Lifeform.initMeshes(game.allocator) catch unreachable;
 
         var framebuffer = Framebuffer.create(800, 600) catch unreachable;
+        var blurFramebuffer = Framebuffer.create(800, 600) catch unreachable;
 
         const cursorPos = game.window.getCursorPos();
         std.valgrind.callgrind.startInstrumentation();
@@ -279,6 +282,7 @@ pub const PlayState = struct {
             .skyboxCubemap = skybox,
             .planet = planet,
             .framebuffer = framebuffer,
+            .blurFramebuffer = blurFramebuffer,
             .cameraDistance = planetRadius * 10,
             .targetCameraDistance = planetRadius * 2.5,
         };
@@ -330,6 +334,9 @@ pub const PlayState = struct {
         if (@floatToInt(c_int, size.x()) != self.framebuffer.width or @floatToInt(c_int, size.y()) != self.framebuffer.height) {
             self.framebuffer.deinit();
             self.framebuffer = Framebuffer.create(@floatToInt(c_int, size.x()), @floatToInt(c_int, size.y())) catch unreachable;
+
+            self.blurFramebuffer.deinit();
+            self.blurFramebuffer = Framebuffer.create(@floatToInt(c_int, size.x()), @floatToInt(c_int, size.y())) catch unreachable;
         }
 
         self.framebuffer.bind();
@@ -337,8 +344,63 @@ pub const PlayState = struct {
         gl.enable(gl.DEPTH_TEST);
 
         self.renderScene(game, renderer);
-
         self.framebuffer.unbind();
+
+        // Compute a texture from the HDR framebuffer with only bright parts
+        {
+            const program = renderer.postprocessProgram;
+            self.framebuffer.bind();
+            defer self.framebuffer.unbind();
+
+            const attachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT1};
+            const ogAttachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT0};
+            gl.drawBuffers(1, &attachments);
+            defer gl.drawBuffers(1, &ogAttachments);
+
+            program.use();
+            program.setUniformBool("doBrightTexture", true);
+
+            gl.bindVertexArray(QuadMesh.getVAO());
+            gl.disable(gl.DEPTH_TEST);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.colorTextures[0]);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+
+        // Blur the bright part to create bloom
+        {
+            const program = renderer.postprocessProgram;
+
+            // Horizontal blurring (framebuffer -> blurFramebuffer)
+            program.use();
+            program.setUniformBool("doBrightTexture", false);
+            program.setUniformBool("doBlurring", true);
+            program.setUniformBool("horizontalBlurring", true);
+            {
+                self.blurFramebuffer.bind();
+                defer self.blurFramebuffer.unbind();
+                gl.bindVertexArray(QuadMesh.getVAO());
+                gl.disable(gl.DEPTH_TEST);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.colorTextures[1]);
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+            }
+
+            // Vertical blurring (blurFramebuffer -> framebuffer)
+            program.setUniformBool("horizontalBlurring", false);
+            {
+                self.framebuffer.bind();
+                defer self.framebuffer.unbind();
+                const attachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT1};
+                const ogAttachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT0};
+                gl.drawBuffers(1, &attachments);
+                defer gl.drawBuffers(1, &ogAttachments);
+
+                gl.bindTexture(gl.TEXTURE_2D, self.blurFramebuffer.colorTextures[0]);
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+            }
+        }
+
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         {
             const program = renderer.postprocessProgram;
@@ -355,7 +417,8 @@ pub const PlayState = struct {
 
             program.use();
             program.setUniformInt("screenTexture", 0);
-            program.setUniformInt("screenDepth", 1);
+            program.setUniformInt("bloomTexture", 1);
+            program.setUniformInt("screenDepth", 2);
             program.setUniformMat4("projMatrix", Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
             program.setUniformMat4("viewMatrix", Mat4.lookAt(self.cameraPos, target, Vec3.new(0, 0, 1)));
             program.setUniformVec3("viewPos", self.cameraPos);
@@ -363,14 +426,18 @@ pub const PlayState = struct {
             program.setUniformFloat("planetRadius", self.planet.radius);
             program.setUniformFloat("atmosphereRadius", self.planet.radius + 50 * 10); // * HEIGHT_ELEVATION
             program.setUniformFloat("lightIntensity", self.solarConstant / 1500);
-            program.setUniformInt("enableAtmosphere", @boolToInt(self.displayMode == .Normal));
+            program.setUniformBool("enableAtmosphere", self.displayMode == .Normal);
+            program.setUniformBool("doBrightTexture", false);
+            program.setUniformBool("doBlurring", false);
 
             gl.bindVertexArray(QuadMesh.getVAO());
             gl.disable(gl.DEPTH_TEST);
             gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.colorTexture);
+            gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.colorTextures[0]); // color
             gl.activeTexture(gl.TEXTURE1);
-            gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.depthTexture);
+            gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.colorTextures[1]); // blur
+            gl.activeTexture(gl.TEXTURE2);
+            gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.depthTexture); // depth
             gl.drawArrays(gl.TRIANGLES, 0, 6);
         }
     }
