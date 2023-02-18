@@ -374,17 +374,21 @@ pub const Planet = struct {
 
         for (mesh.vao) |vao| {
             gl.bindVertexArray(vao);
-            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
-            gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
-            gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32))); // temperature (used for a bunch of things)
-            gl.vertexAttribPointer(3, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 7 * @sizeOf(f32))); // water level (used in Normal display mode)
-            gl.vertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, 9 * @sizeOf(f32), @intToPtr(?*anyopaque, 8 * @sizeOf(f32))); // vegetation level (temporary until replaced by actual living vegetation)
+            // position and normal are interleaved
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+            gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
+            // temperature, water level and vegetation are sequential so we can glBufferSubData
+            gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 1 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32) * vertices.len)); // temperature (used for a bunch of things)
+            gl.vertexAttribPointer(3, 1, gl.FLOAT, gl.FALSE, 1 * @sizeOf(f32), @intToPtr(?*anyopaque, 7 * @sizeOf(f32) * vertices.len)); // water level (used in Normal display mode)
+            gl.vertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, 1 * @sizeOf(f32), @intToPtr(?*anyopaque, 8 * @sizeOf(f32) * vertices.len)); // vegetation level (temporary until replaced by actual living vegetation)
             gl.enableVertexAttribArray(0);
             gl.enableVertexAttribArray(1);
             gl.enableVertexAttribArray(2);
             gl.enableVertexAttribArray(3);
             gl.enableVertexAttribArray(4);
         }
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
 
         const meanPointArea = (4 * std.math.pi * radius * radius) / @intToFloat(f32, numPoints);
         std.log.info("There are {d} points in the ico-sphere.\n", .{numPoints});
@@ -523,7 +527,7 @@ pub const Planet = struct {
 
             // This could be sped up by using LOD? (allowing to transfer less data)
             // NOTE: this has really bad cache locality
-            const STRIDE = 9;
+            const STRIDE = 6;
             for (self.vertices) |point, i| {
                 const waterElevation = self.waterMass[i] * kmPerWaterMass;
                 const totalElevation = self.elevation[i] + waterElevation;
@@ -537,18 +541,32 @@ pub const Planet = struct {
                 const bufSlice = bufData[bytePos + 0 .. bytePos + 10];
                 bufSlice[0..3].* = transformedPoint.data;
                 bufSlice[3..6].* = normal.data;
-                bufData[bytePos + 6] = switch (displayMode) {
-                    .WaterVapor => self.waterVaporMass[i],
-                    .WindMagnitude => self.airVelocity[i].x(),
-                    .Rainfall => self.rainfall[i],
-                    else => self.temperature[i],
-                };
-                bufData[bytePos + 7] = if (displayMode == .WindMagnitude) self.airVelocity[i].y() else waterElevation;
-                bufData[bytePos + 8] = self.vegetation[i];
             }
 
             gl.bindBuffer(gl.ARRAY_BUFFER, self.mesh.vbo);
-            gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
+            gl.bufferSubData(gl.ARRAY_BUFFER, 0, @intCast(isize, 6 * @sizeOf(f32) * self.vertices.len), bufData.ptr);
+
+            // This one is special and needs processing
+            if (displayMode == .WindMagnitude) {
+                for (self.airVelocity) |velocity, i| {
+                    bufData[i] = velocity.x();
+                }
+                gl.bufferSubData(gl.ARRAY_BUFFER, 6 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.vertices.len * @sizeOf(f32)), bufData.ptr);
+                for (self.airVelocity) |velocity, i| {
+                    bufData[i] = velocity.y();
+                }
+                gl.bufferSubData(gl.ARRAY_BUFFER, 7 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.vertices.len * @sizeOf(f32)), bufData.ptr);
+            } else {
+                var displayedSlice = switch (displayMode) {
+                    .WaterVapor => self.waterVaporMass,
+                    .Rainfall => self.rainfall,
+                    .Normal, .Temperature => self.temperature,
+                    else => unreachable,
+                };
+                gl.bufferSubData(gl.ARRAY_BUFFER, 6 * @sizeOf(f32) * self.vertices.len, @intCast(isize, displayedSlice.len * @sizeOf(f32)), displayedSlice.ptr);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 7 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.waterMass.len * @sizeOf(f32)), self.waterMass.ptr);
+            }
+            gl.bufferSubData(gl.ARRAY_BUFFER, 8 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.vegetation.len * @sizeOf(f32)), self.vegetation.ptr);
         }
 
         {
@@ -1316,7 +1334,7 @@ pub const Planet = struct {
 
         const dt = options.dt * options.timeScale;
         // Disable water simulation when timescale is above 100 000
-        if (dt < 15000) {
+        if (dt < 15000 or true) {
             var iteration: usize = 0;
             var numIterations: usize = 1;
             while (iteration < numIterations) : (iteration += 1) {

@@ -54,7 +54,7 @@ pub const GameIntroState = struct {
         if (time <= 3) {
             self.textAlpha = @floatToInt(u8, 255 * (time / 3));
         } else if (self.fadeOutStartTime) |fadeOut| {
-            self.textAlpha = 255 -| @floatToInt(u8, (time - fadeOut) * 255 / 2);
+            self.textAlpha = 255 - @floatToInt(u8, @min(255, @max(0, (time - fadeOut) * 255.0 / 2.0)));
         }
 
         const text = "A long time ago in a galaxy far far away lived a planet...";
@@ -62,11 +62,12 @@ pub const GameIntroState = struct {
         vg.fontSize(self.fontSize);
         if (ui.coloredLabel(vg, game, "intro-label", text, .{}, centerX, centerY, nvg.rgba(self.textAlpha, self.textAlpha, self.textAlpha, self.textAlpha)) and self.textAlpha > 220) {
             self.fontSize = self.fontSize * 0.9 + 56.0 * 0.1;
-            if (pressed and self.fadeOutStartTime == null) {
-                self.fadeOutStartTime = time;
-            }
         } else {
             self.fontSize = self.fontSize * 0.9 + 48.0 * 0.1;
+        }
+
+        if (pressed and self.fadeOutStartTime == null and self.textAlpha > 220) {
+            self.fadeOutStartTime = time;
         }
 
         if (self.fadeOutStartTime != null and self.textAlpha == 0) {
