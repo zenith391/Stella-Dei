@@ -15,7 +15,7 @@ It's also carefully inspired by SimEarth.
 ### Dependencies
 
 The game requires:
-- Zig master (at least `0.10.0-dev.1521+e8813b296`)
+- Zig master (at least `0.11.0-dev.1638+7199d7c77`)
 - [Zigmod](https://github.com/nektro/zigmod)
 
 ### Building from source

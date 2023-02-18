@@ -58,30 +58,30 @@ fn checkMinZig(current: std.SemanticVersion, exe: *std.build.LibExeObjStep) void
 pub const dirs = struct {
     pub const _root = "";
     pub const _93jjp4rc0htn = cache ++ "/../..";
-    pub const _985l9esyd0r5 = cache ++ "/git/github.com/kooparse/zalgebra";
+    pub const _eeikd2bttuwz = cache ++ "/git/github.com/kooparse/zalgebra";
     pub const _3hmo0glo2xj9 = cache ++ "/git/github.com/zigimg/zigimg";
-    pub const _9og1bps0va0o = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _ebanpwiicvn6 = cache ++ "/git/github.com/hexops/mach-glfw";
     pub const _thisisnanovg = cache ++ "/../..";
-    pub const _bvzpqpsh5xyo = cache ++ "/git/github.com/kooparse/zalgebra";
-    pub const _2nprk12ut6s2 = cache ++ "/git/github.com/hexops/mach-glfw";
-    pub const _eyv7t26c2kfn = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _u90k1sgk3yt4 = cache ++ "/git/github.com/kooparse/zalgebra";
+    pub const _02bue7ftqpwa = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _7wk4g66tbz6y = cache ++ "/git/github.com/hexops/mach-glfw";
 };
 
 pub const package_data = struct {
     pub const _93jjp4rc0htn = Package{
         .directory = dirs._93jjp4rc0htn,
     };
-    pub const _985l9esyd0r5 = Package{
-        .directory = dirs._985l9esyd0r5,
-        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._985l9esyd0r5 ++ "/src/main.zig" }, .dependencies = null },
+    pub const _eeikd2bttuwz = Package{
+        .directory = dirs._eeikd2bttuwz,
+        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._eeikd2bttuwz ++ "/src/main.zig" }, .dependencies = null },
     };
     pub const _3hmo0glo2xj9 = Package{
         .directory = dirs._3hmo0glo2xj9,
         .pkg = Pkg{ .name = "zigimg", .source = .{ .path = dirs._3hmo0glo2xj9 ++ "/zigimg.zig" }, .dependencies = null },
     };
-    pub const _9og1bps0va0o = Package{
-        .directory = dirs._9og1bps0va0o,
-        .pkg = Pkg{ .name = "glfw", .source = .{ .path = dirs._9og1bps0va0o ++ "/src/main.zig" }, .dependencies = null },
+    pub const _ebanpwiicvn6 = Package{
+        .directory = dirs._ebanpwiicvn6,
+        .pkg = Pkg{ .name = "glfw", .source = .{ .path = dirs._ebanpwiicvn6 ++ "/src/main.zig" }, .dependencies = null },
     };
     pub const _thisisnanovg = Package{
         .directory = dirs._thisisnanovg,
@@ -90,17 +90,17 @@ pub const package_data = struct {
         .c_source_files = &.{ "deps/nanovg/src/fontstash.c", "deps/nanovg/src/stb_image.c" },
         .c_source_flags = &.{ "-DFONS_NO_STDIO", "-DSTBI_NO_STDIO", "-fno-stack-protector", "-fno-sanitize=undefined" },
     };
-    pub const _bvzpqpsh5xyo = Package{
-        .directory = dirs._bvzpqpsh5xyo,
-        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._bvzpqpsh5xyo ++ "/src/main.zig" }, .dependencies = null },
+    pub const _u90k1sgk3yt4 = Package{
+        .directory = dirs._u90k1sgk3yt4,
+        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._u90k1sgk3yt4 ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _2nprk12ut6s2 = Package{
-        .directory = dirs._2nprk12ut6s2,
-        .pkg = Pkg{ .name = "glfw", .source = .{ .path = dirs._2nprk12ut6s2 ++ "/src/main.zig" }, .dependencies = null },
+    pub const _02bue7ftqpwa = Package{
+        .directory = dirs._02bue7ftqpwa,
+        .pkg = Pkg{ .name = "glfw", .source = .{ .path = dirs._02bue7ftqpwa ++ "/src/main.zig" }, .dependencies = null },
     };
-    pub const _eyv7t26c2kfn = Package{
-        .directory = dirs._eyv7t26c2kfn,
-        .pkg = Pkg{ .name = "build-glfw", .source = .{ .path = dirs._eyv7t26c2kfn ++ "/build.zig" }, .dependencies = null },
+    pub const _7wk4g66tbz6y = Package{
+        .directory = dirs._7wk4g66tbz6y,
+        .pkg = Pkg{ .name = "build-glfw", .source = .{ .path = dirs._7wk4g66tbz6y ++ "/build.zig" }, .dependencies = null },
     };
     pub const _root = Package{
         .directory = dirs._root,
@@ -109,16 +109,16 @@ pub const package_data = struct {
 };
 
 pub const packages = &[_]Package{
-    package_data._985l9esyd0r5,
+    package_data._eeikd2bttuwz,
     package_data._3hmo0glo2xj9,
-    package_data._9og1bps0va0o,
+    package_data._ebanpwiicvn6,
     package_data._thisisnanovg,
 };
 
 pub const pkgs = struct {
-    pub const zalgebra = package_data._985l9esyd0r5;
+    pub const zalgebra = package_data._eeikd2bttuwz;
     pub const zigimg = package_data._3hmo0glo2xj9;
-    pub const glfw = package_data._9og1bps0va0o;
+    pub const glfw = package_data._ebanpwiicvn6;
     pub const nanovg = package_data._thisisnanovg;
 };
 

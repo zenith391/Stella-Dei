@@ -38,8 +38,9 @@ vec2 raySphere(float sphereRadius, vec3 rayOrigin, vec3 rayDir) {
 }
 
 float densityAtPoint(vec3 point) {
-	float height = length(point) - planetRadius;
-	float heightScaled = height / (atmosphereRadius - planetRadius);
+	float radius = planetRadius;
+	float height = length(point) - radius;
+	float heightScaled = height / (atmosphereRadius - radius);
 	float densityFalloff = 3.00; // TODO: variable depending on composition?
 	float localDensity = exp(-heightScaled * densityFalloff) * (1 - heightScaled);
 	return localDensity;
@@ -49,7 +50,7 @@ float densityAtPoint(vec3 point) {
 float opticalDepth(vec3 rayOrigin, vec3 rayDir, float rayLength) {
 	vec3 point = rayOrigin;
 	int numOpticalDepthPoints = 10;
-	float stepSize = rayLength / (numOpticalDepthPoints - 1);
+	float stepSize = rayLength / (numOpticalDepthPoints);
 	float opticalDepth = 0;
 	
 	for (int i = 0; i < numOpticalDepthPoints; i++) {
@@ -64,7 +65,7 @@ vec3 calculateLight(vec3 rayOrigin, vec3 rayDir, float rayLength, vec3 originalC
 	int numInScatteringPoints = 10; // TODO: configurable quality level
 	
 	vec3 inScatterPoint = rayOrigin;
-	float stepSize = rayLength / (numInScatteringPoints - 1);
+	float stepSize = rayLength / (numInScatteringPoints);
 	vec3 inScatteredLight = vec3(0);
 	vec3 dirToSun = lightDir;
 	
@@ -78,6 +79,7 @@ vec3 calculateLight(vec3 rayOrigin, vec3 rayDir, float rayLength, vec3 originalC
 		float sunRayLength = raySphere(atmosphereRadius, inScatterPoint, dirToSun).y;
 		float sunRayOpticalDepth = opticalDepth(inScatterPoint, dirToSun, sunRayLength);
 		viewRayOpticalDepth = opticalDepth(inScatterPoint, -rayDir, stepSize * i);
+		//sunRayOpticalDepth = 0;
 		vec3 transmittance = exp(-(sunRayOpticalDepth + viewRayOpticalDepth) * scatteringCoefficients);
 		float localDensity = densityAtPoint(inScatterPoint);
 		
@@ -118,17 +120,25 @@ void main() {
 	//float dstToSurface = linearizeDepth(depth, zNear, zFar); // TODO: make it work
 	float dstToSurface = dstToAtmosphere + 500;
 	float dstThroughAtmosphere = min(hitInfo.y, dstToSurface - dstToAtmosphere);
+	if (depth == 1) {
+		dstToSurface = dstToAtmosphere + 500;
+	}
 	
 	float factor = dstThroughAtmosphere / atmosphereRadius / 2;
 	vec3 result;
 	if (dstThroughAtmosphere > 0 && enableAtmosphere) {
 		vec3 pointInAtmosphere = viewPos + rayDir * dstToAtmosphere;
+		if (depth == 1 && false) { // skybox
+			color = vec3(0);
+		}
 		vec3 light = calculateLight(pointInAtmosphere, rayDir, dstThroughAtmosphere, color);
 		result = light;
+		//result = pointInAtmosphere / vec3(10000);
+
 	} else {
 		result = color;
 	}
-	//result = mix(result, vec3(factor * 10), 0.9);
+	//result = mix(result, vec3((dstToSurface - dstToAtmosphere - 500)), 0.9);
 
 	// HDR
 	float gamma = 1.0; // 2.2

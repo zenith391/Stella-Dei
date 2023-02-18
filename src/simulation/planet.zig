@@ -22,7 +22,6 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Allocator = std.mem.Allocator;
 
-//const VECTOR_SIZE = 8; // TODO(stage2): std.simd.suggestVectorSize(f32);
 const VECTOR_SIZE = std.simd.suggestVectorSize(f32) orelse 4;
 const VECTOR_ALIGN = @alignOf(SimdVector);
 const SimdVector = @Vector(VECTOR_SIZE, f32);
@@ -1261,12 +1260,18 @@ pub const Planet = struct {
             const vert = self.transformedPoints[i];
             const normVert = vert.norm();
             const solarCoeff = std.math.max(0, normVert.dot(solarVector) / normVert.length());
+            var newVegetation = self.vegetation[i];
             // TODO: Direct Normal Irradiance? when we have atmosphere
 
             _ = solarCoeff;
-            _ = dt;
+            newVegetation -= 0.0001 * dt * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
 
-            self.vegetation[i] = 1;
+            for (self.getNeighbours(i)) |neighbourIndex| {
+                if (self.vegetation[neighbourIndex] < newVegetation) {
+                    self.vegetation[neighbourIndex] += 0.000001 * dt * newVegetation;
+                }
+            }
+            self.vegetation[i] = std.math.clamp(newVegetation, 0, 1);
         }
     }
 

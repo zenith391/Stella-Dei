@@ -145,10 +145,10 @@ fn keyCallback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.A
     if (key == .F11 and action == .press) {
         if (window.getMonitor() == null) {
             const monitor = glfw.Monitor.getPrimary().?;
-            const videoMode = monitor.getVideoMode() catch return;
-            window.setMonitor(monitor, 0, 0, videoMode.getWidth(), videoMode.getHeight(), null) catch return;
+            const videoMode = monitor.getVideoMode().?;
+            window.setMonitor(monitor, 0, 0, videoMode.getWidth(), videoMode.getHeight(), null);
         } else {
-            window.setMonitor(null, 100, 100, 1280, 720, null) catch unreachable;
+            window.setMonitor(null, 100, 100, 1280, 720, null);
         }
     }
 
@@ -168,7 +168,7 @@ fn keyCallback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.A
 fn render(window: glfw.Window) void {
     game.audio.update();
 
-    const size = window.getFramebufferSize() catch unreachable;
+    const size = window.getFramebufferSize();
     gl.viewport(0, 0, @intCast(c_int, size.width), @intCast(c_int, size.height));
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
@@ -280,29 +280,33 @@ inline fn main_wrap() !void {
     const allocator = if (tracy.enabled) tracyAlloc.allocator() else gpa.allocator();
     // tracy.InitThread();
 
-    try glfw.init(.{});
+    if (glfw.init(.{}) == false) {
+        fatalCrash(std.heap.page_allocator, "could not initialize glfw", .{});
+    }
     defer glfw.terminate();
 
     var window = glfw.Window.create(1280, 720, "Stella Dei", null, null, .{
         .opengl_profile = .opengl_core_profile,
         .context_version_major = 4,
         .context_version_minor = 0,
-    }) catch |err| blk: {
-        switch (err) {
-            error.APIUnavailable => fatalCrash(allocator, "OpenGL is not available! Install drivers!", .{}),
-            error.VersionUnavailable => {
-                std.log.warn("Switching to OpenGL 3.3 as support for OpenGL 4.0+ is missing", .{});
-                break :blk glfw.Window.create(1280, 720, "Stella Dei", null, null, .{
-                    .opengl_profile = .opengl_core_profile,
-                    .context_version_major = 3,
-                    .context_version_minor = 3,
-                }) catch |err2| switch (err2) {
-                    error.VersionUnavailable => fatalCrash(allocator, "OpenGL 3.3 (core profile) is not available! Upgrade your drivers!", .{}),
-                    else => unreachable,
-                };
-            },
-            else => fatalCrash(allocator, "Could not create the game window: {s}", .{@errorName(err)}),
-        }
+    }) orelse blk: {
+        glfw.getErrorCode() catch |err| {
+            switch (err) {
+                error.APIUnavailable => fatalCrash(allocator, "OpenGL is not available! Install drivers!", .{}),
+                error.VersionUnavailable => {
+                    std.log.warn("Switching to OpenGL 3.3 as support for OpenGL 4.0+ is missing", .{});
+                    break :blk glfw.Window.create(1280, 720, "Stella Dei", null, null, .{
+                        .opengl_profile = .opengl_core_profile,
+                        .context_version_major = 3,
+                        .context_version_minor = 3,
+                    }) orelse {
+                        fatalCrash(allocator, "OpenGL 3.3 (core profile) is not available! Upgrade your drivers!", .{});
+                    };
+                },
+                else => fatalCrash(allocator, "Could not create the game window: {s}", .{@errorName(err)}),
+            }
+        };
+        unreachable;
     };
     defer window.destroy();
     window.setCursorPosCallback(cursorPosCallback);
@@ -310,8 +314,8 @@ inline fn main_wrap() !void {
     window.setScrollCallback(mouseScroll);
     window.setKeyCallback(keyCallback);
 
-    try glfw.makeContextCurrent(window);
-    try glfw.swapInterval(1);
+    glfw.makeContextCurrent(window);
+    glfw.swapInterval(1);
     std.log.debug("Load OpenGL functions", .{});
     try gl.load({}, getProcAddress);
 
@@ -353,11 +357,11 @@ inline fn main_wrap() !void {
 
     var fpsTimer = try std.time.Timer.start();
     while (!window.shouldClose()) {
-        try glfw.makeContextCurrent(window);
+        glfw.makeContextCurrent(window);
         render(window);
 
-        try window.swapBuffers();
-        try glfw.pollEvents();
+        window.swapBuffers();
+        glfw.pollEvents();
         tracy.FrameMark();
 
         const frameTime = fpsTimer.lap();

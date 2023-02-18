@@ -1,4 +1,4 @@
-const std  = @import("std");
+const std = @import("std");
 const deps = @import("deps.zig");
 const glfw = deps.imports.build_glfw;
 
@@ -11,12 +11,7 @@ const ConvertStep = struct {
 
     pub fn create(builder: *std.build.Builder, root: []const u8) *ConvertStep {
         const self = builder.allocator.create(ConvertStep) catch unreachable;
-        self.* = .{
-            .generated_file = undefined,
-            .step = std.build.Step.init(.install_file, "convert", builder.allocator, ConvertStep.make),
-            .builder = builder,
-            .root = root
-        };
+        self.* = .{ .generated_file = undefined, .step = std.build.Step.init(.install_file, "convert", builder.allocator, ConvertStep.make), .builder = builder, .root = root };
 
         self.generated_file = .{ .step = &self.step };
         return self;
@@ -32,8 +27,7 @@ const ConvertStep = struct {
         var sourceDir = try std.fs.cwd().openIterableDir(std.fs.path.dirname(self.root).?, .{});
         defer sourceDir.close();
 
-        var cacheRoot = try std.fs.cwd().openDir(self.builder.cache_root, .{});
-        defer cacheRoot.close();
+        var cacheRoot = self.builder.cache_root.handle;
 
         var targetDir = try cacheRoot.makeOpenPath("converted", .{});
         defer targetDir.close();
@@ -62,8 +56,7 @@ const ConvertStep = struct {
             }
         }
 
-        self.generated_file.path = try std.mem.concat(self.builder.allocator, u8,
-            &[_][]const u8 { self.builder.cache_root, "/converted/main.zig" });
+        self.generated_file.path = try std.mem.concat(self.builder.allocator, u8, &[_][]const u8{ self.builder.cache_root.path.?, "/converted/main.zig" });
     }
 };
 
@@ -97,36 +90,59 @@ pub fn linkTracy(b: *std.build.Builder, step: *std.build.LibExeObjStep, opt_path
 }
 
 pub fn build(b: *std.build.Builder) !void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
 
-    // Standard release options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
-    const mode = b.standardReleaseOptions();
-
-    const use_tracy = b.option(bool, "tracy", "Build the game with Tracy support") orelse (mode == .Debug);
+    const use_tracy = b.option(bool, "tracy", "Build the game with Tracy support") orelse (optimize == .Debug);
 
     const convert = ConvertStep.create(b, "src/main.zig");
 
-    const exe = b.addExecutableSource("stella-dei", convert.getSource());
-    exe.strip = mode == .ReleaseFast or mode == .ReleaseSmall;
-    if (mode != .Debug) exe.subsystem = .Windows;
-    exe.setTarget(target);
-    exe.setBuildMode(mode);
-    //exe.use_stage1 = true;
+    const exe = b.addExecutable(.{
+        .name = "stella-dei",
+        .root_source_file = convert.getSource(),
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.strip = optimize == .ReleaseFast or optimize == .ReleaseSmall;
+    exe.linkLibC();
+    if (optimize != .Debug) exe.subsystem = .Windows;
     linkTracy(b, exe, if (use_tracy) "deps/tracy-0.8.2/" else null);
-    exe.addPackagePath("gl", "deps/gl3v3.zig");
-    deps.addAllTo(exe);
+
+    // Modules
+    const gl = b.createModule(.{
+        .source_file = .{ .path = "deps/gl3v3.zig" },
+    });
+    exe.addModule("gl", gl);
+
+    const nanovg = b.createModule(.{
+        .source_file = .{ .path = "deps/nanovg/src/nanovg.zig" },
+    });
+    exe.addModule("nanovg", nanovg);
+    const nanovg_c_flags = &.{ "-DFONS_NO_STDIO", "-DSTBI_NO_STDIO", "-fno-stack-protector", "-fno-sanitize=undefined" };
+    exe.addIncludePath("deps/nanovg/src");
+    exe.addCSourceFile("deps/nanovg/src/fontstash.c", nanovg_c_flags);
+    exe.addCSourceFile("deps/nanovg/src/stb_image.c", nanovg_c_flags);
+
+    const zalgebra = b.createModule(.{
+        .source_file = .{ .path = ".zigmod/deps/git/github.com/kooparse/zalgebra/src/main.zig" },
+    });
+    exe.addModule("zalgebra", zalgebra);
+
+    const zigimg = b.createModule(.{
+        .source_file = .{ .path = ".zigmod/deps/git/github.com/zigimg/zigimg/zigimg.zig" },
+    });
+    exe.addModule("zigimg", zigimg);
+
+    // deps.addAllTo(exe);
     try glfw.link(b, exe, .{});
+    const glfw_module = glfw.module(b);
+    exe.addModule("glfw", glfw_module);
 
     exe.addIncludePath("deps");
     exe.addCSourceFile("deps/miniaudio.c", &.{
-        "-fno-sanitize=undefined" // disable UBSAN (due to false positives)
+        "-fno-sanitize=undefined", // disable UBSAN (due to false positives)
     });
-    
+
     exe.install();
 
     const run_cmd = exe.run();
@@ -139,8 +155,11 @@ pub fn build(b: *std.build.Builder) !void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    var exe_tests = b.addTest("src/main.zig");
-    exe_tests.setBuildMode(mode);
+    var exe_tests = b.addTest(.{
+        .root_source_file = convert.getSource(),
+        .target = target,
+        .optimize = optimize,
+    });
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&exe_tests.step);

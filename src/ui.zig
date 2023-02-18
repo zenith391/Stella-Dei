@@ -23,7 +23,7 @@ pub const UiComponentState = union(enum) {
 };
 
 pub fn button(vg: nvg, game: *Game, name: []const u8, x: f32, y: f32, w: f32, h: f32, text: []const u8) bool {
-    const cursor = game.window.getCursorPos() catch unreachable;
+    const cursor = game.window.getCursorPos();
     const pressed = game.window.getMouseButton(.left) == .press;
     const hovered = cursor.xpos >= x and cursor.ypos >= y and cursor.xpos < x + w and cursor.ypos < y + h;
     var state = game.imgui_state.get(name) orelse UiComponentState{ .Button = .{ .color = colors.main } };
@@ -57,7 +57,7 @@ pub fn button(vg: nvg, game: *Game, name: []const u8, x: f32, y: f32, w: f32, h:
 }
 
 pub fn toolButton(vg: nvg, game: *Game, name: []const u8, x: f32, y: f32, w: f32, h: f32, image: *renderer.Texture) bool {
-    const cursor = game.window.getCursorPos() catch unreachable;
+    const cursor = game.window.getCursorPos();
     const pressed = game.window.getMouseButton(.left) == .press;
     const hovered = cursor.xpos >= x and cursor.ypos >= y and cursor.xpos < x + w and cursor.ypos < y + h + 20;
     var state = game.imgui_state.get(name) orelse UiComponentState{ .ToolButton = .{ .color = colors.main } };
@@ -104,7 +104,7 @@ pub fn label(vg: nvg, game: *Game, comptime fmt: []const u8, args: anytype, x: f
 
 /// Returns true if hovered
 pub fn coloredLabel(vg: nvg, game: *Game, name: []const u8, comptime fmt: []const u8, args: anytype, x: f32, y: f32, color: nvg.Color) bool {
-    const cursor = game.window.getCursorPos() catch unreachable;
+    const cursor = game.window.getCursorPos();
     // TODO: real text size
     const w = 180;
     const h = 30;

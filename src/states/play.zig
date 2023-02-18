@@ -254,7 +254,7 @@ pub const PlayState = struct {
         // TODO: make a loading scene
         const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
         const seed = randomPrng.random().int(u64);
-        const planet = Planet.generate(game.allocator, 6, planetRadius, seed, .{}) catch unreachable;
+        const planet = Planet.generate(game.allocator, 7, planetRadius, seed, .{}) catch unreachable;
 
         if (false) {
             // Load Earth
@@ -271,7 +271,7 @@ pub const PlayState = struct {
 
         var framebuffer = Framebuffer.create(800, 600) catch unreachable;
 
-        const cursorPos = game.window.getCursorPos() catch unreachable;
+        const cursorPos = game.window.getCursorPos();
         std.valgrind.callgrind.startInstrumentation();
         return PlayState{
             .dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos)),
@@ -290,7 +290,7 @@ pub const PlayState = struct {
 
         // Move the camera when dragging the mouse
         if (window.getMouseButton(.right) == .press and !self.showEscapeMenu) {
-            const glfwCursorPos = game.window.getCursorPos() catch unreachable;
+            const glfwCursorPos = game.window.getCursorPos();
             const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
             const delta = cursorPos.sub(self.dragStart).scale(1.0 / 100.0);
             const right = self.targetCameraPos.cross(Vec3.forward()).norm();
@@ -663,7 +663,7 @@ pub const PlayState = struct {
         }
 
         if (button == .right) {
-            const cursorPos = game.window.getCursorPos() catch unreachable;
+            const cursorPos = game.window.getCursorPos();
             self.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos));
         }
     }
@@ -682,7 +682,7 @@ pub const PlayState = struct {
     pub fn mouseMoved(self: *PlayState, game: *Game, x: f32, y: f32) void {
         if (self.showEscapeMenu) return;
 
-        const windowSize = game.window.getFramebufferSize() catch unreachable;
+        const windowSize = game.window.getFramebufferSize();
         // Transform screen coordinates to Normalized Device Space coordinates
         const ndsX = 2 * x / @intToFloat(f32, windowSize.width) - 1;
         const ndsY = 1 - 2 * y / @intToFloat(f32, windowSize.height);
