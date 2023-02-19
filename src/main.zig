@@ -47,6 +47,8 @@ pub const Game = struct {
     /// Note: it could be called sooner, as it only needs to be called anytime
     /// after setState.
     deinitJob: ?*Job(void) = null,
+    oldMouseX: f32 = 0,
+    oldMouseY: f32 = 0,
 
     pub fn init(allocator: std.mem.Allocator, window: glfw.Window, ptrRenderer: *Renderer, ptrLoop: *EventLoop) !Game {
         return Game{
@@ -142,7 +144,15 @@ fn cursorPosCallback(window: glfw.Window, xpos: f64, ypos: f64) void {
             // and it has mouseMoved()
             if (comptime @hasDecl(field.type, "mouseMoved")) {
                 // call it
-                @field(game.state, field.name).mouseMoved(&game, @floatCast(f32, xpos), @floatCast(f32, ypos));
+                @field(game.state, field.name).mouseMoved(
+                    &game,
+                    @floatCast(f32, xpos),
+                    @floatCast(f32, ypos),
+                    @floatCast(f32, xpos) - game.oldMouseX,
+                    @floatCast(f32, ypos) - game.oldMouseY,
+                );
+                game.oldMouseX = @floatCast(f32, xpos);
+                game.oldMouseY = @floatCast(f32, ypos);
                 return;
             }
         }

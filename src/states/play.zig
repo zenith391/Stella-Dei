@@ -19,6 +19,7 @@ const Planet = @import("../simulation/planet.zig").Planet;
 
 const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
+const Vec4 = za.Vec4;
 const Mat4 = za.Mat4;
 
 pub const CubeMesh = struct {
@@ -182,6 +183,10 @@ pub const PlayState = struct {
     /// The distance the camera is from the planet's center
     cameraDistance: f32,
     targetCameraDistance: f32,
+    freeCam: bool = false,
+    /// Euler angles of the camera's rotation in degrees.
+    /// This only applies when freeCam = true
+    cameraRotation: Vec3 = Vec3.new(0, 0, 0),
     /// The index of the currently selected point
     selectedPoint: usize = 0,
     displayMode: Planet.DisplayMode = .Normal,
@@ -300,42 +305,70 @@ pub const PlayState = struct {
         const size = renderer.framebufferSize;
 
         // Move the camera when dragging the mouse
-        if (window.getMouseButton(.right) == .press and !self.showEscapeMenu) {
-            const glfwCursorPos = game.window.getCursorPos();
-            const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
-            const delta = cursorPos.sub(self.dragStart).scale(1.0 / 100.0);
-            const right = self.targetCameraPos.cross(Vec3.forward()).norm();
-            const backward = self.targetCameraPos.cross(right).norm();
-            self.targetCameraPos = self.targetCameraPos
-                .add(right.scale(delta.x())
-                .add(backward.scale(-delta.y()))
-                .scale(self.targetCameraDistance / 5));
-            self.dragStart = cursorPos;
+        if (self.freeCam) {
+            const right = self.cameraPos.cross(Vec3.forward()).norm();
+            const down = self.cameraPos.cross(right).norm();
+            _ = down;
 
+            const yaw = za.toRadians(self.cameraRotation.x());
+            const pitch = za.toRadians(self.cameraRotation.y());
+            const forward = Vec3.new(
+                std.math.cos(yaw) * std.math.cos(pitch),
+                std.math.sin(yaw) * std.math.cos(pitch),
+                std.math.sin(pitch),
+            );
+            const speed = (self.cameraPos.length() - self.planet.radius) / 100.0;
+            if (window.getKey(.w) == .press) {
+                self.cameraPos = self.cameraPos.add(forward.scale(speed));
+            }
+            if (window.getKey(.s) == .press) {
+                self.cameraPos = self.cameraPos.sub(forward.scale(speed));
+            }
+
+            {
+                const cameraPoint = self.planet.transformedPoints[self.planet.getNearestPointTo(self.cameraPos)];
+                if (self.cameraPos.length() < cameraPoint.length() + 100) {
+                    self.cameraPos = self.cameraPos.norm().scale(cameraPoint.length() + 100);
+                }
+            }
+        } else {
+            if (window.getMouseButton(.right) == .press and !self.showEscapeMenu) {
+                const glfwCursorPos = game.window.getCursorPos();
+                const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
+                const delta = cursorPos.sub(self.dragStart).scale(1.0 / 100.0);
+                const right = self.targetCameraPos.cross(Vec3.forward()).norm();
+                const backward = self.targetCameraPos.cross(right).norm();
+                self.targetCameraPos = self.targetCameraPos
+                    .add(right.scale(delta.x())
+                    .add(backward.scale(-delta.y()))
+                    .scale(self.targetCameraDistance / 5));
+                self.dragStart = cursorPos;
+
+                self.targetCameraPos = self.targetCameraPos.norm()
+                    .scale(self.targetCameraDistance);
+            }
+
+            {
+                const cameraPoint = self.planet.transformedPoints[self.planet.getNearestPointTo(self.targetCameraPos)];
+                if (self.targetCameraDistance < cameraPoint.length() + 100) {
+                    self.targetCameraDistance = cameraPoint.length() + 100;
+                }
+            }
+
+            // Smooth camera move using linear interpolation
             self.targetCameraPos = self.targetCameraPos.norm()
                 .scale(self.targetCameraDistance);
-        }
-
-        {
-            const cameraPoint = self.planet.transformedPoints[self.planet.getNearestPointTo(self.targetCameraPos)];
-            if (self.targetCameraDistance < cameraPoint.length() + 100) {
-                self.targetCameraDistance = cameraPoint.length() + 100;
+            if (!(std.math.approxEqAbs(f32, self.cameraPos.x(), self.targetCameraPos.x(), 0.01) and
+                std.math.approxEqAbs(f32, self.cameraPos.y(), self.targetCameraPos.y(), 0.01) and
+                std.math.approxEqAbs(f32, self.cameraPos.z(), self.targetCameraPos.z(), 0.01) and
+                std.math.approxEqAbs(f32, self.cameraDistance, self.targetCameraDistance, 0.01)))
+            {
+                // TODO: maybe use Quaternion lerp ? It could help on rotation near the poles.
+                self.cameraPos = self.cameraPos.scale(0.9).add(self.targetCameraPos.scale(0.1));
+                self.cameraDistance = self.cameraDistance * 0.9 + self.targetCameraDistance * 0.1;
+                self.cameraPos = self.cameraPos.norm()
+                    .scale(self.cameraDistance);
             }
-        }
-
-        // Smooth camera move using linear interpolation
-        self.targetCameraPos = self.targetCameraPos.norm()
-            .scale(self.targetCameraDistance);
-        if (!(std.math.approxEqAbs(f32, self.cameraPos.x(), self.targetCameraPos.x(), 0.01) and
-            std.math.approxEqAbs(f32, self.cameraPos.y(), self.targetCameraPos.y(), 0.01) and
-            std.math.approxEqAbs(f32, self.cameraPos.z(), self.targetCameraPos.z(), 0.01) and
-            std.math.approxEqAbs(f32, self.cameraDistance, self.targetCameraDistance, 0.01)))
-        {
-            // TODO: maybe use Quaternion lerp ? It could help on rotation near the poles.
-            self.cameraPos = self.cameraPos.scale(0.9).add(self.targetCameraPos.scale(0.1));
-            self.cameraDistance = self.cameraDistance * 0.9 + self.targetCameraDistance * 0.1;
-            self.cameraPos = self.cameraPos.norm()
-                .scale(self.cameraDistance);
         }
 
         if (@floatToInt(c_int, size.x()) != self.framebuffer.width or @floatToInt(c_int, size.y()) != self.framebuffer.height) {
@@ -416,11 +449,7 @@ pub const PlayState = struct {
             var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
             const zFar = self.planet.radius * 5;
             const zNear = zFar / 10000;
-            const right = self.cameraPos.cross(Vec3.forward()).norm();
-            const forward = self.cameraPos.cross(right).norm().negate();
-            const planetTarget = Vec3.new(0, 0, 0).sub(self.cameraPos).norm();
-            const distToPlanet = self.cameraDistance - self.planet.radius;
-            const target = self.cameraPos.add(Vec3.lerp(planetTarget, forward, std.math.pow(f32, 2, -distToPlanet / self.planet.radius * 5) * 0.6));
+            const target = self.getViewTarget();
 
             program.use();
             program.setUniformInt("screenTexture", 0);
@@ -454,6 +483,28 @@ pub const PlayState = struct {
         }
     }
 
+    fn getViewTarget(self: *PlayState) Vec3 {
+        const right = self.cameraPos.cross(Vec3.forward()).norm();
+        const forward = self.cameraPos.cross(right).norm().negate();
+        const planetTarget = Vec3.new(0, 0, 0).sub(self.cameraPos).norm();
+        const distToPlanet = self.cameraDistance - self.planet.radius;
+        var target = self.cameraPos.add(Vec3.lerp(planetTarget, forward, std.math.pow(f32, 2, -distToPlanet / self.planet.radius * 5) * 0.6));
+
+        if (self.freeCam) {
+            //const rotMatrix = Mat4.fromEulerAngles(self.cameraRotation);
+            const yaw = za.toRadians(self.cameraRotation.x());
+            const pitch = za.toRadians(self.cameraRotation.y());
+            const direction = Vec3.new(
+                std.math.cos(yaw) * std.math.cos(pitch),
+                std.math.sin(yaw) * std.math.cos(pitch),
+                std.math.sin(pitch),
+            );
+            target = self.cameraPos.add(direction);
+        }
+
+        return target;
+    }
+
     pub fn renderScene(self: *PlayState, game: *Game, renderer: *Renderer) void {
         const size = renderer.framebufferSize;
 
@@ -465,11 +516,7 @@ pub const PlayState = struct {
         const zFar = planet.radius * 5;
         const zNear = zFar / 10000;
 
-        const right = self.cameraPos.cross(Vec3.forward()).norm();
-        const forward = self.cameraPos.cross(right).norm().negate();
-        const planetTarget = Vec3.new(0, 0, 0).sub(self.cameraPos).norm();
-        const distToPlanet = self.cameraDistance - self.planet.radius;
-        const target = self.cameraPos.add(Vec3.lerp(planetTarget, forward, std.math.pow(f32, 2, -distToPlanet / self.planet.radius * 5) * 0.6));
+        const target = self.getViewTarget();
 
         // Start by rendering the skybox
         {
@@ -709,7 +756,6 @@ pub const PlayState = struct {
     }
 
     pub fn keyCallback(self: *PlayState, game: *Game, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
-        _ = game;
         _ = scancode;
         _ = mods;
         if (action == .press) {
@@ -724,6 +770,16 @@ pub const PlayState = struct {
             if (key == .F5) {
                 const numEnumFields = @as(c_int, std.meta.fields(Planet.DisplayMode).len);
                 self.displayMode = @intToEnum(Planet.DisplayMode, @mod(@enumToInt(self.displayMode) + 1, numEnumFields));
+            }
+            if (key == .F6) {
+                if (self.freeCam) {
+                    self.targetCameraDistance = self.cameraPos.length();
+                }
+                self.freeCam = !self.freeCam;
+
+                game.renderer.window.setInputModeCursor(
+                    if (self.freeCam) .disabled else .normal,
+                );
             }
             if (key == .space) {
                 self.paused = !self.paused;
@@ -761,8 +817,13 @@ pub const PlayState = struct {
         self.targetCameraDistance = std.math.clamp(self.targetCameraDistance - (@floatCast(f32, yOffset) * self.cameraDistance / 50), minDistance, maxDistance);
     }
 
-    pub fn mouseMoved(self: *PlayState, game: *Game, x: f32, y: f32) void {
+    pub fn mouseMoved(self: *PlayState, game: *Game, x: f32, y: f32, dx: f32, dy: f32) void {
         if (self.showEscapeMenu) return;
+        if (self.freeCam) {
+            const mouseSensitivity = 0.1;
+            self.cameraRotation.data[0] -= dx * mouseSensitivity;
+            self.cameraRotation.data[1] -= dy * mouseSensitivity;
+        }
 
         const windowSize = game.window.getFramebufferSize();
         // Transform screen coordinates to Normalized Device Space coordinates
