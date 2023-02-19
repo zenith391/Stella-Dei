@@ -119,7 +119,6 @@ void drawBrightTexture() {
 }
 
 void drawBlurredTexture() {
-	// TODO: just precompute it and paste it in the file!
 	float weight[16] = float[] (
 		0.11764705882353,
 		0.10382316500995,
@@ -143,8 +142,7 @@ void drawBlurredTexture() {
 	//	weight[i] = w / (7.5 * 2 + 1);
 	//}
 	
-	float sampleDistance = 1.0;
-	
+	float sampleDistance = 1.5;
 	vec2 tex_offset = 1.0 / textureSize(screenTexture, 0); // gets size of single texel
     vec3 result = texture(screenTexture, texCoords).rgb * weight[0]; // current fragment's contribution
     if (horizontalBlurring) {
@@ -206,7 +204,6 @@ void main() {
 		vec3 light = calculateLight(pointInAtmosphere, rayDir, dstThroughAtmosphere, color);
 		result = light;
 		//result = pointInAtmosphere / vec3(10000);
-
 	} else {
 		result = color;
 	}

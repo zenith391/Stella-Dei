@@ -523,7 +523,6 @@ pub const Planet = struct {
         {
             const rotationMatrix = za.Mat4.fromRotation(axialTilt, Vec3.right());
             const kmPerWaterMass = self.getKmPerWaterMass();
-            //std.log.info("water: {d} m / kg", .{ kmPerWaterMass * 1000 });
 
             // This could be sped up by using LOD? (allowing to transfer less data)
             // NOTE: this has really bad cache locality
@@ -538,7 +537,7 @@ pub const Planet = struct {
                 self.transformedPoints[i] = transformedPoint;
 
                 const bytePos = i * STRIDE;
-                const bufSlice = bufData[bytePos + 0 .. bytePos + 10];
+                const bufSlice = bufData[bytePos + 0 .. bytePos + 6];
                 bufSlice[0..3].* = transformedPoint.data;
                 bufSlice[3..6].* = normal.data;
             }

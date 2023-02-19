@@ -191,8 +191,15 @@ pub const PlayState = struct {
     solarConstant: f32 = 1361,
     /// The time it takes for the planet to do a full rotation on itself, in seconds
     planetRotationTime: f32 = 86400,
-    /// The time elapsed in seconds since the start of the game
+    /// The time elapsed in seconds since the start of the game.
+    /// Updated at every tick.
     gameTime: f64 = 0,
+    /// The time elapsed in seconds since the start of the game.
+    /// Updated at every frame. This will periodically resynchronise with gameTime
+    /// The reason this exists is to have smooth rendering even when the simulation is slow
+    renderGameTime: f64 = 0,
+    /// The average time a tick takes to execute.
+    averageUpdateTime: f32 = 0,
     /// Time scale for the simulation.
     /// This is the number of in-game seconds that passes for each real second
     /// TODO: only expose 3 selectable time scales like in most game (normal, fast, super fast)
@@ -404,7 +411,7 @@ pub const PlayState = struct {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         {
             const program = renderer.postprocessProgram;
-            var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi));
+            var sunPhi: f32 = @floatCast(f32, @mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi));
             var sunTheta: f32 = std.math.pi / 2.0;
             var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
             const zFar = self.planet.radius * 5;
@@ -440,13 +447,18 @@ pub const PlayState = struct {
             gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.depthTexture); // depth
             gl.drawArrays(gl.TRIANGLES, 0, 6);
         }
+
+        // TODO: depending on fps
+        if (!self.paused) {
+            self.renderGameTime = self.renderGameTime + self.timeScale / game.fps;
+        }
     }
 
     pub fn renderScene(self: *PlayState, game: *Game, renderer: *Renderer) void {
         const size = renderer.framebufferSize;
 
         const planet = &self.planet;
-        var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi));
+        var sunPhi: f32 = @floatCast(f32, @mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi));
         var sunTheta: f32 = std.math.pi / 2.0;
         var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
 
@@ -682,6 +694,9 @@ pub const PlayState = struct {
 
             // TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
             self.gameTime += dt * self.timeScale;
+            self.averageUpdateTime = self.averageUpdateTime * 0.9 + dt * 0.1;
+            // Re-synchronise render game time with real game time
+            self.renderGameTime = self.gameTime;
         }
 
         if (self.defer_saveGame) {

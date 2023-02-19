@@ -37,6 +37,7 @@ pub const Game = struct {
     loop: *EventLoop,
     allocator: std.mem.Allocator,
     imgui_state: std.StringHashMap(@import("ui.zig").UiComponentState),
+    fps: f32 = 60,
     /// Job that will be deinit at the end. In the code this is only used for a
     /// job's that's created to call Game.setState from a state, but then can't
     /// be deinit immediately because otherwise you'd have a biting-its-tail problem
@@ -373,7 +374,7 @@ inline fn main_wrap() !void {
 
         const frameTime = fpsTimer.lap();
         const fps = 1.0 / (@intToFloat(f32, frameTime) / std.time.ns_per_s);
-        _ = fps;
+        game.fps = fps;
         //std.log.debug("{d} fps", .{ fps });
     }
 }
