@@ -4,6 +4,7 @@ const za = @import("zalgebra");
 const nvg = @import("nanovg");
 const Game = @import("../main.zig").Game;
 const Renderer = @import("../renderer.zig").Renderer;
+const Texture = @import("../renderer.zig").Texture;
 const PlayState = @import("play.zig").PlayState;
 const GameIntroState = @import("game_intro.zig").GameIntroState;
 const ui = @import("../ui.zig");
@@ -12,12 +13,18 @@ const Planet = @import("../simulation/planet.zig").Planet;
 
 const Job = @import("../loop.zig").Job;
 
+const CubeMesh = @import("../utils.zig").CubeMesh;
 const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Mat4 = za.Mat4;
 
 pub const MainMenuState = struct {
     planet: Planet,
+    skybox: Texture,
+    displacementX: f32 = 0,
+    displacementY: f32 = 0,
+    targetDisplacementX: f32 = 0,
+    targetDisplacementY: f32 = 0,
     do_render: bool = true,
     newAlpha: u8 = 128,
     loadAlpha: u8 = 128,
@@ -44,7 +51,14 @@ pub const MainMenuState = struct {
             planet.loadFromImage(game.allocator, file) catch {};
         }
 
-        return MainMenuState{ .planet = planet };
+        // Create the skybox
+        const skybox = Texture.initCubemap();
+        const faces = [_]Texture.CubemapFace{ .PositiveX, .NegativeX, .PositiveY, .NegativeY, .PositiveZ, .NegativeZ };
+        for (faces) |face| {
+            skybox.loadCubemapFace(game.allocator, face, "assets/starsky-1024.png") catch {};
+        }
+
+        return MainMenuState{ .planet = planet, .skybox = skybox };
     }
 
     pub fn render(self: *MainMenuState, game: *Game, renderer: *Renderer) void {
@@ -60,11 +74,41 @@ pub const MainMenuState = struct {
         const zFar = planet.radius * 5;
         const zNear = zFar / 10000;
 
-        var cameraPos = Vec3.new(-802, -913, 292)
+        self.displacementX = self.displacementX * 0.9 + self.targetDisplacementX * 0.1;
+        self.displacementY = self.displacementY * 0.9 + self.targetDisplacementY * 0.1;
+
+        var cameraPos = Vec3.new(-802 + self.displacementX, -913, 292 + self.displacementY)
             .norm().scale(10000 * 1.5);
 
         const planetTarget = Vec3.new(0, 0, 0).sub(cameraPos).norm();
         const target = planetTarget;
+
+        // Start by rendering the skybox
+        {
+            const program = renderer.skyboxProgram;
+            program.use();
+            program.setUniformMat4("projMatrix", Mat4.perspective(70, size.x() / size.y(), 0.01, 100));
+            var newViewMatrix = Mat4.lookAt(cameraPos, target, Vec3.new(0, 0, 1));
+            // remove all the translation part
+            newViewMatrix.data[0][3] = 0;
+            newViewMatrix.data[1][3] = 0;
+            newViewMatrix.data[2][3] = 0;
+            newViewMatrix.data[3][3] = 1;
+            newViewMatrix.data[3][0] = 0;
+            newViewMatrix.data[3][1] = 0;
+            newViewMatrix.data[3][2] = 0;
+            program.setUniformMat4("viewMatrix", newViewMatrix);
+            gl.depthMask(gl.FALSE);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.skybox.texture);
+            program.setUniformInt("skyboxCubemap", 0);
+
+            gl.bindVertexArray(CubeMesh.getVAO());
+            gl.drawArrays(gl.TRIANGLES, 0, 36);
+
+            gl.depthMask(gl.TRUE);
+        }
 
         // Then render the planet
         {
@@ -120,6 +164,10 @@ pub const MainMenuState = struct {
         const columnY = centerY - columnHeight / 2.0;
         const pressed = game.window.getMouseButton(.left) == .press;
 
+        const logoWidth: f32 = 1668.0 / 6.0;
+        const logoHeight = logoWidth / (1668.0 / 353.0);
+        ui.img(vg, size.x() / 2.0 - logoWidth / 2, 50, logoWidth, logoHeight, renderer.textureCache.get("logo"));
+
         vg.textAlign(.{ .horizontal = .left, .vertical = .top });
         vg.fontSize(26.0);
         if (ui.coloredLabel(vg, game, "new-label", "New Planet", .{}, columnX, columnY, nvg.rgba(255, 255, 255, self.newAlpha))) {
@@ -151,6 +199,17 @@ pub const MainMenuState = struct {
         } else {
             self.exitAlpha = 128;
         }
+    }
+
+    pub fn mouseMoved(self: *MainMenuState, game: *Game, x: f32, y: f32, dx: f32, dy: f32) void {
+        _ = dx;
+        _ = dy;
+        const size = game.renderer.framebufferSize;
+        const nx = x / size.x() * 2 - 1;
+        const ny = y / size.y() * 2 - 1;
+
+        self.targetDisplacementX = nx * 300;
+        self.targetDisplacementY = -ny * 100;
     }
 
     pub fn deinit(self: *MainMenuState, game: *Game) void {

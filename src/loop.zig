@@ -151,7 +151,7 @@ pub const EventLoop = struct {
         self.threads = threads;
         self.allocator = allocator;
 
-        for (threads) |*thread, threadId| {
+        for (threads, 0..) |*thread, threadId| {
             thread.* = try Thread.spawn(.{}, workerLoop, .{ self, threadId });
         }
     }

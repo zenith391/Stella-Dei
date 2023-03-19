@@ -440,7 +440,7 @@ pub const Framebuffer = struct {
 
         var colorTextures: [2]gl.GLuint = undefined;
         gl.genTextures(2, &colorTextures);
-        for (colorTextures) |colorTexture, i| {
+        for (colorTextures, 0..) |colorTexture, i| {
             gl.bindTexture(gl.TEXTURE_2D, colorTexture);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB16F, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);

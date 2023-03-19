@@ -90,6 +90,13 @@ pub fn toolButton(vg: nvg, game: *Game, name: []const u8, x: f32, y: f32, w: f32
     return false;
 }
 
+pub fn img(vg: nvg, x: f32, y: f32, w: f32, h: f32, image: *renderer.Texture) void {
+    vg.beginPath();
+    vg.fillPaint(vg.imagePattern(x, y, w, h, 0, image.toVgImage(vg), 1.0));
+    vg.rect(x, y, w, h);
+    vg.fill();
+}
+
 pub fn label(vg: nvg, game: *Game, comptime fmt: []const u8, args: anytype, x: f32, y: f32) void {
     _ = game;
     var buf: [500]u8 = undefined;

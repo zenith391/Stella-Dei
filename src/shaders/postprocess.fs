@@ -49,10 +49,10 @@ vec2 raySphere(float sphereRadius, vec3 rayOrigin, vec3 rayDir) {
 }
 
 float densityAtPoint(vec3 point) {
-	float radius = planetRadius;
+	float radius = planetRadius - 100;
 	float height = length(point) - radius;
 	float heightScaled = height / (atmosphereRadius - radius);
-	float densityFalloff = 3.00; // TODO: variable depending on composition?
+	float densityFalloff = 4.00; // TODO: variable depending on composition?
 	float localDensity = exp(-heightScaled * densityFalloff) * (1 - heightScaled);
 	return localDensity;
 }
@@ -198,7 +198,7 @@ void main() {
 	vec3 result;
 	if (dstThroughAtmosphere > 0 && enableAtmosphere) {
 		vec3 pointInAtmosphere = viewPos + rayDir * dstToAtmosphere;
-		if (depth == 1 && false) { // skybox
+		if (depth == 1) { // skybox
 			color = vec3(0);
 		}
 		vec3 light = calculateLight(pointInAtmosphere, rayDir, dstThroughAtmosphere, color);
@@ -207,7 +207,8 @@ void main() {
 	} else {
 		result = color;
 	}
-	//result = mix(result, vec3((dstToSurface - dstToAtmosphere - 500)), 0.9);
+	//result = mix(result, vec3((dstToSurface - dstToAtmosphere - 500) / 10), 0.9);
+	// result = vec3(dstThroughAtmosphere / (planetRadius * 2));
 
 	// Apply bloom
 	vec3 bloomColor = texture(bloomTexture, texCoords).rgb;

@@ -63,6 +63,9 @@ pub const Game = struct {
     }
 
     pub fn setState(self: *Game, comptime NewState: type) void {
+        std.log.info("Loading {s}...", .{@typeName(NewState)});
+        defer std.log.info("Loaded", .{});
+
         var state = NewState.init(self);
         if (self.state_init) self.deinitState();
         self.imgui_state.clearRetainingCapacity();

@@ -98,7 +98,7 @@ pub const Context = struct {
             c.fonsDeleteInternal(ctx.fs);
         }
 
-        for (ctx.font_images) |*font_image| {
+        for (&ctx.font_images) |*font_image| {
             if (font_image.* != 0) {
                 ctx.deleteImage(font_image.*);
                 font_image.* = 0;

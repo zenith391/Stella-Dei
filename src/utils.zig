@@ -200,6 +200,71 @@ pub const IcosphereMesh = struct {
     }
 };
 
+pub const CubeMesh = struct {
+    const vertices = [36 * 3]f32{
+        -0.5, -0.5, -0.5,
+        0.5,  -0.5, -0.5,
+        0.5,  0.5,  -0.5,
+        0.5,  0.5,  -0.5,
+        -0.5, 0.5,  -0.5,
+        -0.5, -0.5, -0.5,
+
+        -0.5, -0.5, 0.5,
+        0.5,  -0.5, 0.5,
+        0.5,  0.5,  0.5,
+        0.5,  0.5,  0.5,
+        -0.5, 0.5,  0.5,
+        -0.5, -0.5, 0.5,
+
+        -0.5, 0.5,  0.5,
+        -0.5, 0.5,  -0.5,
+        -0.5, -0.5, -0.5,
+        -0.5, -0.5, -0.5,
+        -0.5, -0.5, 0.5,
+        -0.5, 0.5,  0.5,
+
+        0.5,  0.5,  0.5,
+        0.5,  0.5,  -0.5,
+        0.5,  -0.5, -0.5,
+        0.5,  -0.5, -0.5,
+        0.5,  -0.5, 0.5,
+        0.5,  0.5,  0.5,
+
+        -0.5, -0.5, -0.5,
+        0.5,  -0.5, -0.5,
+        0.5,  -0.5, 0.5,
+        0.5,  -0.5, 0.5,
+        -0.5, -0.5, 0.5,
+        -0.5, -0.5, -0.5,
+
+        -0.5, 0.5,  -0.5,
+        0.5,  0.5,  -0.5,
+        0.5,  0.5,  0.5,
+        0.5,  0.5,  0.5,
+        -0.5, 0.5,  0.5,
+        -0.5, 0.5,  -0.5,
+    };
+
+    var cube_vao: ?gl.GLuint = null;
+
+    pub fn getVAO() gl.GLuint {
+        if (cube_vao == null) {
+            var vao: gl.GLuint = undefined;
+            gl.genVertexArrays(1, &vao);
+            var vbo: gl.GLuint = undefined;
+            gl.genBuffers(1, &vbo);
+
+            gl.bindVertexArray(vao);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+            gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), &vertices, gl.STATIC_DRAW);
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+            gl.enableVertexAttribArray(0);
+            cube_vao = vao;
+        }
+        return cube_vao.?;
+    }
+};
+
 /// Wavelength must be a number expressed in nanometers
 /// The returned color is in the RGB color space.
 /// It doesn't account for HDR or tone mapping.

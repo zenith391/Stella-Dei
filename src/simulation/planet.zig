@@ -416,7 +416,7 @@ pub const Planet = struct {
         const standardParallel: f32 = std.math.degreesToRadians(f32, 0);
         const kmPerWaterMass = self.getKmPerWaterMass();
 
-        for (self.vertices) |*vert, idx| {
+        for (self.vertices, 0..) |*vert, idx| {
             const longitude = std.math.atan2(f32, vert.y(), vert.x());
             const latitude = std.math.acos(vert.z()) * 2;
             const imageX = @floatToInt(usize, @intToFloat(f32, image.width) / (std.math.pi * 2.0) * (longitude + std.math.pi) * std.math.cos(standardParallel));
@@ -462,7 +462,7 @@ pub const Planet = struct {
         // there could potentially be a data race between this function and upload
         // but it's not a problem as even if only a part of a normal's components are
         // updated, the glitch is barely noticeable
-        for (self.transformedPoints) |point, i| {
+        for (self.transformedPoints, 0..) |point, i| {
             self.normals[i] = self.computeNormal(i, point);
         }
     }
@@ -527,7 +527,7 @@ pub const Planet = struct {
             // This could be sped up by using LOD? (allowing to transfer less data)
             // NOTE: this has really bad cache locality
             const STRIDE = 6;
-            for (self.vertices) |point, i| {
+            for (self.vertices, 0..) |point, i| {
                 const waterElevation = self.waterMass[i] * kmPerWaterMass;
                 const totalElevation = self.elevation[i] + waterElevation;
                 const exaggeratedElev = (totalElevation - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius;
@@ -547,11 +547,11 @@ pub const Planet = struct {
 
             // This one is special and needs processing
             if (displayMode == .WindMagnitude) {
-                for (self.airVelocity) |velocity, i| {
+                for (self.airVelocity, 0..) |velocity, i| {
                     bufData[i] = velocity.x();
                 }
                 gl.bufferSubData(gl.ARRAY_BUFFER, 6 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.vertices.len * @sizeOf(f32)), bufData.ptr);
-                for (self.airVelocity) |velocity, i| {
+                for (self.airVelocity, 0..) |velocity, i| {
                     bufData[i] = velocity.y();
                 }
                 gl.bufferSubData(gl.ARRAY_BUFFER, 7 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.vertices.len * @sizeOf(f32)), bufData.ptr);
@@ -570,7 +570,7 @@ pub const Planet = struct {
 
         {
             const STRIDE = 4;
-            for (self.vertices) |point, i| {
+            for (self.vertices, 0..) |point, i| {
                 const transformedPoint = point.scale(self.radius + 15 * HEIGHT_EXAGGERATION_FACTOR);
 
                 const bytePos = i * STRIDE;
@@ -586,7 +586,7 @@ pub const Planet = struct {
 
     pub fn render(self: *Planet, loop: *EventLoop, displayMode: DisplayMode, axialTilt: f32) void {
         self.upload(loop, displayMode, axialTilt);
-        for (self.mesh.vao) |vao, vaoIdx| {
+        for (self.mesh.vao, 0..) |vao, vaoIdx| {
             gl.bindVertexArray(vao);
             gl.drawElements(gl.TRIANGLES, self.mesh.num_elements[vaoIdx], gl.UNSIGNED_INT, null);
         }
@@ -646,7 +646,7 @@ pub const Planet = struct {
         // TODO: add a BSP for much better performance?
         var closestPointDist: f32 = std.math.inf_f32;
         var closestPoint: usize = undefined;
-        for (self.transformedPoints) |point, i| {
+        for (self.transformedPoints, 0..) |point, i| {
             const distance = point.distance(position);
             if (distance < closestPointDist) {
                 closestPoint = i;
@@ -942,7 +942,7 @@ pub const Planet = struct {
             self.rainfall[i] = std.math.max(0, self.rainfall[i] * (1.0 - dt / 86400.0));
 
             if (false) {
-                for (self.getNeighbours(i)) |neighbourIdx, location| {
+                for (self.getNeighbours(i), 0..) |neighbourIdx, location| {
                     const neighbourVapor = self.waterVaporMass[neighbourIdx];
                     const dP = pressure - self.getAirPressure(substanceDivider, self.temperature[neighbourIdx], neighbourVapor);
 
@@ -1216,7 +1216,7 @@ pub const Planet = struct {
 
         // Do not transfer to a point that is loaded in the current vector
         // This causes water to disappear
-        for (@as([VECTOR_SIZE]usize, target)) |target_elem, idx| {
+        for (@as([VECTOR_SIZE]usize, target), 0..) |target_elem, idx| {
             if (@reduce(.Or, origin == @splat(VECTOR_SIZE, target_elem))) {
                 transmitted[idx] = 0;
             }
@@ -1272,6 +1272,8 @@ pub const Planet = struct {
         const m_to_nm = std.math.pow(f32, 10.0, 9.0);
         self.plantColorWavelength = maxWavelength * m_to_nm;
 
+        // TODO: multiple species
+
         var i = start;
         while (i < end) : (i += 1) {
             const vert = self.transformedPoints[i];
@@ -1288,7 +1290,17 @@ pub const Planet = struct {
                     self.vegetation[neighbourIndex] += 0.000001 * dt * newVegetation;
                 }
             }
-            self.vegetation[i] = std.math.clamp(newVegetation, 0, 1);
+            newVegetation = std.math.clamp(newVegetation, 0, 1);
+
+            // TODO: only when it's sunny
+            const gasMass = newVegetation * dt * 100 / meanPointArea;
+            const enoughCO2 = @intToFloat(f32, @boolToInt(self.averageCarbonDioxideMass > gasMass));
+            self.averageCarbonDioxideMass -= gasMass * enoughCO2;
+            self.averageOxygenMass += gasMass * enoughCO2;
+
+            newVegetation -= (1 - enoughCO2) * dt * 0.00001;
+            newVegetation = std.math.clamp(newVegetation, 0, 1);
+            self.vegetation[i] = newVegetation;
         }
     }
 
@@ -1299,7 +1311,7 @@ pub const Planet = struct {
         const newTemp = self.newTemperature;
         // Fill newTemp with the current temperatures
         // NOTE: we can copy using memcpy if another way to avoid negative values is found
-        for (self.vertices) |_, i| {
+        for (self.vertices, 0..) |_, i| {
             newTemp[i] = std.math.max(0, self.temperature[i]); // temperature may never go below 0°K
         }
 
@@ -1410,7 +1422,7 @@ pub const Planet = struct {
 
             self.lifeformsLock.lock();
             defer self.lifeformsLock.unlock();
-            for (self.lifeforms.items) |*lifeform, i| {
+            for (self.lifeforms.items, 0..) |*lifeform, i| {
                 if (i >= self.lifeforms.items.len) {
                     // A lifeform has been removed and we got over
                     // the new size of the ArrayList

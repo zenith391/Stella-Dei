@@ -21,71 +21,7 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Vec4 = za.Vec4;
 const Mat4 = za.Mat4;
-
-pub const CubeMesh = struct {
-    const vertices = [36 * 3]f32{
-        -0.5, -0.5, -0.5,
-        0.5,  -0.5, -0.5,
-        0.5,  0.5,  -0.5,
-        0.5,  0.5,  -0.5,
-        -0.5, 0.5,  -0.5,
-        -0.5, -0.5, -0.5,
-
-        -0.5, -0.5, 0.5,
-        0.5,  -0.5, 0.5,
-        0.5,  0.5,  0.5,
-        0.5,  0.5,  0.5,
-        -0.5, 0.5,  0.5,
-        -0.5, -0.5, 0.5,
-
-        -0.5, 0.5,  0.5,
-        -0.5, 0.5,  -0.5,
-        -0.5, -0.5, -0.5,
-        -0.5, -0.5, -0.5,
-        -0.5, -0.5, 0.5,
-        -0.5, 0.5,  0.5,
-
-        0.5,  0.5,  0.5,
-        0.5,  0.5,  -0.5,
-        0.5,  -0.5, -0.5,
-        0.5,  -0.5, -0.5,
-        0.5,  -0.5, 0.5,
-        0.5,  0.5,  0.5,
-
-        -0.5, -0.5, -0.5,
-        0.5,  -0.5, -0.5,
-        0.5,  -0.5, 0.5,
-        0.5,  -0.5, 0.5,
-        -0.5, -0.5, 0.5,
-        -0.5, -0.5, -0.5,
-
-        -0.5, 0.5,  -0.5,
-        0.5,  0.5,  -0.5,
-        0.5,  0.5,  0.5,
-        0.5,  0.5,  0.5,
-        -0.5, 0.5,  0.5,
-        -0.5, 0.5,  -0.5,
-    };
-
-    var cube_vao: ?gl.GLuint = null;
-
-    pub fn getVAO() gl.GLuint {
-        if (cube_vao == null) {
-            var vao: gl.GLuint = undefined;
-            gl.genVertexArrays(1, &vao);
-            var vbo: gl.GLuint = undefined;
-            gl.genBuffers(1, &vbo);
-
-            gl.bindVertexArray(vao);
-            gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-            gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), &vertices, gl.STATIC_DRAW);
-            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
-            gl.enableVertexAttribArray(0);
-            cube_vao = vao;
-        }
-        return cube_vao.?;
-    }
-};
+const CubeMesh = @import("../utils.zig").CubeMesh;
 
 pub const QuadMesh = struct {
     // zig fmt: off
@@ -477,10 +413,11 @@ pub const PlayState = struct {
             gl.drawArrays(gl.TRIANGLES, 0, 6);
         }
 
-        // TODO: depending on fps
         if (!self.paused) {
             self.renderGameTime = self.renderGameTime + self.timeScale / game.fps;
         }
+
+        std.log.err("{d:.1} ups", .{1.0 / self.averageUpdateTime});
     }
 
     fn getViewTarget(self: *PlayState) Vec3 {
@@ -599,9 +536,9 @@ pub const PlayState = struct {
             gl.frontFace(gl.CW);
             defer gl.frontFace(gl.CCW);
 
-            //gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
+            // gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
             planet.render(game.loop, self.displayMode, self.axialTilt);
-            //gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
+            // gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
         }
 
         // Then the clouds
@@ -851,7 +788,7 @@ pub const PlayState = struct {
         const pos = self.cameraPos.add(worldSpaceCursor.scale(self.cameraPos.length() / 2)).norm().scale(self.planet.radius + 20);
         var closestPointDist: f32 = std.math.inf_f32;
         var closestPoint: usize = undefined;
-        for (self.planet.transformedPoints) |point, i| {
+        for (self.planet.transformedPoints, 0..) |point, i| {
             if (point.distance(pos) < closestPointDist) {
                 closestPoint = i;
                 closestPointDist = point.distance(pos);
@@ -1012,19 +949,56 @@ pub const PlayState = struct {
         if (self.debug_showMoreInfo) {
             vg.textAlign(.{ .horizontal = .left, .vertical = .top });
             const baseX = size.x() - 350;
-            const baseY = size.y() - 290;
+            var baseY = size.y() - 290;
             const point = self.selectedPoint;
             const planet = self.planet;
 
             const RH = Planet.getRelativeHumidity(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]);
+            const meanPointArea = planet.getMeanPointArea();
+
+            ui.label(vg, game, "Point #{d}", .{point}, baseX, baseY);
+            baseY += 30;
+
+            ui.label(vg, game, "Point Area: {d}km²", .{@floor(planet.getMeanPointArea() / 1_000_000)}, baseX, baseY);
+            baseY += 20;
+
+            ui.label(vg, game, "Altitude: {d:.1} km", .{planet.elevation[point] - planet.radius}, baseX, baseY);
+            baseY += 20;
+
             ui.label(vg, game, "Temperature: {d:.3}°C", .{planet.temperature[point] - 273.15}, baseX, baseY);
-            ui.label(vg, game, "Humidity: {d:.1}%", .{RH * 100}, baseX, baseY + 20);
-            ui.label(vg, game, "Water Mass: {:.1} kg", .{planet.waterMass[point] * 1_000_000_000}, baseX, baseY + 40);
+            baseY += 20;
+
+            ui.label(vg, game, "Humidity: {d:.1}%", .{RH * 100}, baseX, baseY);
+            baseY += 20;
+
+            ui.label(vg, game, "Water Mass: {:.1} kg", .{planet.waterMass[point] * 1_000_000_000}, baseX, baseY);
+            baseY += 20;
+
             // The units are given in centimeters, which is the equivalent amount of water that could be produced if all the water vapor in the column were to condense
             // similar to https://earthobservatory.nasa.gov/global-maps/MYDAL2_M_SKY_WV
-            ui.label(vg, game, "Water Vapor: {d:.1} cm", .{planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000}, baseX, baseY + 60);
-            ui.label(vg, game, "Vapor Mass: {:.1} kg", .{planet.waterVaporMass[point] * 1_000_000_000}, baseX, baseY + 80);
-            ui.label(vg, game, "Air Speed: {d:.1} km/h", .{planet.airVelocity[point].length() * 3600}, baseX, baseY + 100);
+            ui.label(vg, game, "Water Vapor: {d:.1} cm", .{planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000}, baseX, baseY);
+            baseY += 20;
+
+            ui.label(vg, game, "Vapor Mass: {:.1} kg", .{planet.waterVaporMass[point] * 1_000_000_000}, baseX, baseY);
+            baseY += 20;
+
+            ui.label(vg, game, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{
+                Planet.getPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]),
+                Planet.getEquilibriumVaporPressure(planet.temperature[point]),
+            }, baseX, baseY);
+            baseY += 20;
+
+            ui.label(vg, game, "Air Speed: {d:.1} km/h", .{planet.airVelocity[point].length() * 3600}, baseX, baseY);
+            baseY += 20;
+
+            ui.label(vg, game, "Air Pressure: {d:.2} bar", .{planet.getAirPressureOfPoint(point) / 100_000}, baseX, baseY);
+            baseY += 20;
+
+            ui.label(vg, game, "CO2 Mass: {d:.1} kg/m²", .{planet.averageCarbonDioxideMass * 1_000_000_000 / meanPointArea}, baseX, baseY);
+            baseY += 20;
+
+            ui.label(vg, game, "O2 Mass: {d:.1} kg/m²", .{planet.averageOxygenMass * 1_000_000_000 / meanPointArea}, baseX, baseY);
+            baseY += 20;
         }
 
         // const infoHeight: f32 = if (self.debug_showMoreInfo) 290 else 175;
