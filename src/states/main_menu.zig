@@ -33,7 +33,7 @@ pub const MainMenuState = struct {
 
     pub fn init(game: *Game) MainMenuState {
         const soundTrack = @import("../audio.zig").SoundTrack{ .items = &.{
-            "assets/music-main-menu.mp3",
+            "assets/music/music-main-menu.mp3",
         } };
         game.audio.playSoundTrackIn(soundTrack, 3000);
 
@@ -215,5 +215,6 @@ pub const MainMenuState = struct {
     pub fn deinit(self: *MainMenuState, game: *Game) void {
         _ = game;
         self.planet.deinit();
+        self.skybox.deinit();
     }
 };

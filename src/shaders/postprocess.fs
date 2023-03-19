@@ -1,5 +1,6 @@
 #version 330 core
 #define M_PI 3.1415926535897932384626433832795
+#define BLUR_KERNEL_SIZE 5
 
 // Parameters
 uniform vec3 viewPos;
@@ -119,39 +120,40 @@ void drawBrightTexture() {
 }
 
 void drawBlurredTexture() {
-	float weight[16] = float[] (
-		0.11764705882353,
-		0.10382316500995,
-		0.071356548201486,
-		0.038194407924512,
-		0.015921798027837,
-		0.0051690510145185,
-		0.001306940769205,
-		0.00025735189625681,
-		3.9466191517943e-05,
-		4.7135643991707e-06,
-		4.3842978495043e-07,
-		3.1759747098388e-08,
-		1.7917623229074e-09,
-		7.8724542250503e-11,
-		2.6938057007595e-12,
-		7.1787490324768e-14
-	);
-	//for (int i = 0; i < 16; i++) {
-	//	float w = cos(i * M_PI / 16.0) * 0.5 + 0.5;
-	//	weight[i] = w / (7.5 * 2 + 1);
-	//}
+	// float weight[16] = float[] (
+	// 	0.11764705882353,
+	// 	0.10382316500995,
+	// 	0.071356548201486,
+	// 	0.038194407924512,
+	// 	0.015921798027837,
+	// 	0.0051690510145185,
+	// 	0.001306940769205,
+	// 	0.00025735189625681,
+	// 	3.9466191517943e-05,
+	// 	4.7135643991707e-06,
+	// 	4.3842978495043e-07,
+	// 	3.1759747098388e-08,
+	// 	1.7917623229074e-09,
+	// 	7.8724542250503e-11,
+	// 	2.6938057007595e-12,
+	// 	7.1787490324768e-14
+	// );
+	// for (int i = 0; i < 16; i++) {
+	// 	float w = cos(i * M_PI / 16.0) * 0.5 + 0.5;
+	// 	weight[i] = w / (7.5 * 2 + 1);
+	// }
+	float weight[5] = float[] (0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
 	
 	float sampleDistance = 1.5;
 	vec2 tex_offset = 1.0 / textureSize(screenTexture, 0); // gets size of single texel
     vec3 result = texture(screenTexture, texCoords).rgb * weight[0]; // current fragment's contribution
     if (horizontalBlurring) {
-        for (int i = 1; i < 16; i++) {
+        for (int i = 1; i < BLUR_KERNEL_SIZE; i++) {
             result += texture(screenTexture, texCoords + vec2(tex_offset.x * i * sampleDistance, 0.0)).rgb * weight[i];
             result += texture(screenTexture, texCoords - vec2(tex_offset.x * i * sampleDistance, 0.0)).rgb * weight[i];
         }
     } else {
-        for (int i = 1; i < 16; i++) {
+        for (int i = 1; i < BLUR_KERNEL_SIZE; i++) {
             result += texture(screenTexture, texCoords + vec2(0.0, tex_offset.y * i * sampleDistance)).rgb * weight[i];
             result += texture(screenTexture, texCoords - vec2(0.0, tex_offset.y * i * sampleDistance)).rgb * weight[i];
         }
@@ -213,6 +215,25 @@ void main() {
 	// Apply bloom
 	vec3 bloomColor = texture(bloomTexture, texCoords).rgb;
 	result += bloomColor;
+
+	if (false) {
+		float ghostSpacing = 0.25;
+		float ghostTreshold = 0.1;
+		int ghostCount = 5;
+		
+		vec2 uv = vec2(1.0) - texCoords;
+		vec3 ret = vec3(0.0);
+		vec2 ghostVec = (vec2(0.5) - uv) * ghostSpacing;
+		result -=  result;
+
+		for (int i = 0; i < ghostCount; i++) {
+			vec2 suv = fract(uv + ghostVec * vec2(i));
+			float d = distance(suv, vec2(0.5));
+			float weight = 1.0 - smoothstep(0.0, 0.75, d);
+			vec3 s = max(color - vec3(ghostTreshold), vec3(0.0)); // apply treshold
+			result += s * weight;
+		}
+	}
 	
 	// HDR
 	float gamma = 1.0; // 2.2

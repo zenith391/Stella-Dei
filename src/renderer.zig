@@ -238,6 +238,11 @@ pub const Texture = struct {
             return .{ .handle = tex.id };
         }
     }
+
+    pub fn deinit(self: *Texture) void {
+        // TODO
+        _ = self;
+    }
 };
 
 pub const TextureCache = struct {

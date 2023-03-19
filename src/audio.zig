@@ -116,6 +116,7 @@ pub const MusicManager = struct {
                     c.MA_SOUND_FLAG_NO_PITCH | c.MA_SOUND_FLAG_NO_SPATIALIZATION | c.MA_SOUND_FLAG_STREAM, null, null, sound) != c.MA_SUCCESS)
                 {
                     std.log.scoped(.audio).warn("Could not load music '{s}'", .{nextItem});
+                    self.allocator.destroy(sound);
                     return;
                 }
                 c.ma_sound_set_volume(sound, 0.4);

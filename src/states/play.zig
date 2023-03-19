@@ -164,9 +164,9 @@ pub const PlayState = struct {
 
     pub fn init(game: *Game) PlayState {
         const soundTrack = SoundTrack{ .items = &.{
-            "assets/music1.mp3",
-            "assets/music2.mp3",
-            "assets/music3.mp3",
+            "assets/music/music1.mp3",
+            "assets/music/music2.mp3",
+            "assets/music/music3.mp3",
         } };
         game.audio.playSoundTrack(soundTrack);
 
@@ -351,29 +351,29 @@ pub const PlayState = struct {
             program.use();
             program.setUniformBool("doBrightTexture", false);
             program.setUniformBool("doBlurring", true);
-            program.setUniformBool("horizontalBlurring", true);
-            {
-                self.blurFramebuffer.bind();
-                defer self.blurFramebuffer.unbind();
-                gl.bindVertexArray(QuadMesh.getVAO());
-                gl.disable(gl.DEPTH_TEST);
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, self.framebuffer.colorTextures[1]);
-                gl.drawArrays(gl.TRIANGLES, 0, 6);
-            }
 
-            // Vertical blurring (blurFramebuffer -> framebuffer)
-            program.setUniformBool("horizontalBlurring", false);
-            {
-                self.framebuffer.bind();
-                defer self.framebuffer.unbind();
-                const attachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT1};
-                const ogAttachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT0};
-                gl.drawBuffers(1, &attachments);
-                defer gl.drawBuffers(1, &ogAttachments);
+            for (0..4) |i| {
+                program.setUniformBool("horizontalBlurring", i % 2 == 0);
 
-                gl.bindTexture(gl.TEXTURE_2D, self.blurFramebuffer.colorTextures[0]);
-                gl.drawArrays(gl.TRIANGLES, 0, 6);
+                const source = if (i % 2 == 0) self.framebuffer.colorTextures[1] else self.blurFramebuffer.colorTextures[0];
+                const target = if (i % 2 == 0) self.blurFramebuffer else self.framebuffer;
+                {
+                    target.bind();
+                    defer target.unbind();
+                    var attachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT1};
+                    if (i % 2 == 0) {
+                        attachments[0] = gl.COLOR_ATTACHMENT0;
+                    }
+                    const ogAttachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT0};
+                    gl.drawBuffers(1, &attachments);
+                    defer gl.drawBuffers(1, &ogAttachments);
+
+                    gl.bindVertexArray(QuadMesh.getVAO());
+                    gl.disable(gl.DEPTH_TEST);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, source);
+                    gl.drawArrays(gl.TRIANGLES, 0, 6);
+                }
             }
         }
 
@@ -800,15 +800,15 @@ pub const PlayState = struct {
     pub fn renderUI(self: *PlayState, game: *Game, renderer: *Renderer) void {
         const size = renderer.framebufferSize;
         const vg = renderer.vg;
+        const pressed = game.window.getMouseButton(.left) == .press;
 
-        // if (nk.nk_begin(ctx, "Open Planet Control", .{ .x = 185, .y = 10, .w = 90, .h = 50 },
-        // 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-        // 	nk.nk_layout_row_dynamic(ctx, 40, 1);
-        // 	if (nk.nk_button_label(ctx, "Control") != 0) {
-        // 		self.showPlanetControl = !self.showPlanetControl;
-        // 	}
-        // }
-        // nk.nk_end(ctx);
+        {
+            const barHeight = 50;
+            vg.beginPath();
+            vg.fillColor(nvg.rgbaf(1, 1, 1, 0.7));
+            vg.rect(0, size.y() - barHeight, size.x(), barHeight);
+            vg.fill();
+        }
 
         {
             var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
@@ -824,10 +824,15 @@ pub const PlayState = struct {
                 self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
             }
             vg.textAlign(.{ .horizontal = .left, .vertical = .bottom });
-            ui.label(vg, game, "Mean Temp. : {d:.1}°C", .{self.meanTemperature - 273.15}, 50, size.y());
+            if (ui.coloredLabel(vg, game, "mean-temperature", "{d:.1}°C", .{self.meanTemperature - 273.15}, 150, size.y() - 20, nvg.rgba(255, 255, 255, 255))) {
+                if (pressed) {
+                    std.log.info("open temperature control", .{});
+                    self.showPlanetControl = true;
+                }
+            }
         }
 
-        {
+        if (self.showPlanetControl) {
             vg.textAlign(.{ .horizontal = .center, .vertical = .top });
             ui.label(vg, game, "Solar Constant", .{}, 110, 40);
             ui.label(vg, game, "{d} W/m²", .{self.solarConstant}, 110, 70);
@@ -872,6 +877,7 @@ pub const PlayState = struct {
 
         const renderHud = !self.showEscapeMenu;
         if (renderHud) {
+            // TODO: in addition to that, for tool selection use a circle that spawns under the cursor when you click right mouse
             const panelWidth = 400;
             const panelHeight = 70;
             const panelX = size.x() / 2 - panelWidth / 2;
@@ -1001,49 +1007,6 @@ pub const PlayState = struct {
             baseY += 20;
         }
 
-        // const infoHeight: f32 = if (self.debug_showMoreInfo) 290 else 175;
-        // if (nk.nk_begin(ctx, "Point Info", .{ .x = size.x() - 350, .y = size.y() - infoHeight - 30, .w = 300, .h = infoHeight },
-        // 	0) != 0) {
-        // 	var buf: [200]u8 = undefined;
-        // 	const point = self.selectedPoint;
-        // 	const planet = self.planet;
-
-        // 	if (self.debug_showMoreInfo) {
-        // 		nk.nk_layout_row_dynamic(ctx, 30, 1);
-        // 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point #{d}", .{ point }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
-        // 	} else {
-        // 		nk.nk_layout_row_dynamic(ctx, 10, 1);
-        // 	}
-
-        // 	nk.nk_layout_row_dynamic(ctx, 20, 1);
-        // 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Altitude: {d:.1} km", .{ planet.elevation[point] - planet.radius }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-
-        // 	nk.nk_layout_row_dynamic(ctx, 20, 1);
-        // 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Rainfall: {d:.3} cm / 24h", .{ planet.rainfall[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-
-        // 	nk.nk_layout_row_dynamic(ctx, 20, 1);
-        // 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Temperature: {d:.3}°C", .{ planet.temperature[point] - 273.15 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-
-        // 	if (self.debug_showMoreInfo) {
-        // 		nk.nk_layout_row_dynamic(ctx, 20, 1);
-        // 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Point Area: {d}km²", .{ @floor(planet.getMeanPointArea() / 1_000_000) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-
-        // 		nk.nk_layout_row_dynamic(ctx, 20, 1);
-        // 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{ Planet.getPartialPressure(planet.getSubstanceDivider(), planet.temperature[point], planet.waterVaporMass[point]), Planet.getEquilibriumVaporPressure(planet.temperature[point]) }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-
-        // 		nk.nk_layout_row_dynamic(ctx, 20, 1);
-        // 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "Air Pressure: {d:.2} bar", .{ planet.getAirPressureOfPoint(point) / 100_000 }) catch unreachable, nk.NK_TEXT_ALIGN_LEFT);
-        // 	}
-        // }
-        // nk.nk_end(ctx);
-
-        // // Transparent window style
-        // const windowColor = nk.nk_color { .r = 0, .g = 0, .b = 0, .a = 0 };
-        // _ = nk.nk_style_push_color(ctx, &ctx.style.window.background, windowColor);
-        // defer _ = nk.nk_style_pop_color(ctx);
-        // _ = nk.nk_style_push_style_item(ctx, &ctx.style.window.fixed_background, nk.nk_style_item_color(windowColor));
-        // defer _ = nk.nk_style_pop_style_item(ctx);
-
         if (ui.button(vg, game, "game-pause", size.x() - 70, 30, 40, 40, if (self.paused) ">" else "||")) {
             self.paused = !self.paused;
         }
@@ -1067,24 +1030,6 @@ pub const PlayState = struct {
                 }
             }
         }
-
-        // if (nk.nk_begin(ctx, "Game Speed", .{ .x = size.x() - 200, .y = 130, .w = 140, .h = 180 },
-        // 	nk.NK_WINDOW_NO_SCROLLBAR) != 0) {
-        // 	nk.nk_layout_row_dynamic(ctx, 20, 1);
-        // 	var buf: [200]u8 = undefined;
-        // 	nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{}/s", .{ std.fmt.fmtDuration(@floatToInt(u64, self.timeScale) * std.time.ns_per_s) }) catch unreachable, nk.NK_TEXT_ALIGN_CENTERED);
-
-        // 	nk.nk_layout_row_dynamic(ctx, 40, 2);
-        // 	if (nk.nk_button_label(ctx, "-") != 0) {
-        // 		self.timeScale = std.math.max(1.0, self.timeScale - 3600);
-        // 	}
-        // 	if (nk.nk_button_label(ctx, "+") != 0) {
-        // 		if (self.timeScale < 190000) {
-        // 			self.timeScale = std.math.min(200_000, self.timeScale + 3600);
-        // 		}
-        // 	}
-        // }
-        // nk.nk_end(ctx);
     }
 
     pub fn saveGame(self: *PlayState) !void {

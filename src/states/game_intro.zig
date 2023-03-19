@@ -22,7 +22,7 @@ pub const GameIntroState = struct {
     pub fn init(game: *Game) GameIntroState {
         const soundTrack = @import("../audio.zig").SoundTrack{
             .items = &.{
-                "assets/music-main-menu.mp3",
+                "assets/music/music-main-menu.mp3",
                 // TODO: some kind of wait ethereal new-age music
             },
         };
