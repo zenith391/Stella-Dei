@@ -127,13 +127,13 @@ pub const Planet = struct {
     waterVaporMass: []f32,
     /// The average N2 mass per point of the planet
     /// Unit: 10⁹ kg
-    averageNitrogenMass: f32 = 0,
+    averageNitrogenMass: f64 = 0,
     /// The average O2 mass per point of the planet
     /// Unit: 10⁹ kg
-    averageOxygenMass: f32 = 0,
+    averageOxygenMass: f64 = 0,
     /// The average CO2 mass per point of the planet
     /// Unit: 10⁹ kg
-    averageCarbonDioxideMass: f32 = 0,
+    averageCarbonDioxideMass: f64 = 0,
     /// Historic rainfall
     /// Unit: arbitrary
     rainfall: []f32,
@@ -774,6 +774,8 @@ pub const Planet = struct {
                 //const heatTransfer = solarIrradiance * dt;
                 const heatTransfer = options.solarConstant * solarCoeff * meanPointAreaTime;
                 const temperatureGain = heatTransfer / heatCapacity; // K
+                // TODO: albedo, ice has a higher albedo than liquid water
+
                 totalTemperatureGain += temperatureGain;
             }
 
@@ -784,7 +786,12 @@ pub const Planet = struct {
                 // limestone emissivity: 0.92
                 const emissivity = 0.93; // took a value between the two
                 const radiantEmittance = stefanBoltzmannConstant * temp * temp * temp * temp * emissivity; // W.m-2
-                const heatTransfer = radiantEmittance * meanPointAreaTime; // J
+                const h2o = self.waterVaporMass[i] / meanPointArea;
+                const co2 = self.averageCarbonDioxideMass / meanPointArea;
+                // IRL, H2O and CO2 are the two major greenhouse gases
+                // This is a very crude approximation of the greenhouse effect
+                const greenhouseEffect = @min(radiantEmittance * 0.9, @floatCast(f32, (h2o * 4 + co2) * std.math.ln(radiantEmittance) * 64000));
+                const heatTransfer = (radiantEmittance - greenhouseEffect) * meanPointAreaTime; // J
                 const temperatureLoss = heatTransfer / heatCapacity; // K
                 totalTemperatureGain -= temperatureLoss;
             }

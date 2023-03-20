@@ -721,6 +721,12 @@ pub const PlayState = struct {
             if (key == .space) {
                 self.paused = !self.paused;
             }
+
+            if (key == .kp_add) {
+                self.timeScale += 10;
+            } else if (key == .kp_subtract) {
+                self.timeScale -= 10;
+            }
         }
     }
 
@@ -801,6 +807,8 @@ pub const PlayState = struct {
         const size = renderer.framebufferSize;
         const vg = renderer.vg;
         const pressed = game.window.getMouseButton(.left) == .press;
+        const glfwCursorPos = game.window.getCursorPos();
+        const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
 
         {
             const barHeight = 50;
@@ -808,6 +816,38 @@ pub const PlayState = struct {
             vg.fillColor(nvg.rgbaf(1, 1, 1, 0.7));
             vg.rect(0, size.y() - barHeight, size.x(), barHeight);
             vg.fill();
+        }
+
+        if (self.showPlanetControl) {
+            const panelWidth = 300;
+            const panelHeight = 280;
+            const panelX = 100;
+            const panelY = size.y() - 50 - 10 - panelHeight;
+            vg.beginPath();
+            vg.fillColor(nvg.rgbaf(0.8, 0.8, 0.8, 0.8));
+            vg.roundedRect(panelX, panelY, panelWidth, panelHeight, 10);
+            vg.fill();
+
+            vg.textAlign(.{ .horizontal = .center, .vertical = .top });
+            ui.label(vg, game, "Solar Constant", .{}, panelX + 90, panelY);
+            ui.label(vg, game, "{d} W/m²", .{self.solarConstant}, panelX + 90, panelY + 30);
+            if (ui.button(vg, game, "solar-constant-minus", panelX, panelY + 30, 20, 20, "-")) {
+                self.solarConstant = std.math.max(0, self.solarConstant - 100);
+            }
+            if (ui.button(vg, game, "solar-constant-plus", panelX + 160, panelY + 30, 20, 20, "+")) {
+                self.solarConstant = std.math.min(self.solarConstant + 100, 5000);
+            }
+
+            if (ui.button(vg, game, "clear-water", panelX + panelWidth / 2 - (170 / 2), panelY + 130, 170, 40, "Clear all water")) {
+                self.debug_clearWater = true;
+            }
+            if (ui.button(vg, game, "deluge", panelX + panelWidth / 2 - (170 / 2), panelY + 180, 170, 40, "Deluge")) {
+                self.debug_deluge = true;
+            }
+
+            if (pressed and !(cursorPos.x() >= panelX and cursorPos.x() < panelX + panelWidth and cursorPos.y() >= panelY and cursorPos.y() < panelY + panelHeight)) {
+                self.showPlanetControl = false;
+            }
         }
 
         {
@@ -824,30 +864,11 @@ pub const PlayState = struct {
                 self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
             }
             vg.textAlign(.{ .horizontal = .left, .vertical = .bottom });
-            if (ui.coloredLabel(vg, game, "mean-temperature", "{d:.1}°C", .{self.meanTemperature - 273.15}, 150, size.y() - 20, nvg.rgba(255, 255, 255, 255))) {
+            vg.fontSize(20.0);
+            if (ui.coloredLabel(vg, game, "mean-temperature", "{d:.1}°C", .{self.meanTemperature - 273.15}, 150, size.y() - 15, nvg.rgba(255, 255, 255, 255))) {
                 if (pressed) {
-                    std.log.info("open temperature control", .{});
                     self.showPlanetControl = true;
                 }
-            }
-        }
-
-        if (self.showPlanetControl) {
-            vg.textAlign(.{ .horizontal = .center, .vertical = .top });
-            ui.label(vg, game, "Solar Constant", .{}, 110, 40);
-            ui.label(vg, game, "{d} W/m²", .{self.solarConstant}, 110, 70);
-            if (ui.button(vg, game, "solar-constant-minus", 20, 70, 20, 20, "-")) {
-                self.solarConstant = std.math.max(0, self.solarConstant - 100);
-            }
-            if (ui.button(vg, game, "solar-constant-plus", 180, 70, 20, 20, "+")) {
-                self.solarConstant = std.math.min(self.solarConstant + 100, 5000);
-            }
-
-            if (ui.button(vg, game, "clear-water", 20, 140, 170, 40, "Clear all water")) {
-                self.debug_clearWater = true;
-            }
-            if (ui.button(vg, game, "reload-shaders", 20, 210, 170, 40, "Reload shaders")) {
-                renderer.reloadShaders() catch unreachable;
             }
         }
 
@@ -880,8 +901,8 @@ pub const PlayState = struct {
             // TODO: in addition to that, for tool selection use a circle that spawns under the cursor when you click right mouse
             const panelWidth = 400;
             const panelHeight = 70;
-            const panelX = size.x() / 2 - panelWidth / 2;
-            const panelY = size.y() - panelHeight - 15;
+            const panelX = 10;
+            const panelY = 10;
 
             const colorGradBottom = nvg.lerpRGBA(nvg.rgba(255, 255, 255, 100), nvg.rgba(0, 0, 0, 100), 1 - 0.2);
             vg.beginPath();
@@ -953,6 +974,10 @@ pub const PlayState = struct {
         // }
 
         if (self.debug_showMoreInfo) {
+            if (ui.button(vg, game, "reload-shaders", 20, 210, 170, 40, "Reload shaders")) {
+                renderer.reloadShaders() catch {};
+            }
+
             vg.textAlign(.{ .horizontal = .left, .vertical = .top });
             const baseX = size.x() - 350;
             var baseY = size.y() - 290;
@@ -985,7 +1010,7 @@ pub const PlayState = struct {
             ui.label(vg, game, "Water Vapor: {d:.1} cm", .{planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea() * planet.getKmPerWaterMass() * 100_000}, baseX, baseY);
             baseY += 20;
 
-            ui.label(vg, game, "Vapor Mass: {:.1} kg", .{planet.waterVaporMass[point] * 1_000_000_000}, baseX, baseY);
+            ui.label(vg, game, "Vapor Mass: {d:.1} kg/m²", .{planet.waterVaporMass[point] * 1_000_000_000 / planet.getMeanPointArea()}, baseX, baseY);
             baseY += 20;
 
             ui.label(vg, game, "Vapor Pressure: {d:.0} / {d:.0} Pa", .{
