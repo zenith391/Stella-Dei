@@ -586,13 +586,18 @@ pub const Planet = struct {
 
     pub fn render(self: *Planet, loop: *EventLoop, displayMode: DisplayMode, axialTilt: f32) void {
         self.upload(loop, displayMode, axialTilt);
+        self.renderNoUpload();
+    }
+
+    pub fn renderNoUpload(self: *Planet) void {
         for (self.mesh.vao, 0..) |vao, vaoIdx| {
             gl.bindVertexArray(vao);
             gl.drawElements(gl.TRIANGLES, self.mesh.num_elements[vaoIdx], gl.UNSIGNED_INT, null);
         }
     }
 
-    pub fn renderAtmosphere(self: *Planet) void {
+    // TODO: just do it in shaders postprocess.fs
+    pub fn renderClouds(self: *Planet) void {
         gl.bindVertexArray(self.atmosphereMesh.vao[0]);
         gl.drawElements(gl.TRIANGLES, @intCast(c_int, self.atmosphereMesh.indices.len), gl.UNSIGNED_INT, null);
     }
@@ -725,77 +730,135 @@ pub const Planet = struct {
             }
         }
 
-        var i: usize = start;
-        // NEW(TM) heat simulation
-        while (i < end) : (i += 1) {
-            const normVert = self.transformedPoints[i].norm();
-            // Temperature in the current cell
-            const temp = self.temperature[i];
+        // If dt is too high, default temperature simulation will become highly inaccurate so
+        // we switch to an average simulation.
+        const simulatePrecisely = dt < options.planetRotationTime / 4;
 
-            // In W.m-1.K-1, this is 1 assuming 100% of planet is SiO2 :/
-            const thermalConductivityMultiplier = 10.0; // real world thermal conductivity is too low for a game
-            const groundThermalConductivity: f32 = 1 * thermalConductivityMultiplier;
-            const waterThermalConductivity: f32 = 0.6089 * thermalConductivityMultiplier;
-            const waterLevel = self.waterMass[i];
-            const thermalConductivity = exp(-waterLevel / 2) * (groundThermalConductivity - waterThermalConductivity) + waterThermalConductivity; // W.m-1.K-1
-            const heatCapacity = heatCapacityCache[i];
+        // In W.m-1.K-1, this is 1 assuming 100% of planet is SiO2 :/
+        const thermalConductivityMultiplier = 10.0; // real world thermal conductivity is too low for a game
+        const groundThermalConductivity: f32 = 1 * thermalConductivityMultiplier;
+        const waterThermalConductivity: f32 = 0.6089 * thermalConductivityMultiplier;
 
-            var totalTemperatureGain: f32 = 0;
+        if (simulatePrecisely) {
+            var i: usize = start;
+            // NEW(TM) heat simulation
+            while (i < end) : (i += 1) {
+                const normVert = self.transformedPoints[i].norm();
+                // Temperature in the current cell
+                const temp = self.temperature[i];
 
-            for (self.getNeighbours(i)) |neighbourIndex| {
-                // We compute the 1-dimensional gradient of T (temperature)
-                // aka T1 - T2
-                const dT = self.temperature[neighbourIndex] - temp;
-                if (dT < 0) {
-                    // Heat transfer only happens from the hot point to the cold one
+                const waterLevel = self.waterMass[i];
+                const thermalConductivity = exp(-waterLevel / 2) * (groundThermalConductivity - waterThermalConductivity) + waterThermalConductivity; // W.m-1.K-1
+                const heatCapacity = heatCapacityCache[i];
 
-                    // Rate of heat flow density
-                    const qx = -thermalConductivity * dT / meanDistance; // W.m-2
-                    //const watt = qx * meanPointArea; // W = J.s-1
-                    // So, we get heat transfer in J
-                    //const heatTransfer = watt * dt;
-                    const heatTransfer = qx * meanPointAreaTime;
+                var totalTemperatureGain: f32 = 0;
 
-                    const neighbourHeatCapacity = heatCapacityCache[neighbourIndex];
-                    // it is assumed neighbours are made of the exact same materials
-                    // as this point
-                    const temperatureGain = heatTransfer / neighbourHeatCapacity; // K
-                    newTemp[neighbourIndex] += temperatureGain;
-                    totalTemperatureGain -= temperatureGain;
+                for (self.getNeighbours(i)) |neighbourIndex| {
+                    // We compute the 1-dimensional gradient of T (temperature)
+                    // aka T1 - T2
+                    const dT = self.temperature[neighbourIndex] - temp;
+                    if (dT < 0) {
+                        // Heat transfer only happens from the hot point to the cold one
+
+                        // Rate of heat flow density
+                        const qx = -thermalConductivity * dT / meanDistance; // W.m-2
+                        //const watt = qx * meanPointArea; // W = J.s-1
+                        // So, we get heat transfer in J
+                        //const heatTransfer = watt * dt;
+                        const heatTransfer = qx * meanPointAreaTime;
+
+                        const neighbourHeatCapacity = heatCapacityCache[neighbourIndex];
+                        // it is assumed neighbours are made of the exact same materials
+                        // as this point
+                        const temperatureGain = heatTransfer / neighbourHeatCapacity; // K
+                        newTemp[neighbourIndex] += temperatureGain;
+                        totalTemperatureGain -= temperatureGain;
+                    }
                 }
-            }
 
-            // Solar irradiance
-            {
-                const solarCoeff = std.math.max(0, normVert.dot(solarVector) / normVert.length());
-                // TODO: Direct Normal Irradiance? when we have atmosphere
-                //const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
-                // So, we get heat transfer in J
-                //const heatTransfer = solarIrradiance * dt;
-                const heatTransfer = options.solarConstant * solarCoeff * meanPointAreaTime;
-                const temperatureGain = heatTransfer / heatCapacity; // K
-                // TODO: albedo, ice has a higher albedo than liquid water
+                // Solar irradiance
+                {
+                    const solarCoeff = std.math.max(0, normVert.dot(solarVector) / normVert.length());
+                    // TODO: Direct Normal Irradiance? when we have atmosphere
+                    //const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
+                    // So, we get heat transfer in J
+                    //const heatTransfer = solarIrradiance * dt;
+                    const heatTransfer = options.solarConstant * solarCoeff * meanPointAreaTime;
+                    const temperatureGain = heatTransfer / heatCapacity; // K
+                    // TODO: albedo, ice has a higher albedo than liquid water
 
-                totalTemperatureGain += temperatureGain;
-            }
+                    totalTemperatureGain += temperatureGain;
+                }
 
-            // Thermal radiation with Stefan-Boltzmann law
-            {
-                const stefanBoltzmannConstant = 0.00000005670374; // W.m-2.K-4
-                // water emissivity: 0.96
-                // limestone emissivity: 0.92
-                const emissivity = 0.93; // took a value between the two
-                const radiantEmittance = stefanBoltzmannConstant * temp * temp * temp * temp * emissivity; // W.m-2
-                const h2o = self.waterVaporMass[i] / meanPointArea;
-                const co2 = self.averageCarbonDioxideMass / meanPointArea;
-                // IRL, H2O and CO2 are the two major greenhouse gases
-                // This is a very crude approximation of the greenhouse effect
-                const greenhouseEffect = @min(radiantEmittance * 0.9, @floatCast(f32, (h2o * 4 + co2) * std.math.ln(radiantEmittance) * 64000));
-                const heatTransfer = (radiantEmittance - greenhouseEffect) * meanPointAreaTime; // J
-                const temperatureLoss = heatTransfer / heatCapacity; // K
-                totalTemperatureGain -= temperatureLoss;
+                // Thermal radiation with Stefan-Boltzmann law
+                {
+                    const stefanBoltzmannConstant = 0.00000005670374; // W.m-2.K-4
+                    // water emissivity: 0.96
+                    // limestone emissivity: 0.92
+                    const emissivity = 0.93; // took a value between the two
+                    const radiantEmittance = stefanBoltzmannConstant * temp * temp * temp * temp * emissivity; // W.m-2
+                    const h2o = self.waterVaporMass[i] / meanPointArea;
+                    const co2 = self.averageCarbonDioxideMass / meanPointArea;
+                    // IRL, H2O and CO2 are the two major greenhouse gases
+                    // This is a very crude approximation of the greenhouse effect
+                    const greenhouseEffect = @min(radiantEmittance * 0.9, @floatCast(f32, (h2o * 4 + co2 * 40) * std.math.ln(radiantEmittance) * 64000));
+                    const heatTransfer = (radiantEmittance - greenhouseEffect) * meanPointAreaTime; // J
+                    const temperatureLoss = heatTransfer / heatCapacity; // K
+                    totalTemperatureGain -= temperatureLoss;
+                }
+                newTemp[i] += totalTemperatureGain;
             }
-            newTemp[i] += totalTemperatureGain;
+        } else {
+            var i: usize = start;
+            // NEW(TM) heat simulation
+            while (i < end) : (i += 1) {
+                const normVert = self.transformedPoints[i].norm();
+                // Temperature in the current cell
+                const temp = self.temperature[i];
+                const heatCapacity = heatCapacityCache[i];
+
+                var totalTemperatureGain: f32 = 0;
+
+                // TODO: solve the temperature by calculating with differential
+                // for 4 times planetRotationTime / 4 steps
+                // (thus with the solarVector at predefined cardinal positions)
+                // that would be more accurate and have less bugs than current approach
+
+                // Solar irradiance
+                {
+                    // Divide by 2 because it should only be lit 1/2th of the time
+                    // technically we should divide more to take into account morning and evening not having max solarCoeff
+                    // but whatever
+                    const solarCoeff = (1 - @fabs(normVert.z()));
+                    // TODO: Direct Normal Irradiance? when we have atmosphere
+                    //const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
+                    // So, we get heat transfer in J
+                    //const heatTransfer = solarIrradiance * dt;
+                    const heatTransfer = options.solarConstant * solarCoeff * meanPointAreaTime;
+                    const temperatureGain = heatTransfer / heatCapacity; // K
+                    // TODO: albedo, ice has a higher albedo than liquid water
+
+                    totalTemperatureGain += temperatureGain;
+                }
+
+                // Thermal radiation with Stefan-Boltzmann law
+                {
+                    const stefanBoltzmannConstant = 0.00000005670374; // W.m-2.K-4
+                    // water emissivity: 0.96
+                    // limestone emissivity: 0.92
+                    const emissivity = 0.93; // took a value between the two
+                    const radiantEmittance = stefanBoltzmannConstant * temp * temp * temp * temp * emissivity; // W.m-2
+                    const h2o = self.waterVaporMass[i] / meanPointArea;
+                    const co2 = self.averageCarbonDioxideMass / meanPointArea;
+                    // IRL, H2O and CO2 are the two major greenhouse gases
+                    // This is a very crude approximation of the greenhouse effect
+                    const greenhouseEffect = @min(radiantEmittance * 0.9, @floatCast(f32, (h2o * 4 + co2 * 40) * std.math.ln(radiantEmittance) * 64000));
+                    const heatTransfer = (radiantEmittance - greenhouseEffect) * meanPointAreaTime; // J
+                    const temperatureLoss = heatTransfer / (heatCapacity / 1.75); // K
+                    totalTemperatureGain -= temperatureLoss;
+                }
+                newTemp[i] += totalTemperatureGain;
+            }
         }
     }
 
@@ -884,48 +947,56 @@ pub const Planet = struct {
         const substanceDivider: f64 = self.getSubstanceDivider();
         const meanAtmVolume: f64 = self.getMeanPointArea() * 12_000; // m³
 
+        const evaporationAmt = @as(f32, 0.1) * meanPointArea * dt;
+
         // Do some liquid simulation
         const counting_vector = std.simd.iota(usize, VECTOR_SIZE);
         var i: usize = start;
-        while (i < end - VECTOR_SIZE + 1) : (i += VECTOR_SIZE) {
-            // only fluid if it's not ice
-            const indices = @splat(VECTOR_SIZE, i) + counting_vector; // i + 0, i + 1, i + 2, ...
-            const temp = loadSimdVector(self.temperature, i).*;
-            const elevation = loadSimdVector(self.elevation, i).*;
-            var mass = loadSimdVector(self.newWaterMass, i).*;
-            const vaporMass = loadSimdVector(self.newWaterVaporMass, i).*;
+        if (dt < 86400 / 4) {
+            while (i < end - VECTOR_SIZE + 1) : (i += VECTOR_SIZE) {
+                // only fluid if it's not ice
+                const indices = @splat(VECTOR_SIZE, i) + counting_vector; // i + 0, i + 1, i + 2, ...
+                const temp = loadSimdVector(self.temperature, i).*;
+                const elevation = loadSimdVector(self.elevation, i).*;
+                var mass = loadSimdVector(self.newWaterMass, i).*;
+                const vaporMass = loadSimdVector(self.newWaterVaporMass, i).*;
 
-            //const doApply = temp > @splat(VECTOR_SIZE, 273.15);
+                {
+                    const doBoiling = temp > @splat(VECTOR_SIZE, @as(f32, 373.15));
+                    const diff = @min(mass, @splat(VECTOR_SIZE, evaporationAmt));
+                    mass -= @select(f32, doBoiling, diff, VECTOR_ZERO);
+                }
 
-            // Mass to remove from the current cell because it has been shared to others or evaporated
-            {
-                const RH = Planet.getRelativeHumidities(substanceDivider, temp, vaporMass);
-                // evaporation only happens when the air isn't saturated and when the water is above 0°C
-                const hasSuitableHumidity = RH < @splat(VECTOR_SIZE, @as(f32, 1.0));
-                const isLiquid = temp > @splat(VECTOR_SIZE, @as(f32, 273.15));
-                const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @splat(VECTOR_SIZE, false));
-                const computedDiff = @min(@splat(VECTOR_SIZE, 10 * dt), mass);
-                const diff = @select(f32, doEvaporation, computedDiff, VECTOR_ZERO);
-                mass -= diff;
-                saveSimdVector(self.newWaterVaporMass, i, vaporMass + diff);
+                // Mass to remove from the current cell because it has been shared to others or evaporated
+                {
+                    const RH = Planet.getRelativeHumidities(substanceDivider, temp, vaporMass);
+                    // evaporation only happens when the air isn't saturated and when the water is above 0°C
+                    const hasSuitableHumidity = RH < @splat(VECTOR_SIZE, @as(f32, 1.0));
+                    const isLiquid = temp > @splat(VECTOR_SIZE, @as(f32, 273.15));
+                    const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @splat(VECTOR_SIZE, false));
+                    const computedDiff = @min(@splat(VECTOR_SIZE, 10 * dt), mass);
+                    const diff = @select(f32, doEvaporation, computedDiff, VECTOR_ZERO);
+                    mass -= diff;
+                    saveSimdVector(self.newWaterVaporMass, i, vaporMass + diff);
+                }
+
+                // TODO: ebulittion
+
+                const totalHeight = elevation + mass * @splat(VECTOR_SIZE, kmPerWaterMass);
+                const shared = mass * @splat(VECTOR_SIZE, shareFactor);
+
+                var massToRemove = @splat(VECTOR_SIZE, @as(f32, 0.0));
+                //_ = shared; _ = totalHeight; _ = indices;
+                massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardLeft), indices, shared, totalHeight, kmPerWaterMass);
+                massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardRight), indices, shared, totalHeight, kmPerWaterMass);
+                massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardLeft), indices, shared, totalHeight, kmPerWaterMass);
+                massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardRight), indices, shared, totalHeight, kmPerWaterMass);
+                massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Left), indices, shared, totalHeight, kmPerWaterMass);
+                massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Right), indices, shared, totalHeight, kmPerWaterMass);
+
+                std.debug.assert(@reduce(.And, (mass - massToRemove) >= VECTOR_ZERO));
+                saveSimdVector(self.newWaterMass, i, mass - massToRemove);
             }
-
-            // TODO: ebulittion
-
-            const totalHeight = elevation + mass * @splat(VECTOR_SIZE, kmPerWaterMass);
-            const shared = mass * @splat(VECTOR_SIZE, shareFactor);
-
-            var massToRemove = @splat(VECTOR_SIZE, @as(f32, 0.0));
-            //_ = shared; _ = totalHeight; _ = indices;
-            massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardLeft), indices, shared, totalHeight, kmPerWaterMass);
-            massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardRight), indices, shared, totalHeight, kmPerWaterMass);
-            massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardLeft), indices, shared, totalHeight, kmPerWaterMass);
-            massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardRight), indices, shared, totalHeight, kmPerWaterMass);
-            massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Left), indices, shared, totalHeight, kmPerWaterMass);
-            massToRemove += self.sendWater(self.getNeighbourSimd(indices, .Right), indices, shared, totalHeight, kmPerWaterMass);
-
-            std.debug.assert(@reduce(.And, (mass - massToRemove) >= VECTOR_ZERO));
-            saveSimdVector(self.newWaterMass, i, mass - massToRemove);
         }
 
         // Those are simply the coordinates of points in an hexagon,
@@ -983,6 +1054,7 @@ pub const Planet = struct {
                         // TODO: form cloud as clouds are formed from super-saturated air
                         const diff = std.math.min(mass, 0.5 * dt * mass / 100000.0);
                         //const diff = mass;
+                        self.newWaterMass[i] += diff;
                         self.newWaterVaporMass[i] -= diff;
                         self.rainfall[i] += diff / dt * 86400;
                     }
@@ -1146,7 +1218,7 @@ pub const Planet = struct {
 
     pub inline fn getEquilibriumVaporPressure(temperature: f32) f32 {
         @setFloatMode(.Optimized);
-        if (temperature >= 999) {
+        if (temperature >= 999 or temperature <= 0 or std.math.isNan(temperature)) {
             // This shouldn't be possible with default ranges, so no need to optimize
             return getEquilibriumVaporPressure_Unoptimized(temperature);
         } else {

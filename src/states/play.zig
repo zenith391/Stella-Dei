@@ -203,7 +203,8 @@ pub const PlayState = struct {
         // TODO: make a loading scene
         const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
         const seed = randomPrng.random().int(u64);
-        const subdivisions = if (@import("builtin").mode == .Debug) 6 else 7;
+        // const subdivisions = if (@import("builtin").mode == .Debug) 6 else 7;
+        const subdivisions = 6;
         const planet = Planet.generate(game.allocator, subdivisions, planetRadius, seed, .{}) catch unreachable;
 
         if (false) {
@@ -307,20 +308,27 @@ pub const PlayState = struct {
             }
         }
 
-        if (@floatToInt(c_int, size.x()) != self.framebuffer.width or @floatToInt(c_int, size.y()) != self.framebuffer.height) {
+        const scale = 1;
+        const fbWidth = @floatToInt(c_int, size.x() * scale);
+        const fbHeight = @floatToInt(c_int, size.y() * scale);
+        if (fbWidth != self.framebuffer.width or fbHeight != self.framebuffer.height) {
             self.framebuffer.deinit();
-            self.framebuffer = Framebuffer.create(@floatToInt(c_int, size.x()), @floatToInt(c_int, size.y())) catch unreachable;
+            self.framebuffer = Framebuffer.create(fbWidth, fbHeight) catch unreachable;
 
             self.blurFramebuffer.deinit();
-            self.blurFramebuffer = Framebuffer.create(@floatToInt(c_int, size.x()), @floatToInt(c_int, size.y())) catch unreachable;
+            self.blurFramebuffer = Framebuffer.create(fbWidth, fbHeight) catch unreachable;
         }
 
-        self.framebuffer.bind();
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        gl.enable(gl.DEPTH_TEST);
+        {
+            self.framebuffer.bind();
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.enable(gl.DEPTH_TEST);
+            gl.viewport(0, 0, fbWidth, fbHeight);
+            defer gl.viewport(0, 0, @floatToInt(c_int, size.x()), @floatToInt(c_int, size.y()));
 
-        self.renderScene(game, renderer);
-        self.framebuffer.unbind();
+            self.renderScene(game, renderer);
+            self.framebuffer.unbind();
+        }
 
         // Compute a texture from the HDR framebuffer with only bright parts
         {
@@ -335,6 +343,8 @@ pub const PlayState = struct {
 
             program.use();
             program.setUniformBool("doBrightTexture", true);
+            gl.viewport(0, 0, fbWidth, fbHeight);
+            defer gl.viewport(0, 0, @floatToInt(c_int, size.x()), @floatToInt(c_int, size.y()));
 
             gl.bindVertexArray(QuadMesh.getVAO());
             gl.disable(gl.DEPTH_TEST);
@@ -360,6 +370,8 @@ pub const PlayState = struct {
                 {
                     target.bind();
                     defer target.unbind();
+                    gl.viewport(0, 0, fbWidth, fbHeight);
+                    defer gl.viewport(0, 0, @floatToInt(c_int, size.x()), @floatToInt(c_int, size.y()));
                     var attachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT1};
                     if (i % 2 == 0) {
                         attachments[0] = gl.COLOR_ATTACHMENT0;
@@ -416,8 +428,6 @@ pub const PlayState = struct {
         if (!self.paused) {
             self.renderGameTime = self.renderGameTime + self.timeScale / game.fps;
         }
-
-        std.log.err("{d:.1} ups", .{1.0 / self.averageUpdateTime});
     }
 
     fn getViewTarget(self: *PlayState) Vec3 {
@@ -851,7 +861,8 @@ pub const PlayState = struct {
         }
 
         {
-            var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+            //var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+            var prng = std.rand.DefaultPrng.init(0);
             const random = prng.random();
             if (!self.paused) {
                 var meanTemperature: f32 = 0;
@@ -863,13 +874,18 @@ pub const PlayState = struct {
                 meanTemperature /= 1000;
                 self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
             }
-            vg.textAlign(.{ .horizontal = .left, .vertical = .bottom });
+            vg.textAlign(.{ .horizontal = .left, .vertical = .middle });
             vg.fontSize(20.0);
-            if (ui.coloredLabel(vg, game, "mean-temperature", "{d:.1}°C", .{self.meanTemperature - 273.15}, 150, size.y() - 15, nvg.rgba(255, 255, 255, 255))) {
+            if (ui.coloredLabel(vg, game, "mean-temperature", "{d:.1}°C", .{self.meanTemperature - 273.15}, 150, size.y() - 25, nvg.rgba(255, 255, 255, 255))) {
                 if (pressed) {
                     self.showPlanetControl = true;
                 }
             }
+
+            ui.label(vg, game, "{d:.1} ups", .{1.0 / self.averageUpdateTime}, 250, size.y() - 25);
+
+            vg.textAlign(.{ .horizontal = .center, .vertical = .middle });
+            ui.label(vg, game, "Year {d:.1}", .{self.gameTime / 86400 / 365}, size.x() / 2, size.y() - 25);
         }
 
         if (self.showEscapeMenu) {
@@ -1046,12 +1062,12 @@ pub const PlayState = struct {
             ui.label(vg, game, "Game Speed", .{}, size.x() - 80, 130);
             ui.label(vg, game, "{}/s", .{std.fmt.fmtDuration(@floatToInt(u64, self.timeScale) * std.time.ns_per_s)}, size.x() - 90, 150);
             if (ui.button(vg, game, "game-speed-minus", size.x() - 150, 150, 20, 20, "-")) {
-                self.timeScale = std.math.max(1.0, self.timeScale - 3600);
+                self.timeScale = std.math.max(1.0, self.timeScale - 3600 * 3);
             }
             if (ui.button(vg, game, "game-speed-plus", size.x() - 25, 150, 20, 20, "+")) {
-                if (self.timeScale < 190000) {
+                if (self.timeScale < 190000 or true) {
                     if (self.timeScale == 1) self.timeScale = 0;
-                    self.timeScale = std.math.min(200_000, self.timeScale + 3600);
+                    self.timeScale = std.math.min(200_000_000, self.timeScale + 3600 * 3);
                 }
             }
         }

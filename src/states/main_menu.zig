@@ -30,6 +30,7 @@ pub const MainMenuState = struct {
     loadAlpha: u8 = 128,
     settingsAlpha: u8 = 128,
     exitAlpha: u8 = 128,
+    upload_no: u8 = 0,
 
     pub fn init(game: *Game) MainMenuState {
         const soundTrack = @import("../audio.zig").SoundTrack{ .items = &.{
@@ -150,7 +151,12 @@ pub const MainMenuState = struct {
             gl.frontFace(gl.CW);
             defer gl.frontFace(gl.CCW);
 
-            planet.render(game.loop, .Normal, 0);
+            if (self.upload_no < 100) {
+                planet.upload(game.loop, .Normal, 0);
+                self.upload_no += 1;
+            }
+
+            planet.renderNoUpload();
         }
     }
 

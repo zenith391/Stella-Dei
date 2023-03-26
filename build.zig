@@ -2,72 +2,14 @@ const std = @import("std");
 const deps = @import("deps.zig");
 const glfw = deps.imports.build_glfw;
 
-/// Step used to convert from tabs to space
-const ConvertStep = struct {
-    generated_file: std.build.GeneratedFile,
-    step: std.build.Step,
-    builder: *std.build.Builder,
-    root: []const u8,
-
-    pub fn create(builder: *std.build.Builder, root: []const u8) *ConvertStep {
-        const self = builder.allocator.create(ConvertStep) catch unreachable;
-        self.* = .{ .generated_file = undefined, .step = std.build.Step.init(.install_file, "convert", builder.allocator, ConvertStep.make), .builder = builder, .root = root };
-
-        self.generated_file = .{ .step = &self.step };
-        return self;
-    }
-
-    pub fn getSource(self: *const ConvertStep) std.build.FileSource {
-        return .{ .generated = &self.generated_file };
-    }
-
-    pub fn make(step: *std.build.Step) !void {
-        const self = @fieldParentPtr(ConvertStep, "step", step);
-
-        var sourceDir = try std.fs.cwd().openIterableDir(std.fs.path.dirname(self.root).?, .{});
-        defer sourceDir.close();
-
-        var cacheRoot = self.builder.cache_root.handle;
-
-        var targetDir = try cacheRoot.makeOpenPath("converted", .{});
-        defer targetDir.close();
-
-        var walker = try sourceDir.walk(self.builder.allocator);
-        while (try walker.next()) |entry| {
-            if (entry.kind == .File) {
-                var source = try sourceDir.dir.openFile(entry.path, .{});
-                defer source.close();
-
-                const text = try source.readToEndAlloc(self.builder.allocator, std.math.maxInt(usize));
-                defer self.builder.allocator.free(text);
-
-                // Replace every occurence of a tab by a single space
-                _ = std.mem.replace(u8, text, "\t", " ", text);
-
-                // Ensure the target file's parent directory exists
-                const dirname = std.fs.path.dirname(entry.path) orelse ".";
-                try targetDir.makePath(dirname);
-
-                var target = try targetDir.createFile(entry.path, .{});
-                defer target.close();
-                try target.writeAll(text);
-            } else if (entry.kind == .Directory) {
-                try targetDir.makePath(entry.path);
-            }
-        }
-
-        self.generated_file.path = try std.mem.concat(self.builder.allocator, u8, &[_][]const u8{ self.builder.cache_root.path.?, "/converted/main.zig" });
-    }
-};
-
-pub fn linkTracy(b: *std.build.Builder, step: *std.build.LibExeObjStep, opt_path: ?[]const u8) void {
+pub fn linkTracy(b: *std.build.Builder, step: *std.build.CompileStep, opt_path: ?[]const u8) void {
     const step_options = b.addOptions();
     step.addOptions("build_options", step_options);
     step_options.addOption(bool, "tracy_enabled", opt_path != null);
 
     if (opt_path) |path| {
         step.addIncludePath(path);
-        const tracy_client_source_path = std.fs.path.join(step.builder.allocator, &.{ path, "TracyClient.cpp" }) catch unreachable;
+        const tracy_client_source_path = std.fs.path.join(step.step.owner.allocator, &.{ path, "TracyClient.cpp" }) catch unreachable;
         step.addCSourceFile(tracy_client_source_path, &[_][]const u8{
             "-DTRACY_ENABLE",
             "-DTRACY_FIBERS",
@@ -95,11 +37,9 @@ pub fn build(b: *std.build.Builder) !void {
 
     const use_tracy = b.option(bool, "tracy", "Build the game with Tracy support") orelse (optimize == .Debug);
 
-    const convert = ConvertStep.create(b, "src/main.zig");
-
     const exe = b.addExecutable(.{
         .name = "stella-dei",
-        .root_source_file = convert.getSource(),
+        .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -156,7 +96,7 @@ pub fn build(b: *std.build.Builder) !void {
     run_step.dependOn(&run_cmd.step);
 
     var exe_tests = b.addTest(.{
-        .root_source_file = convert.getSource(),
+        .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
