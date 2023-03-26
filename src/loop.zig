@@ -158,18 +158,17 @@ pub const EventLoop = struct {
 
     pub fn workerLoop(self: *EventLoop, threadId: usize) void {
         _ = threadId;
-        //tracy.InitThread();
-        //var buf: [64]u8 = undefined;
-        //tracy.SetThreadName(std.fmt.bufPrintZ(&buf, "Worker-{d}", .{threadId}) catch unreachable);
+        var sleepTime: u64 = 8 * std.time.ns_per_ms;
 
         while (self.events > 0) {
             if (self.taskStack.pop()) |node| {
-                //std.log.debug("taking task on thread {}", .{threadId});
                 node.data.fnPtr(node.data.userdata);
-                //std.log.debug("task ended on thread {}", .{threadId});
+                sleepTime /= 2;
             } else {
                 // wait until a task is available
-                std.time.sleep(8 * std.time.ns_per_ms);
+                if (sleepTime > 0) std.time.sleep(sleepTime);
+                sleepTime += std.time.ns_per_ms / 10;
+                sleepTime = std.math.min(sleepTime, 50 * std.time.ns_per_ms);
             }
         }
     }
