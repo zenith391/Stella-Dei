@@ -80,6 +80,7 @@ pub const MusicManager = struct {
     currentlyPlaying: ?*c.ma_sound = null,
     allocator: Allocator,
     prng: std.rand.DefaultPrng,
+    volume: f32 = 1,
 
     pub fn init(allocator: Allocator) MusicManager {
         return MusicManager{ .allocator = allocator, .prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp())) };
@@ -119,7 +120,7 @@ pub const MusicManager = struct {
                     self.allocator.destroy(sound);
                     return;
                 }
-                c.ma_sound_set_volume(sound, 0.4);
+                c.ma_sound_set_volume(sound, self.volume);
                 c.ma_sound_set_fade_in_milliseconds(sound, 0, 1, 5000);
                 if (c.ma_sound_start(sound) != c.MA_SUCCESS) {
                     std.log.scoped(.audio).warn("Could not start music '{s}'", .{nextItem});
@@ -127,6 +128,13 @@ pub const MusicManager = struct {
                 self.currentlyPlaying = sound;
                 self.soundTrack.increment();
             }
+        }
+    }
+
+    pub fn setVolume(self: *MusicManager, volume: f32) void {
+        self.volume = volume;
+        if (self.currentlyPlaying) |sound| {
+            c.ma_sound_set_volume(sound, volume);
         }
     }
 

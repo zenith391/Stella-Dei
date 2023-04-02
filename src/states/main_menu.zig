@@ -37,6 +37,7 @@ pub const MainMenuState = struct {
             "assets/music/music-main-menu.mp3",
         } };
         game.audio.playSoundTrackIn(soundTrack, 3000);
+        game.audio.musicManager.setVolume(0.4);
 
         var randomPrng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
         const seed = randomPrng.random().int(u64);

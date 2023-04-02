@@ -203,8 +203,8 @@ pub const PlayState = struct {
         // TODO: make a loading scene
         const planetRadius = 5000; // a radius a bit smaller than Earth's (~6371km)
         const seed = randomPrng.random().int(u64);
-        // const subdivisions = if (@import("builtin").mode == .Debug) 6 else 7;
-        const subdivisions = 6;
+        const subdivisions = if (@import("builtin").mode == .Debug) 6 else 7;
+        //const subdivisions = 6;
         const planet = Planet.generate(game.allocator, subdivisions, planetRadius, seed, .{}) catch unreachable;
 
         if (false) {
@@ -668,30 +668,39 @@ pub const PlayState = struct {
         }
 
         if (!self.paused) {
-            // TODO: variable simulation step
+            // The planet is simulated with a time scale divided by the number
+            // of simulation steps. So that if there are more steps, the same
+            // time speed is kept but the precision is increased.
 
-            const simulationSteps = 1;
-            var i: usize = 0;
-            while (i < simulationSteps) : (i += 1) {
-                // The planet is simulated with a time scale divided by the number
-                // of simulation steps. So that if there are more steps, the same
-                // time speed is kept but the precision is increased.
-                planet.simulate(game.loop, .{
-                    .dt = dt,
-                    .solarConstant = self.solarConstant,
-                    .timeScale = self.timeScale / simulationSteps,
-                    .gameTime = self.gameTime,
-                    .planetRotationTime = self.planetRotationTime,
-                    .solarVector = solarVector,
-                });
-            }
+            var timer = std.time.Timer.start() catch unreachable;
+            planet.simulate(game.loop, .{
+                .dt = dt,
+                .solarConstant = self.solarConstant,
+                .timeScale = self.timeScale,
+                .gameTime = self.gameTime,
+                .planetRotationTime = self.planetRotationTime,
+                .solarVector = solarVector,
+            });
+            const updateTime = @intToFloat(f32, timer.lap() / 1_000) / 1_000_000;
 
             // TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
-            self.gameTime += dt * self.timeScale;
-            self.averageUpdateTime = self.averageUpdateTime * 0.9 + dt * 0.1;
+            self.gameTime += updateTime * self.timeScale;
+            self.averageUpdateTime = self.averageUpdateTime * 0.9 + updateTime * 0.1;
             // Re-synchronise render game time with real game time
             self.renderGameTime = self.gameTime;
         }
+
+        const targetMusicVolume: f32 = blk: {
+            if (self.paused) {
+                break :blk 0.1;
+            } else {
+                break :blk 0.4;
+            }
+        };
+
+        const musicManager = &game.audio.musicManager;
+        const t = 0.6 * dt;
+        musicManager.setVolume(musicManager.volume * (1 - t) + targetMusicVolume * t);
 
         if (self.defer_saveGame) {
             self.saveGame() catch |err| {
@@ -945,49 +954,6 @@ pub const PlayState = struct {
                 self.selectedTool = .LowerTerrain;
             }
         }
-
-        // if (self.showPlanetControl) {
-        // 	if (nk.nk_begin(ctx, "Planet Control",.{ .x = 30, .y = 70, .w = 450, .h = 400 },
-        // 	nk.NK_WINDOW_BORDER) != 0) {
-        // 		nk.nk_layout_row_dynamic(ctx, 50, 1);
-        // 		nk.nk_property_float(ctx, "Axial Tilt (deg)", 0, &self.axialTilt, 360, 1, 0.1);
-
-        // 		nk.nk_layout_row_dynamic(ctx, 50, 1);
-        // 		nk.nk_property_float(ctx, "Solar Constant (W/m²)", 0, &self.solarConstant, 5000, 100, 2);
-
-        // 		// TODO: instead of changing surface conductivity,
-        // 		// change the surface materials by using meteors and
-        // 		// others
-
-        // 		nk.nk_layout_row_dynamic(ctx, 50, 1);
-        // 		nk.nk_property_float(ctx, "Rotation Speed (s)", 10, &self.planetRotationTime, 1600000, 1000, 10);
-
-        // 		nk.nk_layout_row_dynamic(ctx, 50, 1);
-        // 		nk.nk_property_float(ctx, "Time Scale (game s / IRL s)", 0.5, &self.timeScale, 90000, 10000, 5);
-
-        // 		nk.nk_layout_row_dynamic(ctx, 50, 1);
-        // 		var buf: [200]u8 = undefined;
-        // 		nk.nk_label(ctx, std.fmt.bufPrintZ(&buf, "{d} lifeforms", .{ self.planet.lifeforms.items.len }) catch unreachable,
-        // 			nk.NK_TEXT_ALIGN_CENTERED);
-
-        // 		nk.nk_layout_row_dynamic(ctx, 50, 3);
-        // 		if (nk.nk_button_label(ctx, "Clear all water") != 0) {
-        // 			self.debug_clearWater = true;
-        // 		}
-        // 		if (nk.nk_button_label(ctx, "Deluge") != 0) {
-        // 			self.debug_deluge = true;
-        // 		}
-        // 		if (nk.nk_button_label(ctx, "Spawn 10 rabbits") != 0) {
-        // 			self.debug_spawnRabbits = true;
-        // 		}
-
-        // 		nk.nk_layout_row_dynamic(ctx, 50, 1);
-        // 		if (nk.nk_button_label(ctx, "Save game") != 0) {
-        // 			self.defer_saveGame = true;
-        // 		}
-        // 	}
-        // 	nk.nk_end(ctx);
-        // }
 
         if (self.debug_showMoreInfo) {
             if (ui.button(vg, game, "reload-shaders", 20, 210, 170, 40, "Reload shaders")) {
