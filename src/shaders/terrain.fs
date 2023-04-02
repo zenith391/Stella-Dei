@@ -105,10 +105,13 @@ void main() {
 			vec3 waterColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(opticalDepth, 1)); // ocean blue
 			objectColor = mix(objectColor, waterColor, alpha);
 
-			float iceLevel = min(1, exp((-interpData + 272.15) / 3));
-			objectColor = mix(objectColor, vec3(1.0f, 1.0f, 1.0f), iceLevel);
+			float iceLevel = min(1, exp((-interpData + 272.15) / 5));
+			objectColor = mix(objectColor, vec3(1.0f, 1.0f, 1.0f), iceLevel * min(1, alpha*10));
 			if (interpData > 273.15) {
 				specularPower = mix(16, 256, min(partialWaterElevation*1*(1-iceLevel), 1));
+				specularStrength = 0.5;
+			} else {
+				specularPower = 64;
 				specularStrength = 0.5;
 			}
 		}
