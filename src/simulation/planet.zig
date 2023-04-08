@@ -974,7 +974,9 @@ pub const Planet = struct {
                     const hasSuitableHumidity = RH < @splat(VECTOR_SIZE, @as(f32, 1.0));
                     const isLiquid = temp > @splat(VECTOR_SIZE, @as(f32, 273.15));
                     const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @splat(VECTOR_SIZE, false));
-                    const maxDiff = @splat(VECTOR_SIZE, 10 * dt);
+                    // TODO: maxDiff = max until it reaches 100% humidity
+                    const equilibriumMass = Planet.getEquilibriumVaporMasses(substanceDivider, temp);
+                    const maxDiff = @max(equilibriumMass - vaporMass, VECTOR_ZERO);
                     const computedDiff = @min(maxDiff, mass);
                     const diff = @select(f32, doEvaporation, computedDiff, VECTOR_ZERO);
                     mass -= diff;
@@ -1228,12 +1230,24 @@ pub const Planet = struct {
         }
     }
 
-    /// This function is implemented quite naively as indexing isn't easily parallelizable
+    // This function is implemented quite naively as indexing isn't easily parallelizable
     pub inline fn getEquilibriumVaporPressures(temperature: SimdVector) @Vector(VECTOR_SIZE, f64) {
         var vector: @Vector(VECTOR_SIZE, f64) = undefined;
         comptime var i: usize = 0;
         inline while (i < VECTOR_SIZE) : (i += 1) {
             vector[i] = getEquilibriumVaporPressure(temperature[i]);
+        }
+        return vector;
+    }
+
+    pub inline fn getEquilibriumVaporMasses(substanceDivider: f64, temperature: SimdVector) SimdVector {
+        const k = 1.380649 * comptime std.math.pow(f64, 10, -23); // Boltzmann constant
+        var vector: SimdVector = undefined;
+        comptime var i: usize = 0;
+        inline while (i < VECTOR_SIZE) : (i += 1) {
+            const pressure = getEquilibriumVaporPressure(temperature[i]);
+            const mass = (pressure * substanceDivider) / (temperature[i] * k);
+            vector[i] = @floatCast(f32, mass);
         }
         return vector;
     }
