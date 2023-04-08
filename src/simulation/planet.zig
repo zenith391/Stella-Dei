@@ -960,11 +960,14 @@ pub const Planet = struct {
                 const elevation = loadSimdVector(self.elevation, i).*;
                 var mass = loadSimdVector(self.newWaterMass, i).*;
                 const vaporMass = loadSimdVector(self.newWaterVaporMass, i).*;
+                var vaporMassDiff = VECTOR_ZERO;
 
                 {
                     const doBoiling = temp > @splat(VECTOR_SIZE, @as(f32, 373.15));
-                    const diff = @min(mass, @splat(VECTOR_SIZE, evaporationAmt));
-                    mass -= @select(f32, doBoiling, diff, VECTOR_ZERO);
+                    const boilingDiff = @min(mass, @splat(VECTOR_SIZE, evaporationAmt));
+                    const diff = @select(f32, doBoiling, boilingDiff, VECTOR_ZERO);
+                    mass -= diff;
+                    vaporMassDiff += diff;
                 }
 
                 // Mass to remove from the current cell because it has been shared to others or evaporated
@@ -980,16 +983,14 @@ pub const Planet = struct {
                     const computedDiff = @min(maxDiff, mass);
                     const diff = @select(f32, doEvaporation, computedDiff, VECTOR_ZERO);
                     mass -= diff;
-                    saveSimdVector(self.newWaterVaporMass, i, vaporMass + diff);
+                    vaporMassDiff += diff;
+                    saveSimdVector(self.newWaterVaporMass, i, vaporMass + vaporMassDiff);
                 }
-
-                // TODO: ebulittion
 
                 const totalHeight = elevation + mass * @splat(VECTOR_SIZE, kmPerWaterMass);
                 const shared = mass * @splat(VECTOR_SIZE, shareFactor);
 
                 var massToRemove = @splat(VECTOR_SIZE, @as(f32, 0.0));
-                //_ = shared; _ = totalHeight; _ = indices;
                 massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardLeft), indices, shared, totalHeight, kmPerWaterMass);
                 massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardRight), indices, shared, totalHeight, kmPerWaterMass);
                 massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardLeft), indices, shared, totalHeight, kmPerWaterMass);
