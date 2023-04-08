@@ -974,7 +974,8 @@ pub const Planet = struct {
                     const hasSuitableHumidity = RH < @splat(VECTOR_SIZE, @as(f32, 1.0));
                     const isLiquid = temp > @splat(VECTOR_SIZE, @as(f32, 273.15));
                     const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @splat(VECTOR_SIZE, false));
-                    const computedDiff = @min(@splat(VECTOR_SIZE, 10 * dt), mass);
+                    const maxDiff = @splat(VECTOR_SIZE, 10 * dt);
+                    const computedDiff = @min(maxDiff, mass);
                     const diff = @select(f32, doEvaporation, computedDiff, VECTOR_ZERO);
                     mass -= diff;
                     saveSimdVector(self.newWaterVaporMass, i, vaporMass + diff);

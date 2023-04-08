@@ -20,12 +20,26 @@ pub const UiComponentState = union(enum) {
     Label: struct {
         color: nvg.Color,
     },
+    Window: struct {
+        x: f32,
+        y: f32,
+        moving: bool = false,
+        moveRelX: f32 = 0,
+        moveRelY: f32 = 0,
+    },
 };
 
 pub fn button(vg: nvg, game: *Game, name: []const u8, x: f32, y: f32, w: f32, h: f32, text: []const u8) bool {
+    var transform: [6]f32 = undefined;
+    vg.currentTransform(&transform);
+
+    var dstx: f32 = undefined;
+    var dsty: f32 = undefined;
+    nvg.transformPoint(&dstx, &dsty, &transform, x, y);
+
     const cursor = game.window.getCursorPos();
     const pressed = game.window.getMouseButton(.left) == .press;
-    const hovered = cursor.xpos >= x and cursor.ypos >= y and cursor.xpos < x + w and cursor.ypos < y + h;
+    const hovered = cursor.xpos >= dstx and cursor.ypos >= dsty and cursor.xpos < dstx + w and cursor.ypos < dsty + h;
     var state = game.imgui_state.get(name) orelse UiComponentState{ .Button = .{ .color = colors.main } };
     defer game.imgui_state.put(name, state) catch {};
 
@@ -107,6 +121,64 @@ pub fn label(vg: nvg, game: *Game, comptime fmt: []const u8, args: anytype, x: f
     vg.fillColor(nvg.rgb(255, 255, 255));
     vg.fontBlur(0);
     _ = vg.text(x, y, text);
+}
+
+pub fn shadow(vg: nvg, x: f32, y: f32, w: f32, h: f32) void {
+    vg.beginPath();
+    vg.fillColor(nvg.rgbaf(0, 0, 0, 0.20));
+    vg.roundedRect(x + 4, y + 4, w, h, 8);
+    vg.fill();
+
+    vg.beginPath();
+    vg.fillColor(nvg.rgbaf(0, 0, 0, 0.19));
+    vg.roundedRect(x + 6, y + 6, w, h, 20);
+    vg.fill();
+}
+
+/// Returns true when window is staying opened
+/// Returns false when window closed.
+pub fn window(vg: nvg, game: *Game, name: []const u8, w: f32, h: f32) bool {
+    // TODO: place window in the middle of the screen or in a position defined in arguments
+    var state = game.imgui_state.get(name) orelse UiComponentState{ .Window = .{ .x = 100, .y = 100 } };
+    defer game.imgui_state.put(name, state) catch {};
+    const cursor = game.window.getCursorPos();
+    const pressed = game.window.getMouseButton(.left) == .press;
+    const titleBarHeight = 30;
+    const hovered = cursor.xpos >= state.Window.x and cursor.ypos >= state.Window.y and
+        cursor.xpos < state.Window.x + w and cursor.ypos < state.Window.y + titleBarHeight;
+
+    if (pressed and hovered and !state.Window.moving) {
+        state.Window.moving = true;
+        state.Window.moveRelX = @floatCast(f32, cursor.xpos) - state.Window.x;
+        state.Window.moveRelY = @floatCast(f32, cursor.ypos) - state.Window.y;
+    } else if (!pressed) {
+        state.Window.moving = false;
+    }
+
+    if (state.Window.moving) {
+        state.Window.x = @floatCast(f32, cursor.xpos) - state.Window.moveRelX;
+        state.Window.y = @floatCast(f32, cursor.ypos) - state.Window.moveRelY;
+    }
+
+    shadow(vg, state.Window.x, state.Window.y, w, h);
+    vg.beginPath();
+    vg.fillColor(nvg.rgbaf(0.8, 0.8, 0.8, 0.8));
+    vg.roundedRect(state.Window.x, state.Window.y, w, h, 10);
+    vg.fill();
+
+    vg.beginPath();
+    vg.fillColor(nvg.rgbaf(0.5, 0.5, 1.0, 1.0));
+    vg.rect(state.Window.x, state.Window.y, w, titleBarHeight);
+    vg.fill();
+
+    vg.save();
+    vg.translate(state.Window.x, state.Window.y + titleBarHeight + 4);
+
+    return true;
+}
+
+pub fn endWindow(vg: nvg) void {
+    vg.restore();
 }
 
 /// Returns true if hovered

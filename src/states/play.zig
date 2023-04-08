@@ -828,6 +828,7 @@ pub const PlayState = struct {
         const pressed = game.window.getMouseButton(.left) == .press;
         const glfwCursorPos = game.window.getCursorPos();
         const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
+        _ = cursorPos;
 
         {
             const barHeight = 50;
@@ -841,32 +842,33 @@ pub const PlayState = struct {
             const panelWidth = 300;
             const panelHeight = 280;
             const panelX = 100;
+            _ = panelX;
             const panelY = size.y() - 50 - 10 - panelHeight;
-            vg.beginPath();
-            vg.fillColor(nvg.rgbaf(0.8, 0.8, 0.8, 0.8));
-            vg.roundedRect(panelX, panelY, panelWidth, panelHeight, 10);
-            vg.fill();
+            _ = panelY;
+
+            self.showPlanetControl = ui.window(vg, game, "planet-control-window", panelWidth, panelHeight);
+            defer ui.endWindow(vg);
 
             vg.textAlign(.{ .horizontal = .center, .vertical = .top });
-            ui.label(vg, game, "Solar Constant", .{}, panelX + 90, panelY);
-            ui.label(vg, game, "{d} W/m²", .{self.solarConstant}, panelX + 90, panelY + 30);
-            if (ui.button(vg, game, "solar-constant-minus", panelX, panelY + 30, 20, 20, "-")) {
+            ui.label(vg, game, "Solar Constant", .{}, 90, 0);
+            ui.label(vg, game, "{d} W/m²", .{self.solarConstant}, 90, 30);
+            if (ui.button(vg, game, "solar-constant-minus", 0, 30, 20, 20, "-")) {
                 self.solarConstant = std.math.max(0, self.solarConstant - 100);
             }
-            if (ui.button(vg, game, "solar-constant-plus", panelX + 160, panelY + 30, 20, 20, "+")) {
+            if (ui.button(vg, game, "solar-constant-plus", 160, 30, 20, 20, "+")) {
                 self.solarConstant = std.math.min(self.solarConstant + 100, 5000);
             }
 
-            if (ui.button(vg, game, "clear-water", panelX + panelWidth / 2 - (170 / 2), panelY + 130, 170, 40, "Clear all water")) {
+            if (ui.button(vg, game, "clear-water", panelWidth / 2 - (170 / 2), 130, 170, 40, "Clear all water")) {
                 self.debug_clearWater = true;
             }
-            if (ui.button(vg, game, "deluge", panelX + panelWidth / 2 - (170 / 2), panelY + 180, 170, 40, "Deluge")) {
+            if (ui.button(vg, game, "deluge", panelWidth / 2 - (170 / 2), 180, 170, 40, "Deluge")) {
                 self.debug_deluge = true;
             }
 
-            if (pressed and !(cursorPos.x() >= panelX and cursorPos.x() < panelX + panelWidth and cursorPos.y() >= panelY and cursorPos.y() < panelY + panelHeight)) {
-                self.showPlanetControl = false;
-            }
+            // if (pressed and !(cursorPos.x() >= panelX and cursorPos.x() < panelX + panelWidth and cursorPos.y() >= panelY and cursorPos.y() < panelY + panelHeight)) {
+            //     self.showPlanetControl = false;
+            // }
         }
 
         {

@@ -82,8 +82,8 @@ void main() {
 		
 		vec3 diffuse = max(dot(nNormal, lightDir) * lightIntensity, 0.0) * lightColor;
 
-		float specularStrength = 0.2 * lightIntensity;
-		float specularPower = 32;
+		float specularStrength = 0.1;
+		float specularPower = 64;
 		vec3 terrainColor = mix(vec3(0.5f, 0.4f, 0.3f), vegetationColor, vegetation);
 		vec3 objectColor = terrainColor * (noiseValue() / 20 + 1);
 
