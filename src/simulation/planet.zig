@@ -141,6 +141,9 @@ pub const Planet = struct {
     /// of the point that's tangent to the sphere
     /// Unit: km/s
     airVelocity: []Vec2,
+    /// The accumulated error in position of the air when it has been moved.
+    /// Unit: km
+    airPositionError: []Vec2,
     /// The elevation of each point.
     /// Unit: Kilometer
     elevation: []f32,
@@ -256,6 +259,7 @@ pub const Planet = struct {
         const elevation = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
         const waterElev = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
         const airVelocity = try simAlloc.alloc(Vec2, numPoints);
+        const airPositionError = try simAlloc.alloc(Vec2, numPoints);
         const waterVaporMass = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
         const rainfall = try simAlloc.alloc(f32, numPoints);
         const temperature = try simAlloc.alignedAlloc(f32, VECTOR_ALIGN, numPoints);
@@ -286,6 +290,7 @@ pub const Planet = struct {
             .waterVaporMass = waterVaporMass,
             .rainfall = rainfall,
             .airVelocity = airVelocity,
+            .airPositionError = airPositionError,
             .newWaterMass = newWaterElev,
             .newWaterVaporMass = newVaporMass,
             .temperature = temperature,
@@ -1108,24 +1113,57 @@ pub const Planet = struct {
                 }
 
                 // Vector corresponding to the right-center point of the tangent plane of the sphere passing through current point
-                const right = transformedPoint.cross(Vec3.back()).norm();
+                const right = transformedPoint.cross(Vec3.back()).norm().scale(0.1);
 
                 // Vector corresponding to the center-up point on the tangent plane
-                const up = transformedPoint.cross(right).norm();
+                const up = transformedPoint.cross(right).norm().scale(0.1);
                 const targetPos = transformedPoint.add(right.scale(appliedVelocity.x()).add(up.scale(appliedVelocity.y())));
+                _ = targetPos;
 
+                // const neighbours = self.getNeighbours(i);
+                // for (neighbours) |neighbourIdx| {
+                //     const neighbourPos = self.transformedPoints[neighbourIdx];
+                //     const diff = meanDistanceKm - std.math.min(meanDistanceKm, neighbourPos.distance(targetPos));
+
+                //     const shared = std.math.clamp(diff / (6 * meanDistanceKm), 0, 1);
+                //     //std.log.info("shared: {d}", .{ shared });
+                //     const sharedVapor = self.waterVaporMass[i] * shared;
+                //     self.newWaterVaporMass[neighbourIdx] += sharedVapor;
+                //     // avoid negative values due to imprecision
+                //     self.newWaterVaporMass[i] = std.math.max(0, self.newWaterVaporMass[i] - sharedVapor);
+                // }
+
+                // TODO: account for airPositionError
+                var rightmostNeighbour: usize = undefined;
+                var rightmostNeighbourPos: Vec3 = undefined;
+                var rightmostDist: f32 = 1000000;
                 const neighbours = self.getNeighbours(i);
+                const positionError = right.scale(self.airPositionError[i].x()).add(up.scale(self.airPositionError[i].y()));
                 for (neighbours) |neighbourIdx| {
-                    const neighbourPos = self.transformedPoints[neighbourIdx];
-                    const diff = meanDistanceKm - std.math.min(meanDistanceKm, neighbourPos.distance(targetPos));
-
-                    const shared = std.math.clamp(diff / (6 * meanDistanceKm), 0, 1);
-                    //std.log.info("shared: {d}", .{ shared });
-                    const sharedVapor = self.waterVaporMass[i] * shared;
-                    self.newWaterVaporMass[neighbourIdx] += sharedVapor;
-                    // avoid negative values due to imprecision
-                    self.newWaterVaporMass[i] = std.math.max(0, self.newWaterVaporMass[i] - sharedVapor);
+                    const neighbourPos = self.vertices[neighbourIdx].sub(positionError);
+                    const dist = neighbourPos.distance(right);
+                    if (dist < rightmostDist) {
+                        rightmostDist = dist;
+                        rightmostNeighbour = neighbourIdx;
+                        rightmostNeighbourPos = neighbourPos;
+                    }
                 }
+
+                const share = self.waterVaporMass[i] / 4;
+                self.newWaterVaporMass[rightmostNeighbour] += share;
+                self.newWaterVaporMass[i] -= share;
+
+                // TODO: properly determine the coefficient
+                // const coeff = std.math.max(1.0, 0.00005 * dt);
+                const coeff = 0.5;
+                const distanceError = rightmostNeighbourPos.distance(self.vertices[i]) - right.distance(self.vertices[i]);
+                const targetError = Vec2.new(
+                    distanceError * right.dot(rightmostNeighbourPos),
+                    distanceError * up.dot(rightmostNeighbourPos),
+                ); // right now it's always coming from left
+                self.airPositionError[rightmostNeighbour] =
+                    self.airPositionError[rightmostNeighbour].scale(1 - coeff).add(targetError.scale(coeff));
+
                 velocity = velocity.scale(airSpeedMult);
 
                 self.airVelocity[i] = velocity;

@@ -83,9 +83,9 @@ pub fn build(b: *std.build.Builder) !void {
         "-fno-sanitize=undefined", // disable UBSAN (due to false positives)
     });
 
-    exe.install();
+    b.installArtifact(exe);
 
-    const run_cmd = exe.run();
+    const run_cmd = b.addRunArtifact(exe);
 
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {

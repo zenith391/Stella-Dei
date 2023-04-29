@@ -838,6 +838,34 @@ pub const PlayState = struct {
             vg.fill();
         }
 
+        {
+            //var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+            var prng = std.rand.DefaultPrng.init(0);
+            const random = prng.random();
+            if (!self.paused) {
+                var meanTemperature: f32 = 0;
+                var i: usize = 0;
+                while (i < 1000) : (i += 1) {
+                    const pointIdx = random.intRangeLessThanBiased(usize, 0, self.planet.temperature.len);
+                    meanTemperature += self.planet.temperature[pointIdx];
+                }
+                meanTemperature /= 1000;
+                self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
+            }
+            vg.textAlign(.{ .horizontal = .left, .vertical = .middle });
+            vg.fontSize(20.0);
+            if (ui.coloredLabel(vg, game, "mean-temperature", "{d:.1}°C", .{self.meanTemperature - 273.15}, 150, size.y() - 25, nvg.rgba(255, 255, 255, 255))) {
+                if (pressed) {
+                    self.showPlanetControl = true;
+                }
+            }
+
+            ui.label(vg, game, "{d:.1} ups", .{1.0 / self.averageUpdateTime}, 250, size.y() - 25);
+
+            vg.textAlign(.{ .horizontal = .center, .vertical = .middle });
+            ui.label(vg, game, "Year {d:.1}", .{self.gameTime / 86400 / 365}, size.x() / 2, size.y() - 25);
+        }
+
         if (self.showPlanetControl) {
             const panelWidth = 300;
             const panelHeight = 280;
@@ -869,34 +897,6 @@ pub const PlayState = struct {
             // if (pressed and !(cursorPos.x() >= panelX and cursorPos.x() < panelX + panelWidth and cursorPos.y() >= panelY and cursorPos.y() < panelY + panelHeight)) {
             //     self.showPlanetControl = false;
             // }
-        }
-
-        {
-            //var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
-            var prng = std.rand.DefaultPrng.init(0);
-            const random = prng.random();
-            if (!self.paused) {
-                var meanTemperature: f32 = 0;
-                var i: usize = 0;
-                while (i < 1000) : (i += 1) {
-                    const pointIdx = random.intRangeLessThanBiased(usize, 0, self.planet.temperature.len);
-                    meanTemperature += self.planet.temperature[pointIdx];
-                }
-                meanTemperature /= 1000;
-                self.meanTemperature = self.meanTemperature * 0.9 + meanTemperature * 0.1;
-            }
-            vg.textAlign(.{ .horizontal = .left, .vertical = .middle });
-            vg.fontSize(20.0);
-            if (ui.coloredLabel(vg, game, "mean-temperature", "{d:.1}°C", .{self.meanTemperature - 273.15}, 150, size.y() - 25, nvg.rgba(255, 255, 255, 255))) {
-                if (pressed) {
-                    self.showPlanetControl = true;
-                }
-            }
-
-            ui.label(vg, game, "{d:.1} ups", .{1.0 / self.averageUpdateTime}, 250, size.y() - 25);
-
-            vg.textAlign(.{ .horizontal = .center, .vertical = .middle });
-            ui.label(vg, game, "Year {d:.1}", .{self.gameTime / 86400 / 365}, size.x() / 2, size.y() - 25);
         }
 
         if (self.showEscapeMenu) {
@@ -1004,6 +1004,9 @@ pub const PlayState = struct {
             baseY += 20;
 
             ui.label(vg, game, "Air Speed: {d:.1} km/h", .{planet.airVelocity[point].length() * 3600}, baseX, baseY);
+            baseY += 20;
+
+            ui.label(vg, game, "Air Position Error: {d:.1}, {d:.1} km", .{ planet.airPositionError[point].x() * planet.radius, planet.airPositionError[point].y() * planet.radius }, baseX, baseY);
             baseY += 20;
 
             ui.label(vg, game, "Air Pressure: {d:.2} bar", .{planet.getAirPressureOfPoint(point) / 100_000}, baseX, baseY);
