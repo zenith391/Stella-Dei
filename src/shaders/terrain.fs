@@ -102,8 +102,8 @@ void main() {
 			float opticalDepth = 1 - exp(-partialWaterElevation * depthMultiplier);
 			float alpha = 1 - exp(-partialWaterElevation * alphaMultiplier);
 
-			vec3 waterColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(opticalDepth, 1)); // ocean blue
-			objectColor = mix(objectColor, waterColor, alpha);
+			// vec3 waterColor = mix(vec3(0.1f, 0.3f, 0.8f), vec3(0.05f, 0.2f, 0.4f), min(opticalDepth, 1)); // ocean blue
+			// objectColor = mix(objectColor, waterColor, alpha);
 
 			float iceLevel = min(1, exp((-interpData + 272.15) / 5));
 			objectColor = mix(objectColor, vec3(1.0f, 1.0f, 1.0f), iceLevel * min(1, alpha*10));

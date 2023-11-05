@@ -41,7 +41,7 @@ pub const IcosphereMesh = struct {
         const pair = IndexPair{ .first = a, .second = b };
         const result = try lookup.getOrPut(pair);
         if (!result.found_existing) {
-            result.value_ptr.* = @intCast(gl.GLuint, vertices.items.len / 3);
+            result.value_ptr.* = @as(gl.GLuint, @intCast(vertices.items.len / 3));
             const edge0 = Vec3.new(
                 vertices.items[a * 3 + 0],
                 vertices.items[a * 3 + 1],
@@ -173,15 +173,15 @@ pub const IcosphereMesh = struct {
                 const indices = try indicesList.toOwnedSlice();
                 defer allocator.free(indices);
 
-                numElements[i] = @intCast(c_int, indices.len);
+                numElements[i] = @as(c_int, @intCast(indices.len));
 
-                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, indices.len * @sizeOf(c_uint)), indices.ptr, gl.STATIC_DRAW);
+                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @as(isize, @intCast(indices.len * @sizeOf(c_uint))), indices.ptr, gl.STATIC_DRAW);
             }
         } else {
             gl.bindVertexArray(vao[0]);
             gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo[0]);
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(isize, subdivided.indices.len * @sizeOf(c_uint)), subdivided.indices.ptr, gl.STATIC_DRAW);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @as(isize, @intCast(subdivided.indices.len * @sizeOf(c_uint))), subdivided.indices.ptr, gl.STATIC_DRAW);
         }
 
         return IcosphereMesh{
@@ -256,8 +256,8 @@ pub const CubeMesh = struct {
 
             gl.bindVertexArray(vao);
             gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-            gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), &vertices, gl.STATIC_DRAW);
-            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+            gl.bufferData(gl.ARRAY_BUFFER, @as(isize, @intCast(vertices.len * @sizeOf(f32))), &vertices, gl.STATIC_DRAW);
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(0 * @sizeOf(f32)))); // position
             gl.enableVertexAttribArray(0);
             cube_vao = vao;
         }
@@ -277,7 +277,7 @@ pub fn getWavelengthColor(wavelength: f32) Vec3 {
 
     // Refactor
     if (wavelength >= 380 and wavelength < 510) {
-        red = std.math.max(0, -(wavelength - 440) / (440 - 380));
+        red = @max(0, -(wavelength - 440) / (440 - 380));
         green = std.math.clamp((wavelength - 440) / (490 - 440), 0, 1);
         blue = std.math.clamp(-(wavelength - 510) / (510 - 490), 0, 1);
     } else if (wavelength >= 510) {

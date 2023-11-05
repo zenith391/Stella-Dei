@@ -44,10 +44,10 @@ export fn onInit() void {
 }
 
 export fn onResize(w: c_uint, h: c_uint, s: f32) void {
-    video_width = @intToFloat(f32, w);
-    video_height = @intToFloat(f32, h);
+    video_width = @as(f32, @floatFromInt(w));
+    video_height = @as(f32, @floatFromInt(h));
     video_scale = s;
-    gl.glViewport(0, 0, @floatToInt(i32, s * video_width), @floatToInt(i32, s * video_height));
+    gl.glViewport(0, 0, @as(i32, @intFromFloat(s * video_width)), @as(i32, @intFromFloat(s * video_height)));
 }
 
 export fn onKeyDown(key: c_uint) void {
@@ -57,8 +57,8 @@ export fn onKeyDown(key: c_uint) void {
 }
 
 export fn onMouseMove(x: i32, y: i32) void {
-    mx = @intToFloat(f32, x);
-    my = @intToFloat(f32, y);
+    mx = @as(f32, @floatFromInt(x));
+    my = @as(f32, @floatFromInt(y));
 }
 
 export fn onAnimationFrame() void {
@@ -83,8 +83,8 @@ export fn onAnimationFrame() void {
 
     if (screenshot) {
         screenshot = false;
-        const w = @floatToInt(i32, video_width * video_scale);
-        const h = @floatToInt(i32, video_height * video_scale);
+        const w = @as(i32, @intFromFloat(video_width * video_scale));
+        const h = @as(i32, @intFromFloat(video_height * video_scale));
         const data = Demo.saveScreenshot(allocator, w, h, premult) catch return;
         defer allocator.free(data);
         const filename = "dump.png";

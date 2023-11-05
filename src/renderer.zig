@@ -148,10 +148,10 @@ pub const Texture = struct {
         var pixelFormat = PixelFormat.RGBA32;
         const data = blk: {
             if (pixels.* == .rgba32) {
-                const first = @ptrCast([*]u8, &pixels.rgba32[0]);
+                const first = @as([*]u8, @ptrCast(&pixels.rgba32[0]));
                 break :blk first[0 .. image.width * image.height * 4];
             } else {
-                const first = @ptrCast([*]u8, &pixels.rgb24[0]);
+                const first = @as([*]u8, @ptrCast(&pixels.rgb24[0]));
                 pixelFormat = .RGB24;
                 break :blk first[0 .. image.width * image.height * 3];
             }
@@ -167,7 +167,7 @@ pub const Texture = struct {
         var texture: gl.GLuint = undefined;
         gl.genTextures(1, &texture);
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, @intCast(gl.GLint, @enumToInt(pixelFormat)), @intCast(c_int, width), @intCast(c_int, height), 0, @enumToInt(pixelFormat), gl.UNSIGNED_BYTE, data.ptr);
+        gl.texImage2D(gl.TEXTURE_2D, 0, @as(gl.GLint, @intCast(@intFromEnum(pixelFormat))), @as(c_int, @intCast(width)), @as(c_int, @intCast(height)), 0, @intFromEnum(pixelFormat), gl.UNSIGNED_BYTE, data.ptr);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
 
@@ -208,14 +208,14 @@ pub const Texture = struct {
     /// Assumes RGB24
     pub fn setCubemapFace(self: Texture, face: CubemapFace, width: usize, height: usize, data: []const u8) void {
         gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.texture);
-        gl.texImage2D(@enumToInt(face), 0, gl.RGB, @intCast(c_int, width), @intCast(c_int, height), 0, gl.RGB, gl.UNSIGNED_BYTE, data.ptr);
+        gl.texImage2D(@intFromEnum(face), 0, gl.RGB, @as(c_int, @intCast(width)), @as(c_int, @intCast(height)), 0, gl.RGB, gl.UNSIGNED_BYTE, data.ptr);
     }
 
     /// Assumes RGB24
     pub fn loadCubemapFace(self: Texture, allocator: Allocator, face: CubemapFace, path: []const u8) !void {
         var image = try loadImage(allocator, path);
         defer image.deinit();
-        const first = @ptrCast([*]u8, &image.pixels.rgb24[0]);
+        const first = @as([*]u8, @ptrCast(&image.pixels.rgb24[0]));
         const pixels = first[0 .. image.width * image.height * 3];
 
         self.setCubemapFace(face, image.width, image.height, pixels);
@@ -226,10 +226,10 @@ pub const Texture = struct {
         if (self.nvgHandle) |handle| {
             return .{ .handle = handle };
         } else {
-            const ctx = @ptrCast(*nvg.gl.GLContext, @alignCast(@alignOf(*nvg.gl.GLContext), vg.ctx.params.user_ptr));
+            const ctx = @as(*nvg.gl.GLContext, @ptrCast(@alignCast(vg.ctx.params.user_ptr)));
             var tex = ctx.allocTexture() catch unreachable;
-            tex.width = @intCast(i32, self.width);
-            tex.height = @intCast(i32, self.height);
+            tex.width = @as(i32, @intCast(self.width));
+            tex.height = @as(i32, @intCast(self.height));
             tex.tex = self.texture;
             tex.flags = .{};
             tex.tex_type = .rgba;
@@ -309,7 +309,7 @@ const Shader = struct {
             gl.getShaderiv(self.shader, gl.INFO_LOG_LENGTH, &infoLogLen);
 
             const allocator = std.heap.page_allocator; // it's for an error case so
-            const infoLog = allocator.allocSentinel(u8, @intCast(usize, infoLogLen), 0) catch {
+            const infoLog = allocator.allocSentinel(u8, @as(usize, @intCast(infoLogLen)), 0) catch {
                 log.err("Could not get info log: out of memory", .{});
                 return error.CompileError;
             };
@@ -408,7 +408,7 @@ const ShaderProgram = struct {
     }
 
     pub fn setUniformBool(self: ShaderProgram, uniform: [:0]const u8, boolean: bool) void {
-        self.setUniformInt(uniform, @boolToInt(boolean));
+        self.setUniformInt(uniform, @intFromBool(boolean));
     }
 
     pub fn setUniformFloat(self: ShaderProgram, uniform: [:0]const u8, float: f32) void {
@@ -452,7 +452,7 @@ pub const Framebuffer = struct {
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + @intCast(c_uint, i), gl.TEXTURE_2D, colorTexture, 0);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + @as(c_uint, @intCast(i)), gl.TEXTURE_2D, colorTexture, 0);
         }
 
         var depthTexture: gl.GLuint = undefined;

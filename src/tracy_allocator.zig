@@ -21,7 +21,7 @@ pub const TracyAllocator = struct {
     }
 
     fn alloc(ptr: *anyopaque, len: usize, ptr_align: u8, ra: usize) ?[*]u8 {
-        const self = @ptrCast(*TracyAllocator, @alignCast(@alignOf(TracyAllocator), ptr));
+        const self: *TracyAllocator = @ptrCast(@alignCast(ptr));
         const result = self.parent_allocator.rawAlloc(len, ptr_align, ra);
         if (result) |slice| {
             tracy.Alloc(slice, len);
@@ -30,7 +30,7 @@ pub const TracyAllocator = struct {
     }
 
     fn resize(ptr: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ra: usize) bool {
-        const self = @ptrCast(*TracyAllocator, @alignCast(@alignOf(TracyAllocator), ptr));
+        const self: *TracyAllocator = @ptrCast(@alignCast(ptr));
         if (self.parent_allocator.rawResize(buf, buf_align, new_len, ra)) {
             if (new_len > buf.len) {
                 tracy.Free(buf.ptr);
@@ -43,7 +43,7 @@ pub const TracyAllocator = struct {
     }
 
     fn free(ptr: *anyopaque, buf: []u8, buf_align: u8, ra: usize) void {
-        const self = @ptrCast(*TracyAllocator, @alignCast(@alignOf(TracyAllocator), ptr));
+        const self: *TracyAllocator = @ptrCast(@alignCast(ptr));
         self.parent_allocator.rawFree(buf, buf_align, ra);
         tracy.Free(buf.ptr);
     }

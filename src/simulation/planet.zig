@@ -25,9 +25,10 @@ const Allocator = std.mem.Allocator;
 const VECTOR_SIZE = std.simd.suggestVectorSize(f32) orelse 4;
 const VECTOR_ALIGN = @alignOf(SimdVector);
 const SimdVector = @Vector(VECTOR_SIZE, f32);
+const SimdVector64 = @Vector(VECTOR_SIZE, f64);
 const IndexVector = @Vector(VECTOR_SIZE, usize);
-const VECTOR_ZERO = @splat(VECTOR_SIZE, @as(f32, 0.0));
-const VECTOR_ONE = @splat(VECTOR_SIZE, @as(f32, 1.0));
+const VECTOR_ZERO: SimdVector = @splat(0.0);
+const VECTOR_ONE: SimdVector = @splat(1.0);
 
 pub const CLContext = if (!USE_OPENCL) struct {} else struct {
     device: cl.cl_device_id,
@@ -56,7 +57,7 @@ pub const CLContext = if (!USE_OPENCL) struct {} else struct {
         const queue = cl.clCreateCommandQueue(context, device, 0, null);
 
         var sources = [_][*c]const u8{@embedFile("../simulation/simulation.cl")};
-        const program = cl.clCreateProgramWithSource(context, 1, @ptrCast([*c][*c]const u8, &sources), null, null).?;
+        const program = cl.clCreateProgramWithSource(context, 1, @as([*c][*c]const u8, @ptrCast(&sources)), null, null).?;
 
         // TODO: use SPIR-V for the kernel?
         const buildError = cl.clBuildProgram(program, 1, &device, "-cl-strict-aliasing -cl-fast-relaxed-math", null, null);
@@ -241,8 +242,8 @@ pub const Planet = struct {
         const atmosphereMesh = try IcosphereMesh.generate(allocator, numSubdivisions, false);
         gl.bindVertexArray(atmosphereMesh.vao[0]);
         gl.bindBuffer(gl.ARRAY_BUFFER, atmosphereMesh.vbo);
-        gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
-        gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // temperature (used for a bunch of things)
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(0 * @sizeOf(f32)))); // position
+        gl.vertexAttribPointer(1, 1, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(3 * @sizeOf(f32)))); // temperature (used for a bunch of things)
         gl.enableVertexAttribArray(0);
         gl.enableVertexAttribArray(1);
 
@@ -277,7 +278,7 @@ pub const Planet = struct {
         var planet = Planet{
             .mesh = mesh,
             .atmosphereMesh = atmosphereMesh,
-            .numTriangles = @intCast(gl.GLint, mesh.indices.len),
+            .numTriangles = @as(gl.GLint, @intCast(mesh.indices.len)),
             .numSubdivisions = numSubdivisions,
             .seed = seed,
             .radius = radius,
@@ -317,21 +318,21 @@ pub const Planet = struct {
 
         // Zero-out data
         {
-            std.mem.set(f32, waterVaporMass, 0);
-            std.mem.set(f32, rainfall, 0);
-            std.mem.set(Vec2, airVelocity, Vec2.zero());
-            std.mem.set(f32, elevation, radius);
-            std.mem.set(f32, waterElev, 0);
-            std.mem.set(f32, vegetation, 0);
-            std.mem.set(f32, temperature, 273.15 + 22.0);
+            @memset(waterVaporMass, 0);
+            @memset(rainfall, 0);
+            @memset(airVelocity, Vec2.zero());
+            @memset(elevation, radius);
+            @memset(waterElev, 0);
+            @memset(vegetation, 0);
+            @memset(temperature, 273.15 + 22.0);
 
             const NITROGEN_PERCENT = 78.084 / 100.0;
             const OXYGEN_PERCENT = 20.946 / 100.0;
             const CARBON_DIOXIDE_PERCENT = 0.6 / 100.0; // estimated value from Earth prebiotic era
             const ATMOSPHERE_MASS = 5.15 * std.math.pow(f64, 10, 18 - 9);
-            planet.averageNitrogenMass = @floatCast(f32, NITROGEN_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
-            planet.averageOxygenMass = @floatCast(f32, OXYGEN_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
-            planet.averageCarbonDioxideMass = @floatCast(f32, CARBON_DIOXIDE_PERCENT * ATMOSPHERE_MASS / @intToFloat(f64, numPoints));
+            planet.averageNitrogenMass = @as(f32, @floatCast(NITROGEN_PERCENT * ATMOSPHERE_MASS / @as(f64, @floatFromInt(numPoints))));
+            planet.averageOxygenMass = @as(f32, @floatCast(OXYGEN_PERCENT * ATMOSPHERE_MASS / @as(f64, @floatFromInt(numPoints))));
+            planet.averageCarbonDioxideMass = @as(f32, @floatCast(CARBON_DIOXIDE_PERCENT * ATMOSPHERE_MASS / @as(f64, @floatFromInt(numPoints))));
         }
 
         if (options.generate_terrain) {
@@ -350,15 +351,15 @@ pub const Planet = struct {
             var i: usize = 0;
             while (i < vert.len) : (i += 3) {
                 const point = Vec3.fromSlice(vert[i..]).norm();
-                const value = radius + perlin.noise(point.x() * 3 + 5, point.y() * 3 + 5, point.z() * 3 + 5) * std.math.min(radius / 2, 15);
+                const value = radius + perlin.noise(point.x() * 3 + 5, point.y() * 3 + 5, point.z() * 3 + 5) * @min(radius / 2, 15);
 
                 elevation[i / 3] = value;
-                waterElev[i / 3] = std.math.max(0, seaLevel - value) / kmPerWaterMass;
+                waterElev[i / 3] = @max(0, seaLevel - value) / kmPerWaterMass;
                 vertices[i / 3] = point;
                 //vegetation[i / 3] = perlin.fbm(point.x() + 5, point.y() + 5, point.z() + 5, 4) / 2 + 0.5;
                 vegetation[i / 3] = 0;
 
-                temperature[i / 3] = (1 - @fabs(point.z())) * 55 + 273.15 - 25.0;
+                temperature[i / 3] = (1 - @abs(point.z())) * 55 + 273.15 - 25.0;
 
                 const totalElevation = elevation[i / 3] + waterElev[i / 3];
                 const transformedPoint = point.scale(totalElevation);
@@ -380,12 +381,12 @@ pub const Planet = struct {
         for (mesh.vao) |vao| {
             gl.bindVertexArray(vao);
             // position and normal are interleaved
-            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
-            gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(0 * @sizeOf(f32)))); // position
+            gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 6 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(3 * @sizeOf(f32)))); // normal
             // temperature, water level and vegetation are sequential so we can glBufferSubData
-            gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 1 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32) * vertices.len)); // temperature (used for a bunch of things)
-            gl.vertexAttribPointer(3, 1, gl.FLOAT, gl.FALSE, 1 * @sizeOf(f32), @intToPtr(?*anyopaque, 7 * @sizeOf(f32) * vertices.len)); // water level (used in Normal display mode)
-            gl.vertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, 1 * @sizeOf(f32), @intToPtr(?*anyopaque, 8 * @sizeOf(f32) * vertices.len)); // vegetation level (temporary until replaced by actual living vegetation)
+            gl.vertexAttribPointer(2, 1, gl.FLOAT, gl.FALSE, 1 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(6 * @sizeOf(f32) * vertices.len))); // temperature (used for a bunch of things)
+            gl.vertexAttribPointer(3, 1, gl.FLOAT, gl.FALSE, 1 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(7 * @sizeOf(f32) * vertices.len))); // water level (used in Normal display mode)
+            gl.vertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, 1 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(8 * @sizeOf(f32) * vertices.len))); // vegetation level (temporary until replaced by actual living vegetation)
             gl.enableVertexAttribArray(0);
             gl.enableVertexAttribArray(1);
             gl.enableVertexAttribArray(2);
@@ -393,9 +394,9 @@ pub const Planet = struct {
             gl.enableVertexAttribArray(4);
         }
         gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
-        gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, bufData.len * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, @as(isize, @intCast(bufData.len * @sizeOf(f32))), bufData.ptr, gl.STREAM_DRAW);
 
-        const meanPointArea = (4 * std.math.pi * radius * radius) / @intToFloat(f32, numPoints);
+        const meanPointArea = (4 * std.math.pi * radius * radius) / @as(f32, @floatFromInt(numPoints));
         std.log.info("There are {d} points in the ico-sphere.\n", .{numPoints});
         std.log.info("The mean area per point of the ico-sphere is {d} km²\n", .{meanPointArea});
         std.log.info("SIMD Vectors: {} x f32", .{VECTOR_SIZE});
@@ -424,12 +425,12 @@ pub const Planet = struct {
         for (self.vertices, 0..) |*vert, idx| {
             const longitude = std.math.atan2(f32, vert.y(), vert.x());
             const latitude = std.math.acos(vert.z()) * 2;
-            const imageX = @floatToInt(usize, @intToFloat(f32, image.width) / (std.math.pi * 2.0) * (longitude + std.math.pi) * std.math.cos(standardParallel));
-            const imageY = std.math.min(@floatToInt(usize, @intToFloat(f32, image.height) / (std.math.pi * 2.0) * (latitude)), image.height - 1);
+            const imageX = @as(usize, @intFromFloat(@as(f32, @floatFromInt(image.width)) / (std.math.pi * 2.0) * (longitude + std.math.pi) * std.math.cos(standardParallel)));
+            const imageY = @min(@as(usize, @intFromFloat(@as(f32, @floatFromInt(image.height)) / (std.math.pi * 2.0) * (latitude))), image.height - 1);
 
             const pixel = image.pixels.rgba32[imageY * image.width + imageX];
-            self.elevation[idx] = self.radius + @intToFloat(f32, pixel.r) * 0.1 - 14.5;
-            self.waterMass[idx] = std.math.max(0, self.radius - self.elevation[idx]) / kmPerWaterMass;
+            self.elevation[idx] = self.radius + @as(f32, @floatFromInt(pixel.r)) * 0.1 - 14.5;
+            self.waterMass[idx] = @max(0, self.radius - self.elevation[idx]) / kmPerWaterMass;
             self.vegetation[idx] = if (self.waterMass[idx] == 0.0 and self.elevation[idx] - self.radius < 5.0) 1.0 else 0.0;
         }
     }
@@ -481,7 +482,7 @@ pub const Planet = struct {
         / 1000.0 // km / kg
         * 1_000_000_000 // km / 10⁹ kg
         ;
-        return @floatCast(f32, kmPerWaterMass);
+        return @as(f32, @floatCast(kmPerWaterMass));
     }
 
     /// Returns the mean point area in m²
@@ -489,8 +490,8 @@ pub const Planet = struct {
         // The surface of the planet (approx.) divided by the numbers of points
         // Computation is in f64 for greater accuracy
         const radius: f64 = self.radius;
-        const meanPointArea = (4 * std.math.pi * (radius * 1000) * (radius * 1000)) / @intToFloat(f64, self.vertices.len); // m²
-        return @floatCast(f32, meanPointArea);
+        const meanPointArea = (4 * std.math.pi * (radius * 1000) * (radius * 1000)) / @as(f64, @floatFromInt(self.vertices.len)); // m²
+        return @as(f32, @floatCast(meanPointArea));
     }
 
     pub fn mulByVec3(self: za.Mat4, v: Vec3) Vec3 {
@@ -528,13 +529,16 @@ pub const Planet = struct {
         {
             const rotationMatrix = za.Mat4.fromRotation(axialTilt, Vec3.right());
             const kmPerWaterMass = self.getKmPerWaterMass();
+            _ = kmPerWaterMass;
 
             // This could be sped up by using LOD? (allowing to transfer less data)
             // NOTE: this has really bad cache locality
+            // TODO: only update for parts of the world that changed
             const STRIDE = 6;
             for (self.vertices, 0..) |point, i| {
-                const waterElevation = self.waterMass[i] * kmPerWaterMass;
-                const totalElevation = self.elevation[i] + waterElevation;
+                // const waterElevation = self.waterMass[i] * kmPerWaterMass;
+                // const totalElevation = self.elevation[i] + waterElevation;
+                const totalElevation = self.elevation[i];
                 const exaggeratedElev = (totalElevation - self.radius) * HEIGHT_EXAGGERATION_FACTOR + self.radius;
                 const scaledPoint = point.scale(exaggeratedElev);
                 const transformedPoint = mulByVec3(rotationMatrix, scaledPoint);
@@ -548,18 +552,18 @@ pub const Planet = struct {
             }
 
             gl.bindBuffer(gl.ARRAY_BUFFER, self.mesh.vbo);
-            gl.bufferSubData(gl.ARRAY_BUFFER, 0, @intCast(isize, 6 * @sizeOf(f32) * self.vertices.len), bufData.ptr);
+            gl.bufferSubData(gl.ARRAY_BUFFER, 0, @as(isize, @intCast(6 * @sizeOf(f32) * self.vertices.len)), bufData.ptr);
 
             // This one is special and needs processing
             if (displayMode == .WindMagnitude) {
                 for (self.airVelocity, 0..) |velocity, i| {
                     bufData[i] = velocity.x();
                 }
-                gl.bufferSubData(gl.ARRAY_BUFFER, 6 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.vertices.len * @sizeOf(f32)), bufData.ptr);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 6 * @sizeOf(f32) * self.vertices.len, @as(isize, @intCast(self.vertices.len * @sizeOf(f32))), bufData.ptr);
                 for (self.airVelocity, 0..) |velocity, i| {
                     bufData[i] = velocity.y();
                 }
-                gl.bufferSubData(gl.ARRAY_BUFFER, 7 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.vertices.len * @sizeOf(f32)), bufData.ptr);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 7 * @sizeOf(f32) * self.vertices.len, @as(isize, @intCast(self.vertices.len * @sizeOf(f32))), bufData.ptr);
             } else {
                 var displayedSlice = switch (displayMode) {
                     .WaterVapor => self.waterVaporMass,
@@ -567,25 +571,33 @@ pub const Planet = struct {
                     .Normal, .Temperature => self.temperature,
                     else => unreachable,
                 };
-                gl.bufferSubData(gl.ARRAY_BUFFER, 6 * @sizeOf(f32) * self.vertices.len, @intCast(isize, displayedSlice.len * @sizeOf(f32)), displayedSlice.ptr);
-                gl.bufferSubData(gl.ARRAY_BUFFER, 7 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.waterMass.len * @sizeOf(f32)), self.waterMass.ptr);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 6 * @sizeOf(f32) * self.vertices.len, @as(isize, @intCast(displayedSlice.len * @sizeOf(f32))), displayedSlice.ptr);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 7 * @sizeOf(f32) * self.vertices.len, @as(isize, @intCast(self.waterMass.len * @sizeOf(f32))), self.waterMass.ptr);
             }
-            gl.bufferSubData(gl.ARRAY_BUFFER, 8 * @sizeOf(f32) * self.vertices.len, @intCast(isize, self.vegetation.len * @sizeOf(f32)), self.vegetation.ptr);
+            gl.bufferSubData(gl.ARRAY_BUFFER, 8 * @sizeOf(f32) * self.vertices.len, @as(isize, @intCast(self.vegetation.len * @sizeOf(f32))), self.vegetation.ptr);
         }
 
         {
+            const kmPerWaterMass = self.getKmPerWaterMass();
             const STRIDE = 4;
             for (self.vertices, 0..) |point, i| {
-                const transformedPoint = point.scale(self.radius + 15 * HEIGHT_EXAGGERATION_FACTOR);
+                const waterElevation = self.waterMass[i] * kmPerWaterMass;
+
+                const zFightingOffset = 0.1; // TODO: scale depending on distance from camera
+                var totalElevation = (self.elevation[i] + waterElevation - zFightingOffset - self.radius) * @min(waterElevation, 1);
+                if (self.elevation[i] < self.radius) {
+                    totalElevation = self.elevation[i] + waterElevation - zFightingOffset - self.radius;
+                }
+                const transformedPoint = point.scale(self.radius + (totalElevation) * HEIGHT_EXAGGERATION_FACTOR);
 
                 const bytePos = i * STRIDE;
                 const bufSlice = bufData[bytePos + 0 .. bytePos + 4];
                 bufSlice[0..3].* = transformedPoint.data;
-                bufSlice[3] = self.rainfall[i];
+                bufSlice[3] = waterElevation;
             }
 
             gl.bindBuffer(gl.ARRAY_BUFFER, self.atmosphereMesh.vbo);
-            gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, STRIDE * self.atmosphereMesh.num_points * @sizeOf(f32)), bufData.ptr, gl.STREAM_DRAW);
+            gl.bufferData(gl.ARRAY_BUFFER, @as(isize, @intCast(STRIDE * self.atmosphereMesh.num_points * @sizeOf(f32))), bufData.ptr, gl.STREAM_DRAW);
         }
     }
 
@@ -602,9 +614,9 @@ pub const Planet = struct {
     }
 
     // TODO: just do it in shaders postprocess.fs
-    pub fn renderClouds(self: *Planet) void {
+    pub fn renderWater(self: *Planet) void {
         gl.bindVertexArray(self.atmosphereMesh.vao[0]);
-        gl.drawElements(gl.TRIANGLES, @intCast(c_int, self.atmosphereMesh.indices.len), gl.UNSIGNED_INT, null);
+        gl.drawElements(gl.TRIANGLES, @as(c_int, @intCast(self.atmosphereMesh.indices.len)), gl.UNSIGNED_INT, null);
     }
 
     pub const Direction = enum {
@@ -624,12 +636,12 @@ pub const Planet = struct {
     }
 
     pub inline fn getNeighbour(self: Planet, idx: usize, direction: Direction) usize {
-        const directionInt = @enumToInt(direction);
+        const directionInt = @intFromEnum(direction);
         return self.verticesNeighbours[idx][directionInt];
     }
 
     pub inline fn getNeighbourSimd(self: Planet, indexes: IndexVector, direction: Direction) IndexVector {
-        const directionInt = @enumToInt(direction);
+        const directionInt = @intFromEnum(direction);
         var neighbours: IndexVector = undefined;
         // XXX: do something more parallel?
         {
@@ -654,7 +666,7 @@ pub const Planet = struct {
 
     pub fn getNearestPointTo(self: Planet, position: Vec3) usize {
         // TODO: add a BSP for much better performance?
-        var closestPointDist: f32 = std.math.inf_f32;
+        var closestPointDist: f32 = std.math.inf(f32);
         var closestPoint: usize = undefined;
         for (self.transformedPoints, 0..) |point, i| {
             const distance = point.distance(position);
@@ -783,7 +795,7 @@ pub const Planet = struct {
 
                 // Solar irradiance
                 {
-                    const solarCoeff = std.math.max(0, normVert.dot(solarVector) / normVert.length());
+                    const solarCoeff = @max(0, normVert.dot(solarVector) / normVert.length());
                     // TODO: Direct Normal Irradiance? when we have atmosphere
                     //const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
                     // So, we get heat transfer in J
@@ -806,7 +818,7 @@ pub const Planet = struct {
                     const co2 = self.averageCarbonDioxideMass / meanPointArea;
                     // IRL, H2O and CO2 are the two major greenhouse gases
                     // This is a very crude approximation of the greenhouse effect
-                    const greenhouseEffect = @min(radiantEmittance * 0.9, @floatCast(f32, (h2o * 4 + co2 * 40) * std.math.ln(radiantEmittance) * 64000));
+                    const greenhouseEffect = @min(radiantEmittance * 0.9, @as(f32, @floatCast((h2o * 4 + co2 * 40) * @log(radiantEmittance) * 64000)));
                     const heatTransfer = (radiantEmittance - greenhouseEffect) * meanPointAreaTime; // J
                     const temperatureLoss = heatTransfer / heatCapacity; // K
                     totalTemperatureGain -= temperatureLoss;
@@ -834,7 +846,7 @@ pub const Planet = struct {
                     // Divide by 2 because it should only be lit 1/2th of the time
                     // technically we should divide more to take into account morning and evening not having max solarCoeff
                     // but whatever
-                    const solarCoeff = (1 - @fabs(normVert.z()));
+                    const solarCoeff = (1 - @abs(normVert.z()));
                     // TODO: Direct Normal Irradiance? when we have atmosphere
                     //const solarIrradiance = options.solarConstant * solarCoeff * meanPointArea; // W = J.s-1
                     // So, we get heat transfer in J
@@ -857,7 +869,7 @@ pub const Planet = struct {
                     const co2 = self.averageCarbonDioxideMass / meanPointArea;
                     // IRL, H2O and CO2 are the two major greenhouse gases
                     // This is a very crude approximation of the greenhouse effect
-                    const greenhouseEffect = @min(radiantEmittance * 0.9, @floatCast(f32, (h2o * 4 + co2 * 40) * std.math.ln(radiantEmittance) * 64000));
+                    const greenhouseEffect = @min(radiantEmittance * 0.9, @as(f32, @floatCast((h2o * 4 + co2 * 40) * @log(radiantEmittance) * 64000)));
                     const heatTransfer = (radiantEmittance - greenhouseEffect) * meanPointAreaTime; // J
                     const temperatureLoss = heatTransfer / (heatCapacity / 1.75); // K
                     totalTemperatureGain -= temperatureLoss;
@@ -929,11 +941,11 @@ pub const Planet = struct {
     }
 
     inline fn loadSimdVector(slice: []const f32, i: usize) *const SimdVector {
-        return @ptrCast(*const SimdVector, @alignCast(VECTOR_ALIGN, &slice[i]));
+        return @as(*const SimdVector, @ptrCast(@alignCast(&slice[i])));
     }
 
     inline fn saveSimdVector(slice: []f32, i: usize, vector: SimdVector) void {
-        @ptrCast(*SimdVector, @alignCast(VECTOR_ALIGN, &slice[i])).* = vector;
+        @as(*SimdVector, @ptrCast(@alignCast(&slice[i]))).* = vector;
     }
 
     fn simulateWater(self: *Planet, loop: *EventLoop, options: SimulationOptions, numIterations: usize, start: usize, end: usize) void {
@@ -948,7 +960,7 @@ pub const Planet = struct {
         const meanDistanceKm = meanDistance / 1000; // km
         const kmPerWaterMass = self.getKmPerWaterMass(); // km / 10⁹ kg
 
-        const shareFactor = std.math.min(0.00002 * dt / (6 * @intToFloat(f32, numIterations)), 1.0 / 7.0);
+        const shareFactor = @min(0.00002 * dt / (6 * @as(f32, @floatFromInt(numIterations))), 1.0 / 7.0);
         const substanceDivider: f64 = self.getSubstanceDivider();
         const meanAtmVolume: f64 = self.getMeanPointArea() * 12_000; // m³
 
@@ -960,7 +972,7 @@ pub const Planet = struct {
         if (dt < 86400 / 4) {
             while (i < end - VECTOR_SIZE + 1) : (i += VECTOR_SIZE) {
                 // only fluid if it's not ice
-                const indices = @splat(VECTOR_SIZE, i) + counting_vector; // i + 0, i + 1, i + 2, ...
+                const indices = @as(IndexVector, @splat(i)) + counting_vector; // i + 0, i + 1, i + 2, ...
                 const temp = loadSimdVector(self.temperature, i).*;
                 const elevation = loadSimdVector(self.elevation, i).*;
                 var mass = loadSimdVector(self.newWaterMass, i).*;
@@ -968,8 +980,8 @@ pub const Planet = struct {
                 var vaporMassDiff = VECTOR_ZERO;
 
                 {
-                    const doBoiling = temp > @splat(VECTOR_SIZE, @as(f32, 373.15));
-                    const boilingDiff = @min(mass, @splat(VECTOR_SIZE, evaporationAmt));
+                    const doBoiling = temp > @as(SimdVector, @splat(@as(f32, 373.15)));
+                    const boilingDiff = @min(mass, @as(SimdVector, @splat(evaporationAmt)));
                     const diff = @select(f32, doBoiling, boilingDiff, VECTOR_ZERO);
                     mass -= diff;
                     vaporMassDiff += diff;
@@ -979,9 +991,9 @@ pub const Planet = struct {
                 {
                     const RH = Planet.getRelativeHumidities(substanceDivider, temp, vaporMass);
                     // evaporation only happens when the air isn't saturated and when the water is above 0°C
-                    const hasSuitableHumidity = RH < @splat(VECTOR_SIZE, @as(f32, 1.0));
-                    const isLiquid = temp > @splat(VECTOR_SIZE, @as(f32, 273.15));
-                    const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @splat(VECTOR_SIZE, false));
+                    const hasSuitableHumidity = RH < @as(SimdVector, @splat(@as(f32, 1.0)));
+                    const isLiquid = temp > @as(SimdVector, @splat(@as(f32, 273.15)));
+                    const doEvaporation = @select(bool, hasSuitableHumidity, isLiquid, @as(@Vector(VECTOR_SIZE, bool), @splat(false)));
                     // TODO: maxDiff = max until it reaches 100% humidity
                     const equilibriumMass = Planet.getEquilibriumVaporMasses(substanceDivider, temp);
                     const maxDiff = @max(equilibriumMass - vaporMass, VECTOR_ZERO);
@@ -992,10 +1004,10 @@ pub const Planet = struct {
                     saveSimdVector(self.newWaterVaporMass, i, vaporMass + vaporMassDiff);
                 }
 
-                const totalHeight = elevation + mass * @splat(VECTOR_SIZE, kmPerWaterMass);
-                const shared = mass * @splat(VECTOR_SIZE, shareFactor);
+                const totalHeight = elevation + mass * @as(SimdVector, @splat(kmPerWaterMass));
+                const shared = mass * @as(SimdVector, @splat(shareFactor));
 
-                var massToRemove = @splat(VECTOR_SIZE, @as(f32, 0.0));
+                var massToRemove = @as(SimdVector, @splat(@as(f32, 0.0)));
                 massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardLeft), indices, shared, totalHeight, kmPerWaterMass);
                 massToRemove += self.sendWater(self.getNeighbourSimd(indices, .ForwardRight), indices, shared, totalHeight, kmPerWaterMass);
                 massToRemove += self.sendWater(self.getNeighbourSimd(indices, .BackwardLeft), indices, shared, totalHeight, kmPerWaterMass);
@@ -1026,7 +1038,7 @@ pub const Planet = struct {
             const mass = self.newWaterVaporMass[i];
             const T = self.temperature[i]; // TODO: separate air temperature?
             const pressure = self.getAirPressure(substanceDivider, T, mass);
-            self.rainfall[i] = std.math.max(0, self.rainfall[i] * (1.0 - dt / 86400.0));
+            self.rainfall[i] = @max(0, self.rainfall[i] * (1.0 - dt / 86400.0));
 
             if (false) {
                 for (self.getNeighbours(i), 0..) |neighbourIdx, location| {
@@ -1046,7 +1058,7 @@ pub const Planet = struct {
                         // Pressure gradient force
                         const pgf = dP / meanDistance * meanAtmVolume; // N
                         // F = ma, so a = F/m
-                        const acceleration = @floatCast(f32, pgf / (mass * 1_000_000_000) / 1000 * dt); // km/s
+                        const acceleration = @as(f32, @floatCast(pgf / (mass * 1_000_000_000) / 1000 * dt)); // km/s
                         self.airVelocity[i].data += tangent.scale(acceleration).data;
                     }
                 }
@@ -1061,7 +1073,7 @@ pub const Planet = struct {
                     // clouds don't go above 15km
                     if (self.newWaterMass[i] * kmPerWaterMass + self.elevation[i] - self.radius < 15) {
                         // TODO: form cloud as clouds are formed from super-saturated air
-                        const diff = std.math.min(mass, 0.5 * dt * mass / 100000.0);
+                        const diff = @min(mass, 0.5 * dt * mass / 100000.0);
                         //const diff = mass;
                         self.newWaterMass[i] += diff;
                         self.newWaterVaporMass[i] -= diff;
@@ -1123,14 +1135,14 @@ pub const Planet = struct {
                 // const neighbours = self.getNeighbours(i);
                 // for (neighbours) |neighbourIdx| {
                 //     const neighbourPos = self.transformedPoints[neighbourIdx];
-                //     const diff = meanDistanceKm - std.math.min(meanDistanceKm, neighbourPos.distance(targetPos));
+                //     const diff = meanDistanceKm - @min(meanDistanceKm, neighbourPos.distance(targetPos));
 
                 //     const shared = std.math.clamp(diff / (6 * meanDistanceKm), 0, 1);
                 //     //std.log.info("shared: {d}", .{ shared });
                 //     const sharedVapor = self.waterVaporMass[i] * shared;
                 //     self.newWaterVaporMass[neighbourIdx] += sharedVapor;
                 //     // avoid negative values due to imprecision
-                //     self.newWaterVaporMass[i] = std.math.max(0, self.newWaterVaporMass[i] - sharedVapor);
+                //     self.newWaterVaporMass[i] = @max(0, self.newWaterVaporMass[i] - sharedVapor);
                 // }
 
                 // TODO: account for airPositionError
@@ -1154,7 +1166,7 @@ pub const Planet = struct {
                 self.newWaterVaporMass[i] -= share;
 
                 // TODO: properly determine the coefficient
-                // const coeff = std.math.max(1.0, 0.00005 * dt);
+                // const coeff = @max(1.0, 0.00005 * dt);
                 const coeff = 0.5;
                 const distanceError = rightmostNeighbourPos.distance(self.vertices[i]) - right.distance(self.vertices[i]);
                 const targetError = Vec2.new(
@@ -1181,9 +1193,9 @@ pub const Planet = struct {
         return waterPartialPressure;
     }
 
-    pub inline fn getPartialPressures(substanceDivider: f64, temperatures: SimdVector, masses: SimdVector) @Vector(VECTOR_SIZE, f64) {
+    pub inline fn getPartialPressures(substanceDivider: f64, temperatures: SimdVector, masses: SimdVector) SimdVector64 {
         // Intermediary computations are done if f64
-        const k = @splat(VECTOR_SIZE, 1.380649 * comptime std.math.pow(f64, 10, -23)); // Boltzmann constant
+        const k: SimdVector64 = @splat(1.380649 * comptime std.math.pow(f64, 10, -23)); // Boltzmann constant
 
         // Workaround as you can't do @floatCast with a vector
         // TODO: send issue to ziglang/zig
@@ -1192,7 +1204,7 @@ pub const Planet = struct {
             var vector: @Vector(VECTOR_SIZE, f64) = undefined;
             comptime var i: usize = 0;
             inline while (i < VECTOR_SIZE) : (i += 1) {
-                vector[i] = @floatCast(f64, masses[i]);
+                vector[i] = @as(f64, @floatCast(masses[i]));
             }
             break :blk vector;
         };
@@ -1201,12 +1213,12 @@ pub const Planet = struct {
             var vector: @Vector(VECTOR_SIZE, f64) = undefined;
             comptime var i: usize = 0;
             inline while (i < VECTOR_SIZE) : (i += 1) {
-                vector[i] = @floatCast(f64, temperatures[i]);
+                vector[i] = @as(f64, @floatCast(temperatures[i]));
             }
             break :blk vector;
         };
 
-        const waterPartialPressures = (masses_f64 * k * temperatures_f64) / @splat(VECTOR_SIZE, substanceDivider); // Pa
+        const waterPartialPressures = (masses_f64 * k * temperatures_f64) / @as(SimdVector64, @splat(substanceDivider)); // Pa
         return waterPartialPressures;
     }
 
@@ -1217,7 +1229,7 @@ pub const Planet = struct {
     }
 
     pub inline fn getAirPressure(self: Planet, substanceDivider: f64, temperature: f32, vaporMass: f64) f32 {
-        return @floatCast(f32, getPartialPressure(substanceDivider, temperature, vaporMass + self.averageNitrogenMass + self.averageOxygenMass + self.averageCarbonDioxideMass + 1));
+        return @as(f32, @floatCast(getPartialPressure(substanceDivider, temperature, vaporMass + self.averageNitrogenMass + self.averageOxygenMass + self.averageCarbonDioxideMass + 1)));
     }
 
     /// Returns the pressure that air excerts on a given point, in Pascal.
@@ -1238,13 +1250,13 @@ pub const Planet = struct {
         const from = 0.0;
         const to = 1000.0;
         const step = 1.0;
-        const arrayLength = @floatToInt(usize, (to - from) / step);
+        const arrayLength = @as(usize, @intFromFloat((to - from) / step));
         var values: [arrayLength]f32 = undefined;
 
         @setEvalBranchQuota(arrayLength * 10);
         var x: f32 = from;
         while (x < to) : (x += step) {
-            const idx = @floatToInt(usize, x / step);
+            const idx = @as(usize, @intFromFloat(x / step));
             values[idx] = getEquilibriumVaporPressure_Unoptimized(x);
             if (std.math.isInf(values[idx])) { // precision error
                 values[idx] = 0;
@@ -1264,7 +1276,7 @@ pub const Planet = struct {
             // This shouldn't be possible with default ranges, so no need to optimize
             return getEquilibriumVaporPressure_Unoptimized(temperature);
         } else {
-            const idx = @floatToInt(u32, temperature);
+            const idx = @as(u32, @intFromFloat(temperature));
             return lerp(equilibriumVaporPressures[idx], equilibriumVaporPressures[idx + 1], @rem(temperature, 1));
         }
     }
@@ -1286,13 +1298,13 @@ pub const Planet = struct {
         inline while (i < VECTOR_SIZE) : (i += 1) {
             const pressure = getEquilibriumVaporPressure(temperature[i]);
             const mass = (pressure * substanceDivider) / (temperature[i] * k);
-            vector[i] = @floatCast(f32, mass);
+            vector[i] = @as(f32, @floatCast(mass));
         }
         return vector;
     }
 
     pub inline fn getRelativeHumidity(substanceDivider: f64, temperature: f32, mass: f64) f32 {
-        return @floatCast(f32, getPartialPressure(substanceDivider, temperature, mass) / getEquilibriumVaporPressure(temperature));
+        return @as(f32, @floatCast(getPartialPressure(substanceDivider, temperature, mass) / getEquilibriumVaporPressure(temperature)));
     }
 
     pub inline fn getRelativeHumidities(substanceDivider: f64, temperatures: SimdVector, masses: SimdVector) SimdVector {
@@ -1301,7 +1313,7 @@ pub const Planet = struct {
             var vector: @Vector(VECTOR_SIZE, f32) = undefined;
             comptime var i: usize = 0;
             inline while (i < VECTOR_SIZE) : (i += 1) {
-                vector[i] = @floatCast(f32, results[i]);
+                vector[i] = @as(f32, @floatCast(results[i]));
             }
             break :blk vector;
         };
@@ -1339,18 +1351,18 @@ pub const Planet = struct {
             }
             break :blk vector;
         };
-        const targetTotalHeight = elevation + waterMass * @splat(VECTOR_SIZE, kmPerWaterMass);
+        const targetTotalHeight = elevation + waterMass * @as(SimdVector, @splat(kmPerWaterMass));
 
         const doTransmit = totalHeight > targetTotalHeight;
-        const originalTransmitted = @min(shared, shared * (totalHeight - targetTotalHeight) / @splat(VECTOR_SIZE, kmPerWaterMass) / @splat(VECTOR_SIZE, @as(f32, 2.0)));
+        const originalTransmitted = @min(shared, shared * (totalHeight - targetTotalHeight) / @as(SimdVector, @splat(kmPerWaterMass)) / @as(SimdVector, @splat(@as(f32, 2.0))));
 
-        const zero = @splat(VECTOR_SIZE, @as(f32, 0.0));
+        const zero = @as(SimdVector, @splat(@as(f32, 0.0)));
         var transmitted = @select(f32, doTransmit, originalTransmitted, zero);
 
         // Do not transfer to a point that is loaded in the current vector
         // This causes water to disappear
         for (@as([VECTOR_SIZE]usize, target), 0..) |target_elem, idx| {
-            if (@reduce(.Or, origin == @splat(VECTOR_SIZE, target_elem))) {
+            if (@reduce(.Or, origin == @as(IndexVector, @splat(target_elem)))) {
                 transmitted[idx] = 0;
             }
         }
@@ -1367,7 +1379,7 @@ pub const Planet = struct {
     // fn sendWater(self: Planet, target: usize, shared: f32, totalHeight: f32, kmPerWaterMass: f32) f32 {
     // 	const targetTotalHeight = self.elevation[target] + self.waterMass[target] * kmPerWaterMass;
     // 	if (totalHeight > targetTotalHeight) {
-    // 		var transmitted = std.math.min(shared, shared * (totalHeight - targetTotalHeight) / 2 / kmPerWaterMass);
+    // 		var transmitted = @min(shared, shared * (totalHeight - targetTotalHeight) / 2 / kmPerWaterMass);
     // 		std.debug.assert(transmitted >= 0);
     // 		self.newWaterMass[target] += transmitted;
     // 		return transmitted;
@@ -1379,7 +1391,7 @@ pub const Planet = struct {
     fn sendWaterVapor(self: Planet, target: usize, shared: f32, selfMass: f32) f32 {
         const targetMass = self.waterVaporMass[target];
         if (selfMass > targetMass) {
-            var transmitted = std.math.min(shared, shared * (selfMass - targetMass));
+            var transmitted = @min(shared, shared * (selfMass - targetMass));
             self.newWaterVaporMass[target] += transmitted;
             return transmitted;
         } else {
@@ -1397,7 +1409,7 @@ pub const Planet = struct {
         const solarVector = options.solarVector;
 
         // Normally, I should take the distance from the planet to the star and calculate thingies but no
-        const solarIrrCoeff = options.solarConstant * meanPointArea * @intToFloat(f32, self.vegetation.len); // W
+        const solarIrrCoeff = options.solarConstant * meanPointArea * @as(f32, @floatFromInt(self.vegetation.len)); // W
         const stefanBoltzmannConstant = 0.00000005670374; // W.m-2.K-4
         const wienConstant = 0.002897729; // K.m
         const solarTemperature = std.math.pow(f32, solarIrrCoeff / stefanBoltzmannConstant, 1.0 / 8.0) * 4;
@@ -1411,7 +1423,7 @@ pub const Planet = struct {
         while (i < end) : (i += 1) {
             const vert = self.transformedPoints[i];
             const normVert = vert.norm();
-            const solarCoeff = std.math.max(0, normVert.dot(solarVector) / normVert.length());
+            const solarCoeff = @max(0, normVert.dot(solarVector) / normVert.length());
             var newVegetation = self.vegetation[i];
             // TODO: Direct Normal Irradiance? when we have atmosphere
 
@@ -1426,8 +1438,8 @@ pub const Planet = struct {
             newVegetation = std.math.clamp(newVegetation, 0, 1);
 
             // TODO: only when it's sunny
-            const gasMass = newVegetation * dt * 100 / meanPointArea;
-            const enoughCO2 = @intToFloat(f32, @boolToInt(self.averageCarbonDioxideMass > gasMass));
+            const gasMass = newVegetation * dt * 0.1 / meanPointArea;
+            const enoughCO2 = @as(f32, @floatFromInt(@intFromBool(self.averageCarbonDioxideMass > gasMass)));
             self.averageCarbonDioxideMass -= gasMass * enoughCO2;
             self.averageOxygenMass += gasMass * enoughCO2;
 
@@ -1445,7 +1457,7 @@ pub const Planet = struct {
         // Fill newTemp with the current temperatures
         // NOTE: we can copy using memcpy if another way to avoid negative values is found
         for (self.vertices, 0..) |_, i| {
-            newTemp[i] = std.math.max(0, self.temperature[i]); // temperature may never go below 0°K
+            newTemp[i] = @max(0, self.temperature[i]); // temperature may never go below 0°K
         }
 
         // TODO: mix both
@@ -1456,7 +1468,7 @@ pub const Planet = struct {
         } else {
             // TODO: allocate jobs using FixedBufferAllocator for performance
             var jobs: [32]*Job(void) = undefined;
-            const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+            const parallelness = @min(loop.getParallelCount(), jobs.len);
             const pointCount = self.vertices.len;
             var i: usize = 0;
             while (i < parallelness) : (i += 1) {
@@ -1478,7 +1490,7 @@ pub const Planet = struct {
 
         const dt = options.dt * options.timeScale;
         // Disable water simulation when timescale is above 100 000
-        if (dt < 15000 or true) {
+        if (dt < 15000 and false) {
             var iteration: usize = 0;
             var numIterations: usize = 1;
             while (iteration < numIterations) : (iteration += 1) {
@@ -1487,7 +1499,7 @@ pub const Planet = struct {
 
                 {
                     var jobs: [32]*Job(void) = undefined;
-                    const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+                    const parallelness = @min(loop.getParallelCount(), jobs.len);
                     const pointCount = self.vertices.len;
                     var i: usize = 0;
                     while (i < parallelness) : (i += 1) {
@@ -1517,7 +1529,7 @@ pub const Planet = struct {
         if (dt > 365 * std.time.ns_per_day) {}
 
         if (options.gameTime > self.nextMeteorite and false) {
-            var prng = std.rand.DefaultPrng.init(@floatToInt(u64, options.gameTime));
+            var prng = std.rand.DefaultPrng.init(@as(u64, @intFromFloat(options.gameTime)));
             const random = prng.random();
             const impactCenter = random.intRangeLessThanBiased(usize, 0, self.vertices.len);
             std.log.info("METEORITE AT {d}", .{impactCenter});
@@ -1571,7 +1583,7 @@ pub const Planet = struct {
             // TODO: better
             {
                 var jobs: [32]*Job(void) = undefined;
-                const parallelness = std.math.min(loop.getParallelCount(), jobs.len);
+                const parallelness = @min(loop.getParallelCount(), jobs.len);
                 const pointCount = self.vertices.len;
                 var i: usize = 0;
                 while (i < parallelness) : (i += 1) {
@@ -1603,7 +1615,7 @@ pub const Planet = struct {
 
             //    const isInappropriateTemperature = self.temperature[i] >= 273.15 + 50.0 or self.temperature[i] <= 273.15 - 5.0;
             //    newVegetation -= 0.000001 * dt * @as(f32, if (isInappropriateTemperature) 1.0 else 0.0);
-            //    self.vegetation[i] = std.math.max(0, newVegetation);
+            //    self.vegetation[i] = @max(0, newVegetation);
 
             //    for (self.getNeighbours(i)) |neighbour| {
             //        if (self.waterMass[neighbour] < 0.1) {

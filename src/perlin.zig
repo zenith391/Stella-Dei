@@ -13,9 +13,9 @@ fn lerp(t: f32, a: f32, b: f32) f32 {
 /// Returns a value between -1 and 1.
 pub fn p3d(in_x: f32, in_y: f32, in_z: f32) f32 {
     // find unit cube that contains point
-    const X: u9 = @truncate(u8, @floatToInt(u32, in_x));
-    const Y = @truncate(u8, @floatToInt(u32, in_y));
-    const Z = @truncate(u8, @floatToInt(u32, in_z));
+    const X: u9 = @as(u8, @truncate(@as(u32, @intFromFloat(in_x))));
+    const Y = @as(u8, @truncate(@as(u32, @intFromFloat(in_y))));
+    const Z = @as(u8, @truncate(@as(u32, @intFromFloat(in_z))));
 
     // find relative x,y,z of point in cube
     const x = in_x - @floor(in_x);
@@ -67,12 +67,12 @@ pub fn noise(x: f32, y: f32, z: f32) f32 {
 }
 
 fn fade(t: f64) f32 {
-    return @floatCast(f32, t * t * t * (t * (t * 6 - 15) + 10));
+    return @as(f32, @floatCast(t * t * t * (t * (t * 6 - 15) + 10)));
 }
 
 fn grad(hash: u8, x: f32, y: f32, z: f32) f32 {
     // convert lo 4 bits of hash code into 12 gradient directions
-    const h = @truncate(u4, hash);
+    const h = @as(u4, @truncate(hash));
     const u = if (h < 8) x else y;
     const v = if (h < 4) y else if (h == 12 or h == 14) x else z;
     return if (h & 1 == 0) u else -u + if (h & 2 == 0) v else -v;

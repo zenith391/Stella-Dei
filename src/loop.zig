@@ -48,7 +48,7 @@ pub fn Job(comptime ResultType: type) type {
                 const WrapperArgsType = struct { job: *Self, funcArgs: ArgsType, allocator: std.mem.Allocator };
                 const wrapper = struct {
                     pub fn wrapper(userdata: ?*anyopaque) callconv(.Unspecified) void {
-                        const wrapperArgs = @ptrCast(*WrapperArgsType, @alignCast(@alignOf(WrapperArgsType), userdata));
+                        const wrapperArgs = @as(*WrapperArgsType, @ptrCast(@alignCast(userdata)));
                         const job = wrapperArgs.job;
                         const funcArgs = wrapperArgs.funcArgs;
                         const result = @call(.auto, func, funcArgs);
@@ -168,7 +168,7 @@ pub const EventLoop = struct {
                 // wait until a task is available
                 if (sleepTime > 0) std.time.sleep(sleepTime);
                 sleepTime += std.time.ns_per_ms / 10;
-                sleepTime = std.math.min(sleepTime, 50 * std.time.ns_per_ms);
+                sleepTime = @min(sleepTime, 50 * std.time.ns_per_ms);
             }
         }
     }

@@ -56,7 +56,7 @@ pub const Lifeform = struct {
     }
 
     pub fn init(position: Vec3, kind: Kind, gameTime: f64) Lifeform {
-        return Lifeform{ .position = position, .kind = kind, .prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp())), .timeBorn = gameTime };
+        return Lifeform{ .position = position, .kind = kind, .prng = std.rand.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp()))), .timeBorn = gameTime };
     }
 
     pub fn getMesh(self: Lifeform) ObjLoader.Mesh {
@@ -74,8 +74,8 @@ pub const Lifeform = struct {
         const point = planet.transformedPoints[pointIdx];
         const random = self.prng.random();
         const dt = options.dt * options.timeScale;
-        self.reproductionCooldown = std.math.max(0, self.reproductionCooldown - dt);
-        self.satiety = std.math.max(0, self.satiety - dt * 0.001);
+        self.reproductionCooldown = @max(0, self.reproductionCooldown - dt);
+        self.satiety = @max(0, self.satiety - dt * 0.001);
 
         const pointTemperature = planet.temperature[pointIdx];
 
@@ -89,7 +89,7 @@ pub const Lifeform = struct {
         if (self.sexualCriteria > 0.3) {
             // lowers by a few every in-game second
             self.sexualCriteria -= 0.000001 * options.timeScale;
-            self.sexualCriteria = std.math.max(0.3, self.sexualCriteria);
+            self.sexualCriteria = @max(0.3, self.sexualCriteria);
         }
 
         switch (self.state) {
@@ -98,7 +98,7 @@ pub const Lifeform = struct {
                     if (planet.vegetation[pointIdx] > 0.2) {
                         // eat
                         const neededToEat = (100.0 - self.satiety) / 100.0;
-                        const eaten = std.math.min(planet.vegetation[pointIdx], neededToEat);
+                        const eaten = @min(planet.vegetation[pointIdx], neededToEat);
                         planet.vegetation[pointIdx] -= eaten;
                         self.satiety += eaten * 100.0;
                         std.log.info("rabbit ate {d} veggie level", .{eaten});

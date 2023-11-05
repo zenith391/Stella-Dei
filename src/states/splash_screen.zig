@@ -20,7 +20,7 @@ pub const SplashScreenState = struct {
     }
 
     pub fn render(self: *SplashScreenState, game: *Game, renderer: *Renderer) void {
-        const elapsedTime = @intToFloat(f32, std.time.milliTimestamp() - self.start) / 1000;
+        const elapsedTime = @as(f32, @floatFromInt(std.time.milliTimestamp() - self.start)) / 1000;
         const luminosity = fadeIn(std.math.clamp((elapsedTime - 2) / 6, 0.0, 1.0));
         const fadeOut = 1 - fadeIn(std.math.clamp((elapsedTime - 12) / 1, 0.0, 1.0));
         gl.clearColor(luminosity * fadeOut, luminosity * fadeOut, luminosity * fadeOut, 1.0);
@@ -41,7 +41,7 @@ pub const SplashScreenState = struct {
         _ = self;
         const vg = renderer.vg;
 
-        const paint = vg.imagePattern(0, 0, imageWidth, imageHeight, 0, .{ .handle = @bitCast(i32, logo.texture) }, 1.0);
+        const paint = vg.imagePattern(0, 0, imageWidth, imageHeight, 0, .{ .handle = @as(i32, @bitCast(logo.texture)) }, 1.0);
         vg.rect(size.x() / 2 - imageWidth / 2, size.y() / 2 - imageHeight, imageWidth, imageHeight);
         vg.fillPaint(paint);
 

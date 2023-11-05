@@ -37,9 +37,9 @@ pub const MainMenuState = struct {
             "assets/music/music-main-menu.mp3",
         } };
         game.audio.playSoundTrackIn(soundTrack, 3000);
-        game.audio.musicManager.setVolume(0.4);
+        game.audio.setMusicVolume(0.4);
 
-        var randomPrng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+        var randomPrng = std.rand.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp())));
         const seed = randomPrng.random().int(u64);
 
         var earthFile: ?std.fs.File = null;
@@ -69,7 +69,7 @@ pub const MainMenuState = struct {
         const planet = &self.planet;
         const sunAngle = za.toRadians(@as(f32, 195.0));
 
-        const sunPhi = @floatCast(f32, @mod(sunAngle, 2 * std.math.pi));
+        const sunPhi = @as(f32, @floatCast(@mod(sunAngle, 2 * std.math.pi)));
         const sunTheta = za.toRadians(@as(f32, 90.0));
         const solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
 
@@ -119,7 +119,7 @@ pub const MainMenuState = struct {
             program.setUniformMat4("projMatrix", Mat4.perspective(70, size.x() / size.y(), zNear, zFar));
             program.setUniformMat4("viewMatrix", Mat4.lookAt(cameraPos, target, Vec3.new(0, 0, 1)));
 
-            const rot = @floatCast(f32, @mod(@intToFloat(f64, std.time.milliTimestamp()) / 1000.0 / 0.5, 360));
+            const rot = @as(f32, @floatCast(@mod(@as(f64, @floatFromInt(std.time.milliTimestamp())) / 1000.0 / 0.5, 360)));
             const modelMatrix = Mat4.recompose(Vec3.new(0, 0, 0), Vec3.new(0, 0, rot), Vec3.new(1, 1, 1));
             program.setUniformMat4("modelMatrix", modelMatrix);
 

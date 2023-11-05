@@ -1,0 +1,19 @@
+.{
+	.name = "stella-dei",
+	.version = "0.2.0",
+	.paths = .{ "." },
+	.dependencies = .{
+		.zalgebra = .{
+			.url = "https://github.com/kooparse/zalgebra/archive/23aaf89db3b2a9940fd5dfa81e10e9e6f8345ea1.tar.gz",
+			.hash = "1220e7feb5be6842dbc0d20a2a9922e5a61610bfbd3039d7497b0722be5662c603e4",
+		},
+		.zigimg = .{
+			.url = "https://github.com/zigimg/zigimg/archive/368658aa6b4d22cd532f2785d11f75b2ec2b490c.tar.gz",
+			.hash = "12201a74c6aa44832f8eac3e4a0e92e7bb7f3d6a12777f517fd470d7f6643cdc33fc",
+		},
+		.mach_glfw = .{
+			.url = "https://github.com/hexops/mach-glfw/archive/20d247fa4b70c0b3951cb3c439d3466f204754e1.tar.gz",
+			.hash = "1220533928f944fe59f6dd2807db71cd69108cc810101e627835c3abcc4afea4fb06",
+		},
+	}
+}

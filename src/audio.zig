@@ -7,52 +7,74 @@ const c = @cImport({
 });
 
 pub const AudioSubsystem = struct {
-    engine: *c.ma_engine,
+    // engine: *c.ma_engine,
     allocator: Allocator,
-    musicManager: MusicManager,
+    // musicManager: MusicManager,
 
     pub fn init(allocator: Allocator) !AudioSubsystem {
-        const engine = try allocator.create(c.ma_engine);
-        if (c.ma_engine_init(null, engine) != c.MA_SUCCESS) {
-            return error.AudioInitError;
-        }
+        // const engine = try allocator.create(c.ma_engine);
+        // if (c.ma_engine_init(null, engine) != c.MA_SUCCESS) {
+        //     return error.AudioInitError;
+        // }
 
-        return AudioSubsystem{ .engine = engine, .allocator = allocator, .musicManager = MusicManager.init(allocator) };
+        // return AudioSubsystem{ .engine = engine, .allocator = allocator, .musicManager = MusicManager.init(allocator) };
+        return AudioSubsystem{ .allocator = allocator };
     }
 
     pub fn playFromFile(self: *AudioSubsystem, path: [:0]const u8) void {
-        if (c.ma_engine_play_sound(self.engine, path, null) != c.MA_SUCCESS) {
-            std.log.err("couldn't play sound", .{});
-        }
+        // if (c.ma_engine_play_sound(self.engine, path, null) != c.MA_SUCCESS) {
+        //     std.log.err("couldn't play sound", .{});
+        // }
+        _ = self;
+        _ = path;
     }
 
     /// Set the sound track to the one given and wait between 5 and 20 seconds to play
     /// a music chosen at random in the track.
     pub fn playSoundTrack(self: *AudioSubsystem, soundTrack: SoundTrack) void {
-        const random = self.musicManager.prng.random();
-        self.playSoundTrackIn(soundTrack, random.intRangeAtMostBiased(i64, 10000, 15000));
+        // const random = self.musicManager.prng.random();
+        // self.playSoundTrackIn(soundTrack, random.intRangeAtMostBiased(i64, 10000, 15000));
+        _ = self;
+        _ = soundTrack;
     }
 
     pub fn playSoundTrackIn(self: *AudioSubsystem, soundTrack: SoundTrack, time: i64) void {
-        self.musicManager.stopCurrentMusic();
-        self.musicManager.soundTrack = soundTrack;
+        _ = self;
+        _ = soundTrack;
+        _ = time;
+        // self.musicManager.stopCurrentMusic();
+        // self.musicManager.soundTrack = soundTrack;
 
-        const random = self.musicManager.prng.random();
-        self.musicManager.soundTrack.position = random.uintLessThanBiased(usize, soundTrack.items.len);
-        self.musicManager.nextMusicTime = std.time.milliTimestamp() + time;
-        log.debug("Start next music (new sound track) in {d} seconds: {s}", .{ @divTrunc(self.musicManager.nextMusicTime - std.time.milliTimestamp(), 1000), self.musicManager.soundTrack.getNextItem().? });
+        // const random = self.musicManager.prng.random();
+        // self.musicManager.soundTrack.position = random.uintLessThanBiased(usize, soundTrack.items.len);
+        // self.musicManager.nextMusicTime = std.time.milliTimestamp() + time;
+        // log.debug("Start next music (new sound track) in {d} seconds: {s}", .{ @divTrunc(self.musicManager.nextMusicTime - std.time.milliTimestamp(), 1000), self.musicManager.soundTrack.getNextItem().? });
+    }
+
+    pub fn getMusicVolume(self: *AudioSubsystem) f32 {
+        _ = self;
+        // return self.musicManager.volume;
+        return 0.0;
+    }
+
+    pub fn setMusicVolume(self: *AudioSubsystem, volume: f32) void {
+        _ = self;
+        _ = volume;
+        // self.musicManager.setVolume(volume);
     }
 
     pub fn update(self: *AudioSubsystem) void {
-        const zone = tracy.ZoneN(@src(), "Update audio subsystem");
-        defer zone.End();
-        self.musicManager.update();
+        // const zone = tracy.ZoneN(@src(), "Update audio subsystem");
+        // defer zone.End();
+        _ = self;
+        // self.musicManager.update();
     }
 
     pub fn deinit(self: *AudioSubsystem) void {
-        self.musicManager.deinit();
-        c.ma_engine_uninit(self.engine);
-        self.allocator.destroy(self.engine);
+        // self.musicManager.deinit();
+        _ = self;
+        // c.ma_engine_uninit(self.engine);
+        // self.allocator.destroy(self.engine);
     }
 };
 
@@ -83,7 +105,7 @@ pub const MusicManager = struct {
     volume: f32 = 1,
 
     pub fn init(allocator: Allocator) MusicManager {
-        return MusicManager{ .allocator = allocator, .prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp())) };
+        return MusicManager{ .allocator = allocator, .prng = std.rand.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp()))) };
     }
 
     /// Change  to the next item in the sound track if the current music is done playing

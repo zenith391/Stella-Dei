@@ -52,9 +52,18 @@ pub const GameIntroState = struct {
         const pressed = game.window.getMouseButton(.left) == .press;
 
         if (time <= 3) {
-            self.textAlpha = @floatToInt(u8, 255 * (time / 3));
+            self.textAlpha = @as(u8, @intFromFloat(255 * (time / 3)));
         } else if (self.fadeOutStartTime) |fadeOut| {
-            self.textAlpha = 255 - @floatToInt(u8, @min(255, @max(0, (time - fadeOut) * 255.0 / 2.0)));
+            self.textAlpha = 255 - @as(
+                u8,
+                @intFromFloat(@min(
+                    @as(f64, 255),
+                    @max(
+                        @as(f64, 0),
+                        (time - fadeOut) * 255.0 / 2.0,
+                    ),
+                )),
+            );
         }
 
         const text = "A long time ago in a galaxy far far away lived a planet...";

@@ -81,7 +81,7 @@ pub const Game = struct {
     }
 
     pub fn getTime() f64 {
-        return @intToFloat(f64, std.time.milliTimestamp());
+        return @as(f64, @floatFromInt(std.time.milliTimestamp()));
     }
 
     pub fn deinitState(self: *Game) void {
@@ -149,13 +149,13 @@ fn cursorPosCallback(window: glfw.Window, xpos: f64, ypos: f64) void {
                 // call it
                 @field(game.state, field.name).mouseMoved(
                     &game,
-                    @floatCast(f32, xpos),
-                    @floatCast(f32, ypos),
-                    @floatCast(f32, xpos) - game.oldMouseX,
-                    @floatCast(f32, ypos) - game.oldMouseY,
+                    @as(f32, @floatCast(xpos)),
+                    @as(f32, @floatCast(ypos)),
+                    @as(f32, @floatCast(xpos)) - game.oldMouseX,
+                    @as(f32, @floatCast(ypos)) - game.oldMouseY,
                 );
-                game.oldMouseX = @floatCast(f32, xpos);
-                game.oldMouseY = @floatCast(f32, ypos);
+                game.oldMouseX = @as(f32, @floatCast(xpos));
+                game.oldMouseY = @as(f32, @floatCast(ypos));
                 return;
             }
         }
@@ -190,10 +190,10 @@ fn render(window: glfw.Window) void {
     game.audio.update();
 
     const size = window.getFramebufferSize();
-    gl.viewport(0, 0, @intCast(c_int, size.width), @intCast(c_int, size.height));
+    gl.viewport(0, 0, @as(c_int, @intCast(size.width)), @as(c_int, @intCast(size.height)));
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-    renderer.framebufferSize = za.Vec2.new(@intToFloat(f32, size.width), @intToFloat(f32, size.height));
+    renderer.framebufferSize = za.Vec2.new(@as(f32, @floatFromInt(size.width)), @as(f32, @floatFromInt(size.height)));
 
     const zone = tracy.ZoneN(@src(), "Render");
     defer zone.End();
@@ -235,8 +235,8 @@ fn updateLoop(loop: *EventLoop, window: glfw.Window) void {
             }
         }
         const elapsed = timer.read();
-        std.time.sleep(16666666 -| elapsed);
-        fullLoopTime = @intToFloat(f32, timer.read()) / @intToFloat(f32, std.time.ns_per_s);
+        std.time.sleep((16666666 * 2) -| elapsed);
+        fullLoopTime = @as(f32, @floatFromInt(timer.read())) / @as(f32, @floatFromInt(std.time.ns_per_s));
     }
 }
 
@@ -245,7 +245,7 @@ const perlin = @import("perlin.zig").p2d;
 /// This is used by zig-opengl library to load OpenGL functions from GLFW
 fn getProcAddress(_: void, name: [:0]const u8) ?*anyopaque {
     var proc = glfw.getProcAddress(name);
-    return @intToPtr(?*anyopaque, @ptrToInt(proc));
+    return @as(?*anyopaque, @ptrFromInt(@intFromPtr(proc)));
 }
 
 fn mouseButtonCallback(window: glfw.Window, button: glfw.mouse_button.MouseButton, action: glfw.Action, _: glfw.Mods) void {
@@ -292,13 +292,15 @@ pub fn main() !void {
     }
 }
 
-inline fn main_wrap() !void {
+fn main_wrap() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    // If Tracy is enabled, pass-through all allocations to it
-    var tracyAlloc = @import("tracy_allocator.zig").TracyAllocator.init(gpa.allocator());
-    const allocator = if (tracy.enabled) tracyAlloc.allocator() else gpa.allocator();
+    //     // If Tracy is enabled, pass-through all allocations to it
+    // var tracyAlloc = @import("tracy_allocator.zig").TracyAllocator.init(gpa.allocator());
+    // const allocator = if (tracy.enabled) tracyAlloc.allocator() else gpa.allocator();
+    // _ = allocator;
+    const allocator = gpa.allocator();
     // tracy.InitThread();
 
     if (glfw.init(.{}) == false) {
@@ -386,9 +388,9 @@ inline fn main_wrap() !void {
         tracy.FrameMark();
 
         const frameTime = fpsTimer.lap();
-        const fps = 1.0 / (@intToFloat(f32, frameTime) / std.time.ns_per_s);
+        const fps = 1.0 / (@as(f32, @floatFromInt(frameTime)) / std.time.ns_per_s);
         game.fps = fps;
-        //std.log.debug("{d} fps", .{ fps });
+        // std.log.debug("{d} fps", .{fps});
     }
 }
 

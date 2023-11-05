@@ -47,9 +47,9 @@ pub const QuadMesh = struct {
 
             gl.bindVertexArray(vao);
             gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-            gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, vertices.len * @sizeOf(f32)), &vertices, gl.STATIC_DRAW);
-            gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
-            gl.vertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @intToPtr(?*anyopaque, 2 * @sizeOf(f32))); // position
+            gl.bufferData(gl.ARRAY_BUFFER, @as(isize, @intCast(vertices.len * @sizeOf(f32))), &vertices, gl.STATIC_DRAW);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(0 * @sizeOf(f32)))); // position
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(2 * @sizeOf(f32)))); // position
             gl.enableVertexAttribArray(0);
             gl.enableVertexAttribArray(1);
             quad_vao = vao;
@@ -68,9 +68,9 @@ pub const SunMesh = struct {
             const mesh = IcosphereMesh.generate(allocator, 3, false) catch unreachable;
             gl.bindVertexArray(mesh.vao[0]);
             gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
-            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(0 * @sizeOf(f32)))); // position
             gl.enableVertexAttribArray(0);
-            gl.bufferData(gl.ARRAY_BUFFER, @intCast(isize, mesh.vertices.len * @sizeOf(f32)), mesh.vertices.ptr, gl.STREAM_DRAW);
+            gl.bufferData(gl.ARRAY_BUFFER, @as(isize, @intCast(mesh.vertices.len * @sizeOf(f32))), mesh.vertices.ptr, gl.STREAM_DRAW);
             sun_mesh = mesh;
         }
         return sun_mesh.?;
@@ -125,6 +125,7 @@ pub const PlayState = struct {
     cameraRotation: Vec3 = Vec3.new(0, 0, 0),
     /// The index of the currently selected point
     selectedPoint: usize = 0,
+    clickedPoint: usize = 0,
     displayMode: Planet.DisplayMode = .Normal,
     /// Inclination of rotation, in degrees
     axialTilt: f32 = 0, //23.4, // TODO: fix axial tilt with wind and solar vector
@@ -145,11 +146,12 @@ pub const PlayState = struct {
     /// This is the number of in-game seconds that passes for each real second
     /// TODO: only expose 3 selectable time scales like in most game (normal, fast, super fast)
     /// and they would have different values depending on the geological/biological/technological time scale
-    timeScale: f32 = 6 * @intToFloat(f32, std.time.s_per_hour),
+    timeScale: f32 = 6 * @as(f32, @floatFromInt(std.time.s_per_hour)),
     /// Whether the game is paused, this has the same effect as setting timeScale to
     /// 0 except it preserves the time scale value.
     paused: bool = false,
     showPlanetControl: bool = false,
+    showPointDetails: bool = false,
 
     debug_showMoreInfo: bool = false,
     debug_clearWater: bool = false,
@@ -177,7 +179,7 @@ pub const PlayState = struct {
 
         // The seed is constant as it should not be changed between plays for consistency
         var prng = std.rand.DefaultPrng.init(1234);
-        var randomPrng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+        var randomPrng = std.rand.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp())));
 
         // Generate white noise (using the PRNG) to fill all of the cubemap's faces
         const faces = [_]Texture.CubemapFace{ .PositiveX, .NegativeX, .PositiveY, .NegativeY, .PositiveZ, .NegativeZ };
@@ -216,7 +218,7 @@ pub const PlayState = struct {
 
         // Temperature difference breaks the start of the game for some reason
         // TODO: fix the bug
-        std.mem.set(f32, planet.temperature, 293.15);
+        @memset(planet.temperature, 293.15);
 
         Lifeform.initMeshes(game.allocator) catch unreachable;
 
@@ -226,7 +228,7 @@ pub const PlayState = struct {
         const cursorPos = game.window.getCursorPos();
         std.valgrind.callgrind.startInstrumentation();
         return PlayState{
-            .dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos)),
+            .dragStart = Vec2.new(@as(f32, @floatCast(cursorPos.xpos)), @as(f32, @floatCast(cursorPos.ypos))),
             .noiseCubemap = cubemap,
             .skyboxCubemap = skybox,
             .planet = planet,
@@ -271,7 +273,7 @@ pub const PlayState = struct {
         } else {
             if (window.getMouseButton(.right) == .press and !self.showEscapeMenu) {
                 const glfwCursorPos = game.window.getCursorPos();
-                const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
+                const cursorPos = Vec2.new(@as(f32, @floatCast(glfwCursorPos.xpos)), @as(f32, @floatCast(glfwCursorPos.ypos)));
                 const delta = cursorPos.sub(self.dragStart).scale(1.0 / 100.0);
                 const right = self.targetCameraPos.cross(Vec3.forward()).norm();
                 const backward = self.targetCameraPos.cross(right).norm();
@@ -309,8 +311,8 @@ pub const PlayState = struct {
         }
 
         const scale = 1;
-        const fbWidth = @floatToInt(c_int, size.x() * scale);
-        const fbHeight = @floatToInt(c_int, size.y() * scale);
+        const fbWidth = @as(c_int, @intFromFloat(size.x() * scale));
+        const fbHeight = @as(c_int, @intFromFloat(size.y() * scale));
         if (fbWidth != self.framebuffer.width or fbHeight != self.framebuffer.height) {
             self.framebuffer.deinit();
             self.framebuffer = Framebuffer.create(fbWidth, fbHeight) catch unreachable;
@@ -324,7 +326,7 @@ pub const PlayState = struct {
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             gl.enable(gl.DEPTH_TEST);
             gl.viewport(0, 0, fbWidth, fbHeight);
-            defer gl.viewport(0, 0, @floatToInt(c_int, size.x()), @floatToInt(c_int, size.y()));
+            defer gl.viewport(0, 0, @as(c_int, @intFromFloat(size.x())), @as(c_int, @intFromFloat(size.y())));
 
             self.renderScene(game, renderer);
             self.framebuffer.unbind();
@@ -344,7 +346,7 @@ pub const PlayState = struct {
             program.use();
             program.setUniformBool("doBrightTexture", true);
             gl.viewport(0, 0, fbWidth, fbHeight);
-            defer gl.viewport(0, 0, @floatToInt(c_int, size.x()), @floatToInt(c_int, size.y()));
+            defer gl.viewport(0, 0, @as(c_int, @intFromFloat(size.x())), @as(c_int, @intFromFloat(size.y())));
 
             gl.bindVertexArray(QuadMesh.getVAO());
             gl.disable(gl.DEPTH_TEST);
@@ -371,7 +373,7 @@ pub const PlayState = struct {
                     target.bind();
                     defer target.unbind();
                     gl.viewport(0, 0, fbWidth, fbHeight);
-                    defer gl.viewport(0, 0, @floatToInt(c_int, size.x()), @floatToInt(c_int, size.y()));
+                    defer gl.viewport(0, 0, @as(c_int, @intFromFloat(size.x())), @as(c_int, @intFromFloat(size.y())));
                     var attachments: [1]gl.GLenum = .{gl.COLOR_ATTACHMENT1};
                     if (i % 2 == 0) {
                         attachments[0] = gl.COLOR_ATTACHMENT0;
@@ -392,7 +394,7 @@ pub const PlayState = struct {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         {
             const program = renderer.postprocessProgram;
-            var sunPhi: f32 = @floatCast(f32, @mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi));
+            var sunPhi: f32 = @as(f32, @floatCast(@mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi)));
             var sunTheta: f32 = std.math.pi / 2.0;
             var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
             const zFar = self.planet.radius * 5;
@@ -456,7 +458,7 @@ pub const PlayState = struct {
         const size = renderer.framebufferSize;
 
         const planet = &self.planet;
-        var sunPhi: f32 = @floatCast(f32, @mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi));
+        var sunPhi: f32 = @as(f32, @floatCast(@mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi)));
         var sunTheta: f32 = std.math.pi / 2.0;
         var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
 
@@ -504,7 +506,7 @@ pub const PlayState = struct {
 
             const mesh = SunMesh.getMesh(game.allocator);
             gl.bindVertexArray(mesh.vao[0]);
-            gl.drawElements(gl.TRIANGLES, @intCast(c_int, mesh.indices.len), gl.UNSIGNED_INT, null);
+            gl.drawElements(gl.TRIANGLES, @as(c_int, @intCast(mesh.indices.len)), gl.UNSIGNED_INT, null);
         }
 
         // Then render the planet
@@ -522,7 +524,7 @@ pub const PlayState = struct {
             program.setUniformFloat("lightIntensity", self.solarConstant / 1500);
             program.setUniformVec3("viewPos", self.cameraPos);
             program.setUniformFloat("planetRadius", planet.radius);
-            program.setUniformInt("displayMode", @enumToInt(self.displayMode)); // display mode
+            program.setUniformInt("displayMode", @intFromEnum(self.displayMode)); // display mode
             program.setUniformVec3("selectedVertexPos", planet.transformedPoints[self.selectedPoint]);
             program.setUniformFloat("kmPerWaterMass", planet.getKmPerWaterMass());
             program.setUniformVec3("vegetationColor", utils.getWavelengthColor(planet.plantColorWavelength));
@@ -567,12 +569,19 @@ pub const PlayState = struct {
             program.setUniformVec3("viewPos", self.cameraPos);
             program.setUniformFloat("planetRadius", planet.radius);
             program.setUniformFloat("kmPerWaterMass", planet.getKmPerWaterMass());
+            program.setUniformFloat("gameTime", @as(f32, @floatCast(self.gameTime)));
 
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_CUBE_MAP, self.noiseCubemap.texture);
             program.setUniformInt("noiseCubemap", 0);
 
-            //planet.renderAtmosphere();
+            const waterNormalMap = renderer.textureCache.getExt("water-normal-map", .{ .mipmaps = true });
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, waterNormalMap.texture);
+            program.setUniformInt("waterNormalMap", 1);
+
+            if (self.displayMode == .Normal)
+                planet.renderWater();
         }
 
         const entity = renderer.entityProgram;
@@ -600,7 +609,7 @@ pub const PlayState = struct {
 
         const planet = &self.planet;
 
-        var sunPhi: f32 = @floatCast(f32, @mod(self.gameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi));
+        var sunPhi: f32 = @as(f32, @floatCast(@mod(self.gameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi)));
         var sunTheta: f32 = std.math.pi / 2.0;
         var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
 
@@ -644,18 +653,18 @@ pub const PlayState = struct {
         }
 
         if (self.debug_clearWater) {
-            std.mem.set(f32, self.planet.waterMass, 0);
-            std.mem.set(f32, self.planet.waterVaporMass, 0);
+            @memset(self.planet.waterMass, 0);
+            @memset(self.planet.waterVaporMass, 0);
             self.debug_clearWater = false;
         }
 
         if (self.debug_deluge) {
-            std.mem.set(f32, self.planet.waterVaporMass, 5_000_000);
+            @memset(self.planet.waterVaporMass, 5_000_000);
             self.debug_deluge = false;
         }
 
         if (self.debug_spawnRabbits) {
-            var prng = std.rand.DefaultPrng.init(@bitCast(u64, std.time.milliTimestamp()));
+            var prng = std.rand.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp())));
             const random = prng.random();
 
             var i: usize = 0;
@@ -681,7 +690,7 @@ pub const PlayState = struct {
                 .planetRotationTime = self.planetRotationTime,
                 .solarVector = solarVector,
             });
-            const updateTime = @intToFloat(f32, timer.lap() / 1_000) / 1_000_000;
+            const updateTime = @as(f32, @floatFromInt(timer.lap() / 1_000)) / 1_000_000;
 
             // TODO: use std.time.milliTimestamp or std.time.Timer for accurate game time
             self.gameTime += updateTime * self.timeScale;
@@ -698,9 +707,8 @@ pub const PlayState = struct {
             }
         };
 
-        const musicManager = &game.audio.musicManager;
         const t = 0.6 * dt;
-        musicManager.setVolume(musicManager.volume * (1 - t) + targetMusicVolume * t);
+        game.audio.setMusicVolume(game.audio.getMusicVolume() * (1 - t) + targetMusicVolume * t);
 
         if (self.defer_saveGame) {
             self.saveGame() catch |err| {
@@ -725,7 +733,7 @@ pub const PlayState = struct {
             }
             if (key == .F5) {
                 const numEnumFields = @as(c_int, std.meta.fields(Planet.DisplayMode).len);
-                self.displayMode = @intToEnum(Planet.DisplayMode, @mod(@enumToInt(self.displayMode) + 1, numEnumFields));
+                self.displayMode = @as(Planet.DisplayMode, @enumFromInt(@mod(@intFromEnum(self.displayMode) + 1, numEnumFields)));
             }
             if (key == .F6) {
                 if (self.freeCam) {
@@ -757,14 +765,19 @@ pub const PlayState = struct {
             const point = self.selectedPoint;
             const pointPos = planet.transformedPoints[point];
             const lifeform = Lifeform.init(pointPos, .Rabbit, self.gameTime);
-            planet.lifeformsLock.lock();
-            defer planet.lifeformsLock.unlock();
+            // planet.lifeformsLock.lock();
+            // defer planet.lifeformsLock.unlock();
             planet.addLifeform(lifeform) catch unreachable;
+        }
+
+        if (self.selectedTool == .None and button == .left) {
+            self.showPointDetails = true;
+            self.clickedPoint = self.selectedPoint;
         }
 
         if (button == .right) {
             const cursorPos = game.window.getCursorPos();
-            self.dragStart = Vec2.new(@floatCast(f32, cursorPos.xpos), @floatCast(f32, cursorPos.ypos));
+            self.dragStart = Vec2.new(@as(f32, @floatCast(cursorPos.xpos)), @as(f32, @floatCast(cursorPos.ypos)));
         }
     }
 
@@ -776,7 +789,7 @@ pub const PlayState = struct {
 
         const minDistance = self.planet.radius + zNear;
         const maxDistance = self.planet.radius * 5;
-        self.targetCameraDistance = std.math.clamp(self.targetCameraDistance - (@floatCast(f32, yOffset) * self.cameraDistance / 50), minDistance, maxDistance);
+        self.targetCameraDistance = std.math.clamp(self.targetCameraDistance - (@as(f32, @floatCast(yOffset)) * self.cameraDistance / 50), minDistance, maxDistance);
     }
 
     pub fn mouseMoved(self: *PlayState, game: *Game, x: f32, y: f32, dx: f32, dy: f32) void {
@@ -789,14 +802,14 @@ pub const PlayState = struct {
 
         const windowSize = game.window.getFramebufferSize();
         // Transform screen coordinates to Normalized Device Space coordinates
-        const ndsX = 2 * x / @intToFloat(f32, windowSize.width) - 1;
-        const ndsY = 1 - 2 * y / @intToFloat(f32, windowSize.height);
+        const ndsX = 2 * x / @as(f32, @floatFromInt(windowSize.width)) - 1;
+        const ndsY = 1 - 2 * y / @as(f32, @floatFromInt(windowSize.height));
         var cursorVector = za.Vec4.new(ndsX, ndsY, -1, 1);
 
         // 'unproject' the coordinates by using the inversed projection matrix
         const zFar = self.planet.radius * 5;
         const zNear = zFar / 10000;
-        const projMatrix = Mat4.perspective(70, @intToFloat(f32, windowSize.width) / @intToFloat(f32, windowSize.height), zNear, zFar);
+        const projMatrix = Mat4.perspective(70, @as(f32, @floatFromInt(windowSize.width)) / @as(f32, @floatFromInt(windowSize.height)), zNear, zFar);
         cursorVector = projMatrix.inv().mulByVec4(cursorVector);
 
         // put to world space by multiplying by inverse of view matrix
@@ -811,7 +824,7 @@ pub const PlayState = struct {
         // To do this, it gets the point that has the lowest distance to the
         // position of the camera.
         const pos = self.cameraPos.add(worldSpaceCursor.scale(self.cameraPos.length() / 2)).norm().scale(self.planet.radius + 20);
-        var closestPointDist: f32 = std.math.inf_f32;
+        var closestPointDist: f32 = std.math.inf(f32);
         var closestPoint: usize = undefined;
         for (self.planet.transformedPoints, 0..) |point, i| {
             if (point.distance(pos) < closestPointDist) {
@@ -827,7 +840,7 @@ pub const PlayState = struct {
         const vg = renderer.vg;
         const pressed = game.window.getMouseButton(.left) == .press;
         const glfwCursorPos = game.window.getCursorPos();
-        const cursorPos = Vec2.new(@floatCast(f32, glfwCursorPos.xpos), @floatCast(f32, glfwCursorPos.ypos));
+        const cursorPos = Vec2.new(@as(f32, @floatCast(glfwCursorPos.xpos)), @as(f32, @floatCast(glfwCursorPos.ypos)));
         _ = cursorPos;
 
         {
@@ -869,10 +882,6 @@ pub const PlayState = struct {
         if (self.showPlanetControl) {
             const panelWidth = 300;
             const panelHeight = 280;
-            const panelX = 100;
-            _ = panelX;
-            const panelY = size.y() - 50 - 10 - panelHeight;
-            _ = panelY;
 
             self.showPlanetControl = ui.window(vg, game, "planet-control-window", panelWidth, panelHeight);
             defer ui.endWindow(vg);
@@ -881,10 +890,10 @@ pub const PlayState = struct {
             ui.label(vg, game, "Solar Constant", .{}, 90, 0);
             ui.label(vg, game, "{d} W/m²", .{self.solarConstant}, 90, 30);
             if (ui.button(vg, game, "solar-constant-minus", 0, 30, 20, 20, "-")) {
-                self.solarConstant = std.math.max(0, self.solarConstant - 100);
+                self.solarConstant = @max(0, self.solarConstant - 100);
             }
             if (ui.button(vg, game, "solar-constant-plus", 160, 30, 20, 20, "+")) {
-                self.solarConstant = std.math.min(self.solarConstant + 100, 5000);
+                self.solarConstant = @min(self.solarConstant + 100, 5000);
             }
 
             if (ui.button(vg, game, "clear-water", panelWidth / 2 - (170 / 2), 130, 170, 40, "Clear all water")) {
@@ -897,6 +906,20 @@ pub const PlayState = struct {
             // if (pressed and !(cursorPos.x() >= panelX and cursorPos.x() < panelX + panelWidth and cursorPos.y() >= panelY and cursorPos.y() < panelY + panelHeight)) {
             //     self.showPlanetControl = false;
             // }
+        }
+
+        if (self.showPointDetails) {
+            const panelWidth = 350;
+            const panelHeight = 200;
+            const selectedPoint = self.clickedPoint;
+            const RH = Planet.getRelativeHumidity(self.planet.getSubstanceDivider(), self.planet.temperature[selectedPoint], self.planet.waterVaporMass[selectedPoint]);
+
+            self.showPointDetails = ui.window(vg, game, "point-details", panelWidth, panelHeight);
+            defer ui.endWindow(vg);
+            vg.textAlign(.{ .horizontal = .left, .vertical = .top });
+            ui.label(vg, game, "Altitude: {d:.2} km", .{self.planet.elevation[selectedPoint] - self.planet.radius}, 90, 0);
+            ui.label(vg, game, "Temperature: {d:.1}°C", .{self.planet.temperature[selectedPoint] - 273.15}, 90, 20);
+            ui.label(vg, game, "Humidity: {d:.0}%", .{RH * 100}, 90, 40);
         }
 
         if (self.showEscapeMenu) {
@@ -954,6 +977,9 @@ pub const PlayState = struct {
             }
             if (ui.toolButton(vg, game, "lower-terrain", panelX + 350, panelY, 50, 50, renderer.textureCache.get("ui/lower-terrain"))) {
                 self.selectedTool = .LowerTerrain;
+            }
+            if (ui.toolButton(vg, game, "place-vegetation", panelX + 420, panelY, 50, 50, renderer.textureCache.get("ui/place-vegetation"))) {
+                self.selectedTool = .PlaceLife;
             }
         }
 
@@ -1025,20 +1051,20 @@ pub const PlayState = struct {
 
         {
             vg.textAlign(.{ .horizontal = .center, .vertical = .top });
-            ui.label(vg, game, "{}", .{std.fmt.fmtDuration(@floatToInt(u64, self.gameTime) * std.time.ns_per_s)}, size.x() / 2, 10);
+            ui.label(vg, game, "{}", .{std.fmt.fmtDuration(@as(u64, @intFromFloat(self.gameTime)) * std.time.ns_per_s)}, size.x() / 2, 10);
         }
 
         {
             vg.textAlign(.{ .horizontal = .center, .vertical = .top });
             ui.label(vg, game, "Game Speed", .{}, size.x() - 80, 130);
-            ui.label(vg, game, "{}/s", .{std.fmt.fmtDuration(@floatToInt(u64, self.timeScale) * std.time.ns_per_s)}, size.x() - 90, 150);
+            ui.label(vg, game, "{}/s", .{std.fmt.fmtDuration(@as(u64, @intFromFloat(self.timeScale)) * std.time.ns_per_s)}, size.x() - 90, 150);
             if (ui.button(vg, game, "game-speed-minus", size.x() - 150, 150, 20, 20, "-")) {
-                self.timeScale = std.math.max(1.0, self.timeScale - 3600 * 3);
+                self.timeScale = @max(1.0, self.timeScale - 3600 * 3);
             }
             if (ui.button(vg, game, "game-speed-plus", size.x() - 25, 150, 20, 20, "+")) {
                 if (self.timeScale < 190000 or true) {
                     if (self.timeScale == 1) self.timeScale = 0;
-                    self.timeScale = std.math.min(200_000_000, self.timeScale + 3600 * 3);
+                    self.timeScale = @min(200_000_000, self.timeScale + 3600 * 3);
                 }
             }
         }
@@ -1070,7 +1096,7 @@ pub const PlayState = struct {
             .radius = self.planet.radius,
             .subdivisions = self.planet.numSubdivisions,
             .seed = self.planet.seed,
-        }, .{ .whitespace = .{ .indent = .Tab } }, metadataFile.writer());
+        }, .{ .whitespace = .indent_tab }, metadataFile.writer());
 
         const planetFile = try std.fs.cwd().createFile("saves/abc/planet.dat", .{});
         defer planetFile.close();
@@ -1081,28 +1107,28 @@ pub const PlayState = struct {
         // planet.vertices can be re-generated using icosphere data, same for indices
 
         for (planet.elevation) |elevation| {
-            try writer.writeIntLittle(u32, @bitCast(u32, elevation));
+            try writer.writeInt(u32, @as(u32, @bitCast(elevation)), .little);
         }
 
         for (planet.temperature) |temperature| {
-            try writer.writeIntLittle(u32, @bitCast(u32, temperature));
+            try writer.writeInt(u32, @as(u32, @bitCast(temperature)), .little);
         }
 
         for (planet.vegetation) |vegetation| {
-            try writer.writeIntLittle(u32, @bitCast(u32, vegetation));
+            try writer.writeInt(u32, @as(u32, @bitCast(vegetation)), .little);
         }
 
         for (planet.waterMass) |waterMass| {
-            try writer.writeIntLittle(u32, @bitCast(u32, waterMass));
+            try writer.writeInt(u32, @as(u32, @bitCast(waterMass)), .little);
         }
 
         for (planet.waterVaporMass) |waterVaporMass| {
-            try writer.writeIntLittle(u32, @bitCast(u32, waterVaporMass));
+            try writer.writeInt(u32, @as(u32, @bitCast(waterVaporMass)), .little);
         }
 
         for (planet.airVelocity) |airVelocity| {
-            try writer.writeIntLittle(u32, @bitCast(u32, airVelocity.x()));
-            try writer.writeIntLittle(u32, @bitCast(u32, airVelocity.y()));
+            try writer.writeInt(u32, @as(u32, @bitCast(airVelocity.x())), .little);
+            try writer.writeInt(u32, @as(u32, @bitCast(airVelocity.y())), .little);
         }
 
         // TODO: save lifeforms

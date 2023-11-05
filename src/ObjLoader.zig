@@ -28,15 +28,15 @@ pub const Mesh = struct {
         gl.bindVertexArray(vao);
         gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
 
-        gl.bufferData(gl.ARRAY_BUFFER, @bitCast(isize, data.len * @sizeOf(f32)), data.ptr, gl.STATIC_DRAW);
-        gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 0 * @sizeOf(f32))); // position
-        gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 3 * @sizeOf(f32))); // normal
-        gl.vertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @intToPtr(?*anyopaque, 6 * @sizeOf(f32))); // texture coordinates
+        gl.bufferData(gl.ARRAY_BUFFER, @as(isize, @bitCast(data.len * @sizeOf(f32))), data.ptr, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(0 * @sizeOf(f32)))); // position
+        gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(3 * @sizeOf(f32)))); // normal
+        gl.vertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), @as(?*anyopaque, @ptrFromInt(6 * @sizeOf(f32)))); // texture coordinates
         gl.enableVertexAttribArray(0);
         gl.enableVertexAttribArray(1);
         gl.enableVertexAttribArray(2);
 
-        return Mesh{ .vao = vao, .vbo = vbo, .numTriangles = @intCast(c_int, data.len / 8) };
+        return Mesh{ .vao = vao, .vbo = vbo, .numTriangles = @as(c_int, @intCast(data.len / 8)) };
     }
 };
 
@@ -114,9 +114,9 @@ pub fn readObj(allocator: Allocator, reader: anytype) !Mesh {
                         posIdx = 1; // TODO
                     }
                     try elements.append(.{
-                        .posIdx = @intCast(usize, posIdx - 1),
-                        .texIdx = @intCast(usize, texIdx - 1),
-                        .normalIdx = @intCast(usize, normalIdx - 1),
+                        .posIdx = @as(usize, @intCast(posIdx - 1)),
+                        .texIdx = @as(usize, @intCast(texIdx - 1)),
+                        .normalIdx = @as(usize, @intCast(normalIdx - 1)),
                     });
                 } else {
                     break;

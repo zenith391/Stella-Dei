@@ -149,15 +149,15 @@ pub fn window(vg: nvg, game: *Game, name: []const u8, w: f32, h: f32) bool {
 
     if (pressed and hovered and !state.Window.moving) {
         state.Window.moving = true;
-        state.Window.moveRelX = @floatCast(f32, cursor.xpos) - state.Window.x;
-        state.Window.moveRelY = @floatCast(f32, cursor.ypos) - state.Window.y;
+        state.Window.moveRelX = @as(f32, @floatCast(cursor.xpos)) - state.Window.x;
+        state.Window.moveRelY = @as(f32, @floatCast(cursor.ypos)) - state.Window.y;
     } else if (!pressed) {
         state.Window.moving = false;
     }
 
     if (state.Window.moving) {
-        state.Window.x = @floatCast(f32, cursor.xpos) - state.Window.moveRelX;
-        state.Window.y = @floatCast(f32, cursor.ypos) - state.Window.moveRelY;
+        state.Window.x = @as(f32, @floatCast(cursor.xpos)) - state.Window.moveRelX;
+        state.Window.y = @as(f32, @floatCast(cursor.ypos)) - state.Window.moveRelY;
     }
 
     shadow(vg, state.Window.x, state.Window.y, w, h);
