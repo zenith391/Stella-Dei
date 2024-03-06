@@ -222,8 +222,8 @@ pub const PlayState = struct {
 
         Lifeform.initMeshes(game.allocator) catch unreachable;
 
-        var framebuffer = Framebuffer.create(800, 600) catch unreachable;
-        var blurFramebuffer = Framebuffer.create(800, 600) catch unreachable;
+        const framebuffer = Framebuffer.create(800, 600) catch unreachable;
+        const blurFramebuffer = Framebuffer.create(800, 600) catch unreachable;
 
         const cursorPos = game.window.getCursorPos();
         std.valgrind.callgrind.startInstrumentation();
@@ -394,9 +394,9 @@ pub const PlayState = struct {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         {
             const program = renderer.postprocessProgram;
-            var sunPhi: f32 = @as(f32, @floatCast(@mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi)));
-            var sunTheta: f32 = std.math.pi / 2.0;
-            var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
+            const sunPhi: f32 = @as(f32, @floatCast(@mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi)));
+            const sunTheta: f32 = std.math.pi / 2.0;
+            const solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
             const zFar = self.planet.radius * 5;
             const zNear = zFar / 10000;
             const target = self.getViewTarget();
@@ -458,9 +458,9 @@ pub const PlayState = struct {
         const size = renderer.framebufferSize;
 
         const planet = &self.planet;
-        var sunPhi: f32 = @as(f32, @floatCast(@mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi)));
-        var sunTheta: f32 = std.math.pi / 2.0;
-        var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
+        const sunPhi: f32 = @as(f32, @floatCast(@mod(self.renderGameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi)));
+        const sunTheta: f32 = std.math.pi / 2.0;
+        const solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
 
         const zFar = planet.radius * 5;
         const zNear = zFar / 10000;
@@ -609,9 +609,9 @@ pub const PlayState = struct {
 
         const planet = &self.planet;
 
-        var sunPhi: f32 = @as(f32, @floatCast(@mod(self.gameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi)));
-        var sunTheta: f32 = std.math.pi / 2.0;
-        var solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
+        const sunPhi: f32 = @as(f32, @floatCast(@mod(self.gameTime / self.planetRotationTime * 2 * std.math.pi, 2 * std.math.pi)));
+        const sunTheta: f32 = std.math.pi / 2.0;
+        const solarVector = Vec3.new(@cos(sunPhi) * @sin(sunTheta), @sin(sunPhi) * @sin(sunTheta), @cos(sunTheta));
 
         if (self.selectedTool == .EmitWater and game.window.getMouseButton(.left) == .press) {
             const kmPerWaterMass = planet.getKmPerWaterMass();

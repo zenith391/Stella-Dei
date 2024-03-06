@@ -57,7 +57,7 @@ pub const GLContext = struct {
     uniforms: ArrayList(FragUniforms),
 
     fn init(allocator: Allocator, options: Options) !*GLContext {
-        var self = try allocator.create(GLContext);
+        const self = try allocator.create(GLContext);
         self.* = GLContext{
             .allocator = allocator,
             .options = options,
@@ -465,7 +465,7 @@ const FragUniforms = struct {
             frag.scissor_scale[1] = @sqrt(scissor.xform[1] * scissor.xform[1] + scissor.xform[3] * scissor.xform[3]) / fringe;
         }
 
-        std.mem.copy(f32, &frag.extent, &paint.extent);
+        @memcpy(&frag.extent, &paint.extent);
         frag.stroke_mult = (width * 0.5 + fringe * 0.5) / fringe;
         frag.stroke_thr = stroke_thr;
 

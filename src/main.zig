@@ -66,13 +66,13 @@ pub const Game = struct {
         std.log.info("Loading {s}...", .{@typeName(NewState)});
         defer std.log.info("Loaded", .{});
 
-        var state = NewState.init(self);
+        const new_state = NewState.init(self);
         if (self.state_init) self.deinitState();
         self.imgui_state.clearRetainingCapacity();
 
         inline for (std.meta.fields(GameState)) |field| {
             if (field.type == NewState) {
-                self.state = @unionInit(GameState, field.name, state);
+                self.state = @unionInit(GameState, field.name, new_state);
                 self.state_init = true;
                 return;
             }
@@ -244,7 +244,7 @@ const perlin = @import("perlin.zig").p2d;
 
 /// This is used by zig-opengl library to load OpenGL functions from GLFW
 fn getProcAddress(_: void, name: [:0]const u8) ?*anyopaque {
-    var proc = glfw.getProcAddress(name);
+    const proc = glfw.getProcAddress(name);
     return @as(?*anyopaque, @ptrFromInt(@intFromPtr(proc)));
 }
 

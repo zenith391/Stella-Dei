@@ -79,7 +79,7 @@ pub const MainMenuState = struct {
         self.displacementX = self.displacementX * 0.9 + self.targetDisplacementX * 0.1;
         self.displacementY = self.displacementY * 0.9 + self.targetDisplacementY * 0.1;
 
-        var cameraPos = Vec3.new(-802 + self.displacementX, -913, 292 + self.displacementY)
+        const cameraPos = Vec3.new(-802 + self.displacementX, -913, 292 + self.displacementY)
             .norm().scale(10000 * 1.5);
 
         const planetTarget = Vec3.new(0, 0, 0).sub(cameraPos).norm();

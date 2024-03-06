@@ -15,28 +15,21 @@ It's also carefully inspired by SimEarth.
 ### Dependencies
 
 The game requires:
-- Zig master (at least `0.11.0-dev.1638+7199d7c77`)
-- [Zigmod](https://github.com/nektro/zigmod)
+- Zig [`2024.1.0-mach`](https://machengine.org/about/nominated-zig/) (`0.12.0-dev.2063+804cee3b9`)
 
 ### Building from source
 
-```
+```sh
 $ git clone https://github.com/PixelGuys/Stella-Dei && Stella-Dei
-$ zigmod fetch
 $ zig build
 ```
 
-*Note: you need the `ocl-icd-opencl-dev` package (only for building the game)*
-
-Windows require one more step, you need to paste https://raw.githubusercontent.com/PixelGuys/Stella-Dei/master/deps/OpenCL.def into `YOUR_ZIG_FOLDER/lib/libc/mingw/lib-common/OpenCL.def` for 32-bit cross-compilation to work
-If you want 64-bit to work, paste X to Y
-
 And now you've got an executable located inside `zig-out/bin/`. If you want to directly run the game, just do:
-```
+```sh
 $ zig build run
 ```
 
-To distribute an executable, use:
-```
+To distribute an executable for Windows, use:
+```sh
 $ zig build -Dtarget=native-windows -Dcpu=x86_64_v2 -Doptimize=ReleaseSafe
 ```

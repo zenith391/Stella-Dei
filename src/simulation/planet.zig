@@ -565,7 +565,7 @@ pub const Planet = struct {
                 }
                 gl.bufferSubData(gl.ARRAY_BUFFER, 7 * @sizeOf(f32) * self.vertices.len, @as(isize, @intCast(self.vertices.len * @sizeOf(f32))), bufData.ptr);
             } else {
-                var displayedSlice = switch (displayMode) {
+                const displayedSlice = switch (displayMode) {
                     .WaterVapor => self.waterVaporMass,
                     .Rainfall => self.rainfall,
                     .Normal, .Temperature => self.temperature,
@@ -1391,7 +1391,7 @@ pub const Planet = struct {
     fn sendWaterVapor(self: Planet, target: usize, shared: f32, selfMass: f32) f32 {
         const targetMass = self.waterVaporMass[target];
         if (selfMass > targetMass) {
-            var transmitted = @min(shared, shared * (selfMass - targetMass));
+            const transmitted = @min(shared, shared * (selfMass - targetMass));
             self.newWaterVaporMass[target] += transmitted;
             return transmitted;
         } else {
@@ -1492,7 +1492,7 @@ pub const Planet = struct {
         // Disable water simulation when timescale is above 100 000
         if (dt < 15000 and false) {
             var iteration: usize = 0;
-            var numIterations: usize = 1;
+            const numIterations: usize = 1;
             while (iteration < numIterations) : (iteration += 1) {
                 std.mem.copy(f32, self.newWaterMass, self.waterMass);
                 std.mem.copy(f32, self.newWaterVaporMass, self.waterVaporMass);

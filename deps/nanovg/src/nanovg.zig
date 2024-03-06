@@ -267,8 +267,8 @@ pub fn hsl(hue: f32, sat: f32, lig: f32) Color {
 pub fn hsla(hue: f32, sat: f32, lig: f32, a: u8) Color {
     var h = @mod(hue, 1.0);
     if (h < 0.0) h += 1.0;
-    var s = std.math.clamp(sat, 0, 1);
-    var l = std.math.clamp(lig, 0, 1);
+    const s = std.math.clamp(sat, 0, 1);
+    const l = std.math.clamp(lig, 0, 1);
     const m2 = if (l <= 0.5) l * (1 + s) else l + s - l * s;
     const m1 = 2 * l - m2;
     return .{
@@ -533,9 +533,9 @@ pub fn transformPremultiply(dst: *[6]f32, src: *const [6]f32) void {
     const t = dst;
     const s = src;
     var tmp: [6]f32 = undefined;
-    std.mem.copy(f32, &tmp, s);
+    @memcpy(&tmp, s);
     transformMultiply(&tmp, t);
-    std.mem.copy(f32, t, &tmp);
+    @memcpy(t, &tmp);
 }
 
 // Sets the destination to inverse of specified transform.

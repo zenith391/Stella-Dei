@@ -1,5 +1,5 @@
 const std = @import("std");
-const TaskStack = std.atomic.Stack(Task);
+const TaskStack = std.DoublyLinkedList(Task);
 const Thread = std.Thread;
 const Allocator = std.mem.Allocator;
 const tracy = @import("vendor/tracy.zig");
@@ -13,7 +13,7 @@ pub fn Job(comptime ResultType: type) type {
     return struct {
         loop: *EventLoop,
         result: ResultType,
-        completed: std.atomic.Atomic(bool),
+        completed: std.atomic.Value(bool),
         /// If the call() function was used, this contains the async frame
         //asyncBuffer: ?[]u8 = null,
         toNotify: ?*Self = null,
@@ -24,13 +24,13 @@ pub fn Job(comptime ResultType: type) type {
 
         pub fn create(loop: *EventLoop) !*Self {
             const jobPtr = try loop.allocator.create(Self);
-            jobPtr.* = .{ .loop = loop, .result = undefined, .completed = std.atomic.Atomic(bool).init(false) };
+            jobPtr.* = .{ .loop = loop, .result = undefined, .completed = std.atomic.Value(bool).init(false) };
             return jobPtr;
         }
 
         pub fn completed(loop: *EventLoop, result: ResultType) !*Self {
             const jobPtr = try loop.allocator.create(Self);
-            jobPtr.* = .{ .loop = loop, .result = result, .completed = std.atomic.Atomic(bool).init(true) };
+            jobPtr.* = .{ .loop = loop, .result = result, .completed = std.atomic.Value(bool).init(true) };
             return jobPtr;
         }
 
@@ -68,7 +68,10 @@ pub fn Job(comptime ResultType: type) type {
                     .next = null,
                 };
                 self.has_node = true;
-                self.loop.taskStack.push(&self.node);
+
+                self.loop.taskStackMutex.lock();
+                defer self.loop.taskStackMutex.unlock();
+                self.loop.taskStack.append(&self.node);
             } else {
                 @compileError("The function's return type doesn't match the job's result type");
             }
@@ -130,7 +133,8 @@ pub fn Job(comptime ResultType: type) type {
 pub const EventLoop = struct {
     allocator: Allocator,
     taskStack: TaskStack,
-    //numTasks: std.atomic.Atomic(u32) = std.atomic.Atomic(u32).init(0),
+    taskStackMutex: std.Thread.Mutex = .{},
+    //numTasks: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
     /// The number of 'events', when it hits 0 the run loop is stopped
     events: usize = 0,
     threads: []Thread,
@@ -138,7 +142,7 @@ pub const EventLoop = struct {
     pub fn init() EventLoop {
         return EventLoop{
             .allocator = undefined,
-            .taskStack = TaskStack.init(),
+            .taskStack = TaskStack{},
             .threads = undefined,
         };
     }
@@ -161,10 +165,13 @@ pub const EventLoop = struct {
         var sleepTime: u64 = 8 * std.time.ns_per_ms;
 
         while (self.events > 0) {
-            if (self.taskStack.pop()) |node| {
+            self.taskStackMutex.lock();
+            if (self.taskStack.popFirst()) |node| {
+                self.taskStackMutex.unlock();
                 node.data.fnPtr(node.data.userdata);
                 sleepTime /= 2;
             } else {
+                self.taskStackMutex.unlock();
                 // wait until a task is available
                 if (sleepTime > 0) std.time.sleep(sleepTime);
                 sleepTime += std.time.ns_per_ms / 10;
