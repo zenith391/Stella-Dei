@@ -11,7 +11,6 @@ const EventLoop = @import("loop.zig").EventLoop;
 const Job = @import("loop.zig").Job;
 
 var renderer: Renderer = undefined;
-var texture: Texture = undefined;
 
 const SplashScreenState = @import("states/splash_screen.zig").SplashScreenState;
 const MainMenuState = @import("states/main_menu.zig").MainMenuState;

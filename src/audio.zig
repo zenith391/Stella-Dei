@@ -7,74 +7,61 @@ const c = @cImport({
 });
 
 pub const AudioSubsystem = struct {
-    // engine: *c.ma_engine,
+    engine: *c.ma_engine,
     allocator: Allocator,
-    // musicManager: MusicManager,
+    musicManager: MusicManager,
 
     pub fn init(allocator: Allocator) !AudioSubsystem {
-        // const engine = try allocator.create(c.ma_engine);
-        // if (c.ma_engine_init(null, engine) != c.MA_SUCCESS) {
-        //     return error.AudioInitError;
-        // }
+        const engine = try allocator.create(c.ma_engine);
+        if (c.ma_engine_init(null, engine) != c.MA_SUCCESS) {
+            return error.AudioInitError;
+        }
 
-        // return AudioSubsystem{ .engine = engine, .allocator = allocator, .musicManager = MusicManager.init(allocator) };
-        return AudioSubsystem{ .allocator = allocator };
+        return AudioSubsystem{ .engine = engine, .allocator = allocator, .musicManager = MusicManager.init(allocator) };
     }
 
     pub fn playFromFile(self: *AudioSubsystem, path: [:0]const u8) void {
-        // if (c.ma_engine_play_sound(self.engine, path, null) != c.MA_SUCCESS) {
-        //     std.log.err("couldn't play sound", .{});
-        // }
-        _ = self;
-        _ = path;
+        if (c.ma_engine_play_sound(self.engine, path, null) != c.MA_SUCCESS) {
+            std.log.err("couldn't play sound", .{});
+        }
     }
 
     /// Set the sound track to the one given and wait between 5 and 20 seconds to play
     /// a music chosen at random in the track.
     pub fn playSoundTrack(self: *AudioSubsystem, soundTrack: SoundTrack) void {
-        // const random = self.musicManager.prng.random();
-        // self.playSoundTrackIn(soundTrack, random.intRangeAtMostBiased(i64, 10000, 15000));
-        _ = self;
-        _ = soundTrack;
+        const random = self.musicManager.prng.random();
+        self.playSoundTrackIn(soundTrack, random.intRangeAtMostBiased(i64, 10000, 15000));
     }
 
     pub fn playSoundTrackIn(self: *AudioSubsystem, soundTrack: SoundTrack, time: i64) void {
-        _ = self;
-        _ = soundTrack;
-        _ = time;
-        // self.musicManager.stopCurrentMusic();
-        // self.musicManager.soundTrack = soundTrack;
+        self.musicManager.stopCurrentMusic();
+        self.musicManager.soundTrack = soundTrack;
 
-        // const random = self.musicManager.prng.random();
-        // self.musicManager.soundTrack.position = random.uintLessThanBiased(usize, soundTrack.items.len);
-        // self.musicManager.nextMusicTime = std.time.milliTimestamp() + time;
-        // log.debug("Start next music (new sound track) in {d} seconds: {s}", .{ @divTrunc(self.musicManager.nextMusicTime - std.time.milliTimestamp(), 1000), self.musicManager.soundTrack.getNextItem().? });
+        const random = self.musicManager.prng.random();
+        self.musicManager.soundTrack.position = random.uintLessThanBiased(usize, soundTrack.items.len);
+        self.musicManager.nextMusicTime = std.time.milliTimestamp() + time;
+        log.debug("Start next music (new sound track) in {d} seconds: {s}", .{ @divTrunc(self.musicManager.nextMusicTime - std.time.milliTimestamp(), 1000), self.musicManager.soundTrack.getNextItem().? });
     }
 
     pub fn getMusicVolume(self: *AudioSubsystem) f32 {
-        _ = self;
-        // return self.musicManager.volume;
-        return 0.0;
+        return self.musicManager.volume;
     }
 
     pub fn setMusicVolume(self: *AudioSubsystem, volume: f32) void {
-        _ = self;
-        _ = volume;
-        // self.musicManager.setVolume(volume);
+        self.musicManager.setVolume(volume);
     }
 
     pub fn update(self: *AudioSubsystem) void {
-        // const zone = tracy.ZoneN(@src(), "Update audio subsystem");
-        // defer zone.End();
-        _ = self;
-        // self.musicManager.update();
+        const zone = tracy.ZoneN(@src(), "Update audio subsystem");
+        defer zone.End();
+        self.musicManager.update();
     }
 
     pub fn deinit(self: *AudioSubsystem) void {
-        // self.musicManager.deinit();
-        _ = self;
-        // c.ma_engine_uninit(self.engine);
-        // self.allocator.destroy(self.engine);
+        std.log.info("deinit audio", .{});
+        self.musicManager.deinit();
+        c.ma_engine_uninit(self.engine);
+        self.allocator.destroy(self.engine);
     }
 };
 
@@ -143,7 +130,8 @@ pub const MusicManager = struct {
                     return;
                 }
                 c.ma_sound_set_volume(sound, self.volume);
-                c.ma_sound_set_fade_in_milliseconds(sound, 0, 1, 5000);
+                // c.ma_sound_set_fade_in_milliseconds(sound, 0, 1, 5000);
+                std.log.info("start sound", .{});
                 if (c.ma_sound_start(sound) != c.MA_SUCCESS) {
                     std.log.scoped(.audio).warn("Could not start music '{s}'", .{nextItem});
                 }
