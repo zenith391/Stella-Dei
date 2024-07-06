@@ -419,7 +419,7 @@ pub const Planet = struct {
         // - do equirectangular projection in order to convert to image coordinates
         // - use resulting value as height (TODO: do average of neighbour cells too?)
 
-        const standardParallel: f32 = std.math.degreesToRadians(f32, 0);
+        const standardParallel: f32 = std.math.degreesToRadians(0);
         const kmPerWaterMass = self.getKmPerWaterMass();
 
         for (self.vertices, 0..) |*vert, idx| {
@@ -438,7 +438,7 @@ pub const Planet = struct {
     const HEIGHT_EXAGGERATION_FACTOR = 10;
 
     fn computeNormal(self: Planet, a: usize, aVec: Vec3) Vec3 {
-        @setFloatMode(.Optimized);
+        @setFloatMode(.optimized);
         var sum = Vec3.zero();
         const adjacentVertices = self.getNeighbours(a);
         {
@@ -495,7 +495,7 @@ pub const Planet = struct {
     }
 
     pub fn mulByVec3(self: za.Mat4, v: Vec3) Vec3 {
-        @setFloatMode(.Optimized);
+        @setFloatMode(.optimized);
         @setRuntimeSafety(false);
 
         const x = (self.data[0][0] * v.x()) + (self.data[1][0] * v.y()) + (self.data[2][0] * v.z());
@@ -506,7 +506,7 @@ pub const Planet = struct {
 
     /// Upload all changes to the GPU
     pub fn upload(self: *Planet, loop: *EventLoop, displayMode: DisplayMode, axialTilt: f32) void {
-        @setFloatMode(.Optimized);
+        @setFloatMode(.optimized);
         @setRuntimeSafety(false);
 
         const zone = tracy.ZoneN(@src(), "Planet GPU Upload");
@@ -714,7 +714,7 @@ pub const Planet = struct {
     }
 
     fn simulateTemperature(self: *Planet, loop: *EventLoop, options: SimulationOptions, start: usize, end: usize) void {
-        @setFloatMode(.Optimized);
+        @setFloatMode(.optimized);
         @setRuntimeSafety(false);
         _ = loop;
 
@@ -1266,12 +1266,12 @@ pub const Planet = struct {
     };
 
     inline fn lerp(a: f32, b: f32, t: f32) f32 {
-        @setFloatMode(.Optimized);
+        @setFloatMode(.optimized);
         return a * (1 - t) + b * t;
     }
 
     pub inline fn getEquilibriumVaporPressure(temperature: f32) f32 {
-        @setFloatMode(.Optimized);
+        @setFloatMode(.optimized);
         if (temperature >= 999 or temperature <= 0 or std.math.isNan(temperature)) {
             // This shouldn't be possible with default ranges, so no need to optimize
             return getEquilibriumVaporPressure_Unoptimized(temperature);

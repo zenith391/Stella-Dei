@@ -7,10 +7,10 @@ pub fn linkTracy(b: *std.Build, step: *std.Build.Step.Compile, opt_path: ?[]cons
     step.root_module.addOptions("build_options", step_options);
 
     if (opt_path) |path| {
-        step.addIncludePath(.{ .path = path });
+        step.addIncludePath(b.path(path));
         const tracy_client_source_path = std.fs.path.join(step.step.owner.allocator, &.{ path, "TracyClient.cpp" }) catch unreachable;
         step.addCSourceFile(.{
-            .file = .{ .path = tracy_client_source_path },
+            .file = b.path(tracy_client_source_path),
             .flags = &[_][]const u8{
                 "-DTRACY_ENABLE",
                 "-DTRACY_FIBERS",
@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) !void {
 
     const exe = b.addExecutable(.{
         .name = "stella-dei",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -51,16 +51,16 @@ pub fn build(b: *std.Build) !void {
 
     // Modules
     const gl = b.createModule(.{
-        .root_source_file = .{ .path = "deps/gl3v3.zig" },
+        .root_source_file = b.path("deps/gl3v3.zig"),
     });
     exe.root_module.addImport("gl", gl);
 
     const nanovg = b.createModule(.{
-        .root_source_file = .{ .path = "deps/nanovg/src/nanovg.zig" },
+        .root_source_file = b.path("deps/nanovg/src/nanovg.zig"),
     });
     exe.root_module.addImport("nanovg", nanovg);
     const nanovg_c_flags = &.{ "-DFONS_NO_STDIO", "-DSTBI_NO_STDIO", "-fno-stack-protector", "-fno-sanitize=undefined" };
-    nanovg.addIncludePath(.{ .path = "deps/nanovg/src" });
+    nanovg.addIncludePath(b.path("deps/nanovg/src"));
     nanovg.addCSourceFiles(.{
         .files = &.{
             "deps/nanovg/src/fontstash.c",
@@ -78,9 +78,9 @@ pub fn build(b: *std.Build) !void {
     const glfw_dep = b.dependency("mach_glfw", .{ .target = target, .optimize = optimize });
     exe.root_module.addImport("glfw", glfw_dep.module("mach-glfw"));
 
-    exe.addIncludePath(.{ .path = "deps" });
+    exe.addIncludePath(b.path("deps"));
     exe.addCSourceFile(.{
-        .file = .{ .path = "deps/miniaudio.c" },
+        .file = b.path("deps/miniaudio.c"),
         .flags = &.{
             "-fno-sanitize=undefined", // disable UBSAN (due to false positives)
         },
@@ -98,7 +98,7 @@ pub fn build(b: *std.Build) !void {
     run_step.dependOn(&run_cmd.step);
 
     var exe_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -108,10 +108,10 @@ pub fn build(b: *std.Build) !void {
     exe_tests.root_module.addImport("gl", gl);
     exe_tests.root_module.addImport("zigimg", zigimg_dep.module("zigimg"));
     exe_tests.root_module.addImport("zalgebra", zalgebra_dep.module("zalgebra"));
-    exe_tests.addIncludePath(.{ .path = "deps/nanovg/src" });
-    exe_tests.addCSourceFile(.{ .file = .{ .path = "deps/nanovg/src/fontstash.c" }, .flags = nanovg_c_flags });
-    exe_tests.addCSourceFile(.{ .file = .{ .path = "deps/nanovg/src/stb_image.c" }, .flags = nanovg_c_flags });
-    exe_tests.addIncludePath(.{ .path = "deps" });
+    exe_tests.addIncludePath(b.path("deps/nanovg/src"));
+    exe_tests.addCSourceFile(.{ .file = b.path("deps/nanovg/src/fontstash.c"), .flags = nanovg_c_flags });
+    exe_tests.addCSourceFile(.{ .file = b.path("deps/nanovg/src/stb_image.c"), .flags = nanovg_c_flags });
+    exe_tests.addIncludePath(b.path("deps"));
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&exe_tests.step);

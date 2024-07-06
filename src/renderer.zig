@@ -138,7 +138,8 @@ pub const Texture = struct {
         //var image = try zigimg.Image.fromFile(allocator, &file);
         var streamSource = std.io.StreamSource{ .file = file };
         const image = try zigimg.png.PNG.formatInterface().readImage(allocator, &streamSource);
-        return image;
+        const managed_image = image.toManaged(allocator);
+        return managed_image;
     }
 
     pub fn createFromPath(allocator: Allocator, path: []const u8) !Texture {

@@ -79,7 +79,7 @@ pub fn Job(comptime ResultType: type) type {
 
         /// Get result
         pub fn get(self: *const Self) ResultType {
-            while (self.completed.load(.Acquire) == false) {
+            while (self.completed.load(.acquire) == false) {
                 //self.loop.yield();
                 std.time.sleep(1000);
             }
@@ -87,7 +87,7 @@ pub fn Job(comptime ResultType: type) type {
         }
 
         pub fn peek(self: *const Self) ?ResultType {
-            if (self.completed.load(.Acquire) == true) {
+            if (self.completed.load(.acquire) == true) {
                 return self.result;
             } else {
                 return null;
@@ -95,7 +95,7 @@ pub fn Job(comptime ResultType: type) type {
         }
 
         pub fn isCompleted(self: *const Self) bool {
-            return self.completed.load(.Acquire);
+            return self.completed.load(.acquire);
         }
 
         pub fn then(self: *Self, next: *Self) void {
@@ -116,7 +116,7 @@ pub fn Job(comptime ResultType: type) type {
 
         pub fn notify(self: *Self, value: ResultType) void {
             self.result = value;
-            defer self.completed.store(true, .Release);
+            defer self.completed.store(true, .release);
 
             if (self.toNotify) |job| {
                 job.notify(value);
@@ -150,7 +150,7 @@ pub const EventLoop = struct {
     /// This function assumes that the EventLoop pointer will stay
     /// valid during the entire loop's lifetime
     pub fn start(self: *EventLoop, allocator: Allocator) !void {
-        const cpuCount = try Thread.getCpuCount();
+        const cpuCount = std.math.floorPowerOfTwo(usize, try Thread.getCpuCount());
         const threads = try allocator.alloc(Thread, cpuCount);
         self.threads = threads;
         self.allocator = allocator;

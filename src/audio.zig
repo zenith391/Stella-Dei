@@ -97,7 +97,7 @@ pub const MusicManager = struct {
 
     /// Change  to the next item in the sound track if the current music is done playing
     pub fn update(self: *MusicManager) void {
-        const subsystem = @fieldParentPtr(AudioSubsystem, "musicManager", self);
+        const subsystem: *AudioSubsystem = @fieldParentPtr("musicManager", self);
         if (self.currentlyPlaying) |sound| {
             if (c.ma_sound_is_playing(sound) == 0) {
                 const zone = tracy.ZoneN(@src(), "Destroy current music");
@@ -150,7 +150,7 @@ pub const MusicManager = struct {
 
     /// Fade out the music for 5 seconds and then stop it.
     pub fn stopCurrentMusic(self: *MusicManager) void {
-        const subsystem = @fieldParentPtr(AudioSubsystem, "musicManager", self);
+        const subsystem: *AudioSubsystem = @fieldParentPtr("musicManager", self);
         const engine = subsystem.engine;
         if (self.currentlyPlaying) |sound| {
             if (c.ma_sound_is_playing(sound) != 0) {
