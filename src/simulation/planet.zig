@@ -22,7 +22,7 @@ const Vec2 = za.Vec2;
 const Vec3 = za.Vec3;
 const Allocator = std.mem.Allocator;
 
-const VECTOR_SIZE = std.simd.suggestVectorSize(f32) orelse 4;
+const VECTOR_SIZE = std.simd.suggestVectorLength(f32) orelse 4;
 const VECTOR_ALIGN = @alignOf(SimdVector);
 const SimdVector = @Vector(VECTOR_SIZE, f32);
 const SimdVector64 = @Vector(VECTOR_SIZE, f64);
@@ -423,7 +423,7 @@ pub const Planet = struct {
         const kmPerWaterMass = self.getKmPerWaterMass();
 
         for (self.vertices, 0..) |*vert, idx| {
-            const longitude = std.math.atan2(f32, vert.y(), vert.x());
+            const longitude = std.math.atan2(vert.y(), vert.x());
             const latitude = std.math.acos(vert.z()) * 2;
             const imageX = @as(usize, @intFromFloat(@as(f32, @floatFromInt(image.width)) / (std.math.pi * 2.0) * (longitude + std.math.pi) * std.math.cos(standardParallel)));
             const imageY = @min(@as(usize, @intFromFloat(@as(f32, @floatFromInt(image.height)) / (std.math.pi * 2.0) * (latitude))), image.height - 1);
@@ -1427,7 +1427,6 @@ pub const Planet = struct {
             var newVegetation = self.vegetation[i];
             // TODO: Direct Normal Irradiance? when we have atmosphere
 
-            _ = solarCoeff;
             newVegetation -= 0.0001 * dt * @as(f32, if (self.waterMass[i] >= 1_000_000) 1.0 else 0.0);
 
             for (self.getNeighbours(i)) |neighbourIndex| {
@@ -1439,12 +1438,15 @@ pub const Planet = struct {
 
             // TODO: only when it's sunny
             const gasMass = newVegetation * dt * 0.1 / meanPointArea;
-            const enoughCO2 = @as(f32, @floatFromInt(@intFromBool(self.averageCarbonDioxideMass > gasMass)));
+            const enoughCO2 = @as(f32, @floatFromInt(@intFromBool(self.averageCarbonDioxideMass > gasMass))) * solarCoeff;
             self.averageCarbonDioxideMass -= gasMass * enoughCO2;
             self.averageOxygenMass += gasMass * enoughCO2;
-
             newVegetation -= (1 - enoughCO2) * dt * 0.00001;
+
+            const tooHot: f32 = @floatFromInt(@intFromBool(self.temperature[i] > 273.15 + 80.0));
+            newVegetation -= tooHot * dt * 0.00001;
             newVegetation = std.math.clamp(newVegetation, 0, 1);
+
             self.vegetation[i] = newVegetation;
         }
     }
@@ -1490,12 +1492,12 @@ pub const Planet = struct {
 
         const dt = options.dt * options.timeScale;
         // Disable water simulation when timescale is above 100 000
-        if (dt < 15000 and false) {
+        if (dt < 15000) {
             var iteration: usize = 0;
             const numIterations: usize = 1;
             while (iteration < numIterations) : (iteration += 1) {
-                std.mem.copy(f32, self.newWaterMass, self.waterMass);
-                std.mem.copy(f32, self.newWaterVaporMass, self.waterVaporMass);
+                @memcpy(self.newWaterMass, self.waterMass);
+                @memcpy(self.newWaterVaporMass, self.waterVaporMass);
 
                 {
                     var jobs: [32]*Job(void) = undefined;
