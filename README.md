@@ -6,7 +6,7 @@ Stella Dei is a sandbox game about creating planet and influencing it with your 
 
 > Careful. At some point you’re just playing god.
 
-It's also carefully inspired by SimEarth.
+It's also inspired by SimEarth.
 
 ---
 
@@ -15,7 +15,7 @@ It's also carefully inspired by SimEarth.
 ### Dependencies
 
 The game requires:
-- Zig [`2024.1.0-mach`](https://machengine.org/about/nominated-zig/) (`0.12.0-dev.2063+804cee3b9`)
+- Zig [`2024.5.0-mach`](https://machengine.org/about/nominated-zig/) (`0.13.0-dev.351+64ef45eb0`)
 
 ### Building from source
 
